@@ -26,8 +26,15 @@ type Error struct {
 func (e *Error) Error() string { return fmt.Sprintf("%v at offset %d: %s", e.Kind, e.Pos, e.Msg) }
 func (e *Error) Unwrap() error { return e.Kind }
 
-// Render appends the rendered template to dst. On error out is nil.
-func Render(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
+// Render renders tpl with vars. strict makes undefined variables in output an error.
+func Render(tpl string, vars map[string]any, strict bool) (string, error) {
+	out, err := Append(make([]byte, 0, len(tpl)+len(tpl)/2), tpl, vars, strict)
+	return string(out), err
+}
+
+// Append is Render appending to dst, so callers can reuse a buffer and render
+// without allocating. On error out is nil.
+func Append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
 	defer recoverBail(&err)
 	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict}
 	r.run()
@@ -73,7 +80,7 @@ func RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrat
 		if v == nil {
 			v = vars
 		}
-		out, err := Render(buf[:0], st.Body, v, st.Strict)
+		out, err := Append(buf[:0], st.Body, v, st.Strict)
 		if errors.Is(err, ErrUnsupported) {
 			return res, i, vars
 		}

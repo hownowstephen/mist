@@ -32,10 +32,10 @@ func loadCases(t testing.TB) []tcase {
 func TestCases(t *testing.T) {
 	for _, c := range loadCases(t) {
 		t.Run(c.Name, func(t *testing.T) {
-			out, err := Render(nil, c.Tpl, c.Data, c.Strict)
+			out, err := Render(c.Tpl, c.Data, c.Strict)
 			switch c.Err {
 			case "":
-				if err != nil || string(out) != c.Out {
+				if err != nil || out != c.Out {
 					t.Fatalf("got %q, %v; want %q", out, err, c.Out)
 				}
 			case "undefined":
@@ -111,14 +111,14 @@ func TestChainBailStopsEarly(t *testing.T) {
 }
 
 func TestUndefinedNamesWholePath(t *testing.T) {
-	_, err := Render(nil, "{{ trigger.first_name[0] }}", map[string]any{}, true)
+	_, err := Render("{{ trigger.first_name[0] }}", map[string]any{}, true)
 	if e, ok := errors.AsType[*Error](err); !ok || !errors.Is(err, ErrUndefined) || e.Msg != "trigger.first_name[0]" {
 		t.Fatalf("got %v; want ErrUndefined naming trigger.first_name[0]", err)
 	}
 }
 
 func TestErrorPosition(t *testing.T) {
-	_, err := Render(nil, "line1\n{{ a | b }}", nil, false)
+	_, err := Render("line1\n{{ a | b }}", nil, false)
 	if e, ok := errors.AsType[*Error](err); !ok || e.Pos != 11 {
 		t.Fatalf("got %v; want unsupported at offset 11", err)
 	}
@@ -138,8 +138,8 @@ func FuzzRender(f *testing.F) {
 	}
 	vars := map[string]any{"a": map[string]any{"b": "x", "n": 2.0}, "xs": []any{1.0, "s", nil}, "t": true, "s": "str"}
 	f.Fuzz(func(t *testing.T, tpl string) {
-		_, err1 := Render(nil, tpl, vars, false)
-		_, err2 := Render(nil, tpl, vars, true)
+		_, err1 := Render(tpl, vars, false)
+		_, err2 := Render(tpl, vars, true)
 		if checkErr := Check(tpl); checkErr != nil {
 			// Check parses a superset of what Render parses, so Render must fail too.
 			if err1 == nil || err2 == nil {
@@ -166,7 +166,7 @@ const benchTpl = `<p>Hi {{ customer.first_name }},</p>
 <ul>{% for item in event.items %}<li>{{ item.name }} x{{ item.qty }}</li>{% endfor %}</ul>
 {% unless customer.unsubscribed %}<a href="https://example.com/u/{{ customer.id }}">Unsubscribe</a>{% endunless %}`
 
-func BenchmarkRender(b *testing.B) {
+func BenchmarkAppend(b *testing.B) {
 	vars := map[string]any{
 		"customer": map[string]any{"first_name": "Ada", "plan": "pro", "since": "2019", "id": 42.0, "unsubscribed": false},
 		"event":    map[string]any{"items": []any{map[string]any{"name": "Widget", "qty": 2.0}, map[string]any{"name": "Gadget", "qty": 1.0}}},
@@ -176,7 +176,21 @@ func BenchmarkRender(b *testing.B) {
 	b.SetBytes(int64(len(benchTpl)))
 	for b.Loop() {
 		var err error
-		if buf, err = Render(buf[:0], benchTpl, vars, true); err != nil {
+		if buf, err = Append(buf[:0], benchTpl, vars, true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRender(b *testing.B) {
+	vars := map[string]any{
+		"customer": map[string]any{"first_name": "Ada", "plan": "pro", "since": "2019", "id": 42.0, "unsubscribed": false},
+		"event":    map[string]any{"items": []any{map[string]any{"name": "Widget", "qty": 2.0}, map[string]any{"name": "Gadget", "qty": 1.0}}},
+	}
+	b.ReportAllocs()
+	b.SetBytes(int64(len(benchTpl)))
+	for b.Loop() {
+		if _, err := Render(benchTpl, vars, true); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -199,12 +213,12 @@ func TestGoValues(t *testing.T) {
 		"{% if i == 3 and jn == 5 and i64 < 0 %}ok{% endif %}": "ok",
 		"{% if i %}t{% endif %}":                               "t",
 	} {
-		if out, err := Render(nil, tpl, vars, true); err != nil || string(out) != want {
+		if out, err := Render(tpl, vars, true); err != nil || out != want {
 			t.Errorf("%s: got %q, %v; want %q", tpl, out, err, want)
 		}
 	}
 	for _, tpl := range []string{"{{ ss }}", "{% if ss %}{% endif %}", "{% if ss == 1 %}{% endif %}", "{{ bad }}"} {
-		if _, err := Render(nil, tpl, vars, false); !errors.Is(err, ErrUnsupported) {
+		if _, err := Render(tpl, vars, false); !errors.Is(err, ErrUnsupported) {
 			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
 		}
 	}

@@ -52,7 +52,7 @@ func TestCorpus(t *testing.T) {
 			if strict && c.Strict != nil {
 				want = *c.Strict
 			}
-			out, err := Render(nil, c.Tpl, c.Data, strict)
+			out, err := Render(c.Tpl, c.Data, strict)
 			if e, ok := errors.AsType[*Error](err); ok && errors.Is(err, ErrUnsupported) {
 				bailed++
 				reasons[bailNoise.ReplaceAllString(e.Msg, "…")]++
@@ -63,7 +63,7 @@ func TestCorpus(t *testing.T) {
 			}
 			accepted++
 			switch {
-			case err == nil && want.Out != nil && string(out) == *want.Out:
+			case err == nil && want.Out != nil && out == *want.Out:
 			case errors.Is(err, ErrUndefined) && want.Err != "":
 			default:
 				wantS := want.Err
