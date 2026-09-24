@@ -34,7 +34,7 @@ func (r *renderer) filters(v val, eval bool) val {
 		if name == "" {
 			bail(at, "expected filter name")
 		}
-		if first && name == "default" && r.undef.set {
+		if first && name == "default" && r.undef.set && (r.dialect == nil || !r.dialect.NoDefaultLeniency) {
 			// liquidjs makes the input lenient when default is the first filter (lenientIf).
 			r.undef, v = pendingUndef{}, val{}
 		}

@@ -140,6 +140,14 @@ func FuzzRender(f *testing.F) {
 	f.Fuzz(func(t *testing.T, tpl string) {
 		_, err1 := Render(tpl, vars, false)
 		_, err2 := Render(tpl, vars, true)
+		d := Engine{Dialect: &Dialect{Reject: TrimMarkers | NegativeLiterals | UnspacedOperators | RawBlocks | BlankKeyword}}
+		if err := d.Check(tpl); err != nil {
+			if _, rerr := d.Render(tpl, vars, false); rerr == nil {
+				t.Fatalf("dialect Check rejected (%v) but Render accepted", err)
+			}
+		} else if _, rerr := d.Render(tpl, vars, false); errors.Is(rerr, ErrUnsupported) && !runtimeBail(rerr) {
+			t.Fatalf("dialect Check accepted but Render bailed on syntax: %v", rerr)
+		}
 		if checkErr := Check(tpl); checkErr != nil {
 			// Check parses a superset of what Render parses, so Render must fail too.
 			if err1 == nil || err2 == nil {
@@ -153,7 +161,7 @@ func FuzzRender(f *testing.F) {
 
 // runtimeBail reports data-dependent bails, which Check can't see.
 func runtimeBail(err error) bool {
-	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil"} {
+	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of"} {
 		if strings.Contains(err.Error(), s) {
 			return true
 		}
