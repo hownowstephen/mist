@@ -3,6 +3,7 @@ package mist
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -504,6 +505,9 @@ func (r *renderer) write(v val) {
 func appendJSNumber(dst []byte, f float64) []byte {
 	if f == 0 {
 		return append(dst, '0') // including -0
+	}
+	if f == math.Trunc(f) && math.Abs(f) < maxSafeInt {
+		return strconv.AppendInt(dst, int64(f), 10) // below 2^53 every digit is needed to round-trip
 	}
 	var buf [32]byte
 	e := strconv.AppendFloat(buf[:0], f, 'e', -1, 64) // shortest round-trip digits, as in JS

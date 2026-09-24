@@ -231,3 +231,23 @@ func TestChainKeyThroughScalar(t *testing.T) {
 		t.Fatalf("got n=%d res=%+v; want the step handed to the full engine", n, res)
 	}
 }
+
+const filterTpl = `<p>Hi {{ customer.first_name | default: "there" | capitalize }},</p>
+{% assign plan = customer.plan | default: "free" %}<p>Plan: {{ plan | capitalize }} since {{ customer.since | default: "today" }}.</p>
+{% for item in event.items %}<li>{{ item.name | capitalize }} x{{ item.qty | default: 1 }}</li>{% endfor %}`
+
+func BenchmarkFilters(b *testing.B) {
+	vars := map[string]any{
+		"customer": map[string]any{"first_name": "ada", "plan": "pro"},
+		"event":    map[string]any{"items": []any{map[string]any{"name": "widget", "qty": 2.0}, map[string]any{"name": "gadget"}}},
+	}
+	buf := make([]byte, 0, 1024)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(filterTpl)))
+	for b.Loop() {
+		var err error
+		if buf, err = Append(buf[:0], filterTpl, vars, true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

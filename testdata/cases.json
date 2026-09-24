@@ -218,5 +218,6 @@
   {"name": "named arg on capitalize", "tpl": "[{{ x | default: 'd', other: true }}]", "data": {}, "err": "unsupported"},
   {"name": "allow_false non literal", "tpl": "[{{ x | default: 'd', allow_false: y }}]", "data": {"y": true}, "err": "unsupported"},
   {"name": "capitalize number literal", "tpl": "[{{ 5 | capitalize }}]", "out": "[5]"},
-  {"name": "blank filter argument", "tpl": "[{{ x | default: blank }}]", "err": "unsupported"}
+  {"name": "blank filter argument", "tpl": "[{{ x | default: blank }}]", "err": "unsupported"},
+  {"name": "integers around 2^53", "tpl": "{{ a }}|{{ b }}|{{ c }}|{{ d }}", "data": {"a": 9007199254740991, "b": -9007199254740991, "c": 9007199254740992, "d": 219000977437029504}, "out": "9007199254740991|-9007199254740991|9007199254740992|219000977437029500"}
 ]
