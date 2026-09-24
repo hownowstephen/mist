@@ -26,7 +26,7 @@ tagbody  = "if" cond | "elsif" cond | "else" | "endif"
 cond     = cmp { "and" cmp } | cmp { "or" cmp } ;      (* one connective per condition *)
 cmp      = expr [ op expr ] ;
 op       = "==" | "!=" | "<=" | ">=" | "<" | ">" ;
-expr     = path | string | int | "true" | "false" | "nil" | "null" ;
+expr     = path | string | int | "true" | "false" | "nil" | "null" | "blank" ;   (* blank: only as an operand of == or != *)
 path     = ident { "." ident | "[" int "]" | "[" string "]" } ;   (* no spaces inside *)
 ident    = ( letter | "_" ) { letter | digit | "_" | "-" } ;      (* ASCII only *)
 string   = "'" { ? any but ' or \ ? } "'" | '"' { ? any but " or \ ? } '"' ;
@@ -59,6 +59,7 @@ Structural rules the EBNF doesn't express:
 | `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
 | `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
+| `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank` or `nil` bails, because liquidjs is asymmetric there. |
 | `<` `>` `<=` `>=` | Two numbers, or two ASCII strings (byte order). |
 | `and` / `or` | Evaluated as written. Mixing them bails, which sidesteps Liquid's right-to-left associativity. |
 | Whitespace control | `{{-`/`{%-` trim the template text before; `-}}`/`-%}` trim the template text after. Rendered values are never trimmed. The trimmed set is ASCII whitespace plus U+00A0, U+1680, U+180E, U+2000–200A, U+2028, U+2029, U+202F, U+205F, U+3000. |
@@ -76,7 +77,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`/`blank`, float literals, string escapes, variable indexes (`a[b]`), and every Customer.io tag (`cio_link`, `unsubscribe_url`, `countdown`, …).
+Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, `blank` outside `==`/`!=`, float literals, string escapes, variable indexes (`a[b]`), and every Customer.io tag (`cio_link`, `unsubscribe_url`, `countdown`, …).
 
 ## Chains
 

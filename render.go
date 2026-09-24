@@ -197,6 +197,9 @@ func (r *renderer) output(b, e int) {
 	r.setSrc(b, e)
 	live := r.live()
 	v := r.expr(live, false)
+	if v.isBlank() {
+		bail(b, "blank is only supported with == and !=")
+	}
 	r.end()
 	if live {
 		r.write(v)
@@ -286,6 +289,9 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		r.p++
 		val := r.expr(live, true)
+		if val.isBlank() {
+			bail(b, "blank is only supported with == and !=")
+		}
 		r.end()
 		if live {
 			if isNil(val) {
