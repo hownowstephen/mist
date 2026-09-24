@@ -16,6 +16,11 @@ type nilLitT struct{}
 
 var nilLit = nilLitT{}
 
+// blankT is the blank literal, supported only as an operand of == and !=.
+type blankT struct{}
+
+var blankLit = blankT{}
+
 // val carries literals unboxed so evaluating them doesn't allocate.
 type val struct {
 	x   any // data values, bools, nil, undefined
@@ -28,6 +33,8 @@ const (
 	litStr = iota + 1
 	litNum
 )
+
+func (v val) isBlank() bool { return v.lit == 0 && v.x == blankLit }
 
 func (v val) any() any {
 	switch v.lit {
@@ -116,14 +123,30 @@ func (r *renderer) cond(eval bool) bool {
 
 // cmp = expr [ op expr ]
 func (r *renderer) cmp(eval bool) bool {
+	start := r.pos()
 	a := r.expr(eval, true)
 	r.ws()
 	op := r.op()
 	if op == "" {
+		if a.isBlank() {
+			bail(start, "blank is only supported with == and !=")
+		}
 		return eval && truthy(a, r.pos())
 	}
 	at := r.pos()
 	b := r.expr(eval, true)
+	if a.isBlank() || b.isBlank() {
+		other := a
+		if a.isBlank() {
+			other = b
+		}
+		switch {
+		case op != "==" && op != "!=":
+			bail(start, "blank is only supported with == and !=")
+		case other.isBlank() || (other.lit == 0 && other.x == nilLit):
+			bail(start, "blank compared with blank or nil") // liquidjs is asymmetric here
+		}
+	}
 	return eval && compare(op, a, b, at)
 }
 
@@ -157,8 +180,10 @@ func (r *renderer) expr(eval, lenient bool) val {
 			v = false
 		case "nil", "null":
 			v = nilLit
-		case "empty", "blank":
-			bail(at, "empty/blank are not supported")
+		case "blank":
+			v = blankLit
+		case "empty":
+			bail(at, "empty is not supported")
 		default:
 			r.p = save
 			return val{x: r.path(eval, lenient)}
@@ -396,6 +421,38 @@ func isObj(v val) bool {
 	return false
 }
 
+// blankValue mirrors liquidjs's BlankDrop: nil, false, and empty or whitespace-only strings, arrays and objects.
+func blankValue(v val) bool {
+	if s, ok := v.str(); ok {
+		for _, c := range s {
+			if !jsSpace(c) {
+				return false
+			}
+		}
+		return true
+	}
+	switch x := v.x.(type) {
+	case nil, undefinedT:
+		return v.lit == 0
+	case bool:
+		return !x
+	case map[string]any:
+		return len(x) == 0
+	case []any:
+		return len(x) == 0
+	}
+	return false // numbers
+}
+
+// jsSpace is JavaScript's \s, which BlankDrop tests strings against.
+func jsSpace(c rune) bool {
+	switch c {
+	case ' ', '\t', '\n', '\v', '\f', '\r', 0xA0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF:
+		return true
+	}
+	return c >= 0x2000 && c <= 0x200A
+}
+
 func isNil(v val) bool {
 	switch v.x.(type) {
 	case nil, undefinedT, nilLitT:
@@ -543,6 +600,12 @@ func ascii(s string) bool {
 
 // eq mirrors liquidjs: === on scalars, except the nil literal matches null and undefined.
 func eq(a, b val, at int) bool {
+	if a.isBlank() {
+		a, b = b, a
+	}
+	if b.isBlank() { // cmp has ruled out blank vs blank or nil
+		return blankValue(a.check(at))
+	}
 	a, b = a.check(at), b.check(at)
 	if (a.lit == 0 && a.x == nilLit) || (b.lit == 0 && b.x == nilLit) {
 		return isNil(a) && isNil(b)

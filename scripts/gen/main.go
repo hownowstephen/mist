@@ -75,7 +75,11 @@ func (g *gen) cmp() string {
 	if g.r.IntN(2) == 0 {
 		return g.expr()
 	}
-	return g.expr() + g.ws() + g.pick([]string{"==", "!=", "<", ">", "<=", ">="}) + g.ws() + g.expr()
+	op := g.pick([]string{"==", "!=", "<", ">", "<=", ">="})
+	if (op == "==" || op == "!=") && g.r.IntN(4) == 0 {
+		return g.expr() + g.ws() + op + g.ws() + "blank"
+	}
+	return g.expr() + g.ws() + op + g.ws() + g.expr()
 }
 
 func (g *gen) open(tag string) string {
@@ -132,7 +136,7 @@ func (g *gen) value(depth int) any {
 	case 3:
 		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000})
 	case 4:
-		return g.pick([]string{"", "a", "b", "A", "10", "2", " x "})
+		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085"})
 	case 5, 6:
 		if depth < 3 {
 			m := map[string]any{}

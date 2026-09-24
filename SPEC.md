@@ -1,6 +1,6 @@
-# mist Liquid subset — v0
+# mist Liquid subset — v0.2.0
 
-_Last updated 2026-09-23. Parity target: liquidjs 10.16.1 with `new Liquid({ lenientIf: true })`, the render service configuration._
+_Last updated 2026-09-24. Parity target: liquidjs 10.16.1 configured with `new Liquid({ lenientIf: true })`._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -26,7 +26,7 @@ tagbody  = "if" cond | "elsif" cond | "else" | "endif"
 cond     = cmp { "and" cmp } | cmp { "or" cmp } ;      (* one connective per condition *)
 cmp      = expr [ op expr ] ;
 op       = "==" | "!=" | "<=" | ">=" | "<" | ">" ;
-expr     = path | string | int | "true" | "false" | "nil" | "null" ;
+expr     = path | string | int | "true" | "false" | "nil" | "null" | "blank" ;   (* blank: only as an operand of == or != *)
 path     = ident { "." ident | "[" int "]" | "[" string "]" } ;   (* no spaces inside *)
 ident    = ( letter | "_" ) { letter | digit | "_" | "-" } ;      (* ASCII only *)
 string   = "'" { ? any but ' or \ ? } "'" | '"' { ? any but " or \ ? } '"' ;
@@ -59,6 +59,7 @@ Structural rules the EBNF doesn't express:
 | `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
 | `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
+| `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank` or `nil` bails, because liquidjs is asymmetric there. |
 | `<` `>` `<=` `>=` | Two numbers, or two ASCII strings (byte order). |
 | `and` / `or` | Evaluated as written. Mixing them bails, which sidesteps Liquid's right-to-left associativity. |
 | Whitespace control | `{{-`/`{%-` trim the template text before; `-}}`/`-%}` trim the template text after. Rendered values are never trimmed. The trimmed set is ASCII whitespace plus U+00A0, U+1680, U+180E, U+2000–200A, U+2028, U+2029, U+202F, U+205F, U+3000. |
@@ -76,14 +77,14 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`/`blank`, float literals, string escapes, variable indexes (`a[b]`), and every Customer.io tag (`cio_link`, `unsubscribe_url`, `countdown`, …).
+Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
 
 ## Chains
 
-`RenderChain` mirrors the render service's `render` array (`liquidController.js` `parse_liquid`):
+`RenderChain` renders a sequence of templates whose outputs feed later ones, such as snippets, then subject, then body, then a layout:
 - Steps run in order. A step's `Vars`, if set, replace the chain vars for that step only.
 - On success, the output is bound at `Key` (for example `["snippets","greeting"]`) into the chain vars, provided the step used them. Nested maps are created as needed.
-- A step whose `Key[0]` is `content` always binds `content` at the top level. If that step errors, the raw template body is bound instead.
+- A step whose `Key[0]` is `content` always binds `content` at the top level, following the layout convention of `{{ content }}`. If that step errors, the raw template body is bound instead, so a layout can still render.
 - `ErrUndefined` is recorded in the step's result and the chain continues.
 - The first unsupported step stops the chain. The caller renders `steps[n:]` with the returned vars.
 - Post-processing such as CSS inlining is the caller's job. A step whose output must be post-processed before later steps read it belongs with the full engine.

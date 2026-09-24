@@ -1,4 +1,4 @@
-// Runs harvested/generated cases through liquidjs (render service config) and
+// Runs harvested/generated cases through liquidjs (the SPEC.md parity config) and
 // writes their lax and strict results, the oracle for corpus_test.go.
 //
 //   node oracle.mjs [-o OUT.json] CASES.json...   (default out: ../testdata/corpus.json)
