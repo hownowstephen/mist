@@ -21,7 +21,9 @@ tagbody  = "if" cond | "elsif" cond | "else" | "endif"
          | "for" ident "in" path | "endfor"
          | "assign" ident "=" expr
          | "comment" | "endcomment"
-         | "raw" | "endraw" ;
+         | "raw" | "endraw"
+         | custom ;
+custom   = ident { ? any ? } ;                     (* only names registered in Engine.Tags *)
 
 cond     = cmp { "and" cmp } | cmp { "or" cmp } ;      (* one connective per condition *)
 cmp      = expr [ op expr ] ;
@@ -78,6 +80,15 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 ### Out of spec (always bails)
 
 Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
+
+## Custom tags
+
+`Engine.Tags` registers inline tags (`{% name args %}`). Block tags such as `{% x %}…{% endx %}` aren't supported.
+- A tag's function runs each time the tag is reached in a live branch. That includes every loop iteration but never a dead branch.
+- The function gets the raw, trimmed text after the name (`Args`), the data passed to `Render` (`Vars`), and the strict flag. `Lookup(path)` resolves a variable in the tag's scope: loop variables, then assigns, then data.
+- Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Any other error stops rendering and is returned wrapped, so `errors.Is` still matches it.
+- Built-in tag names can't be overridden, and names that aren't registered bail as before. `Engine.Check` accepts registered names without calling them. Their arguments aren't checked.
+- The parity contract doesn't cover custom tags. Matching the full engine's output for them is up to whoever implements the tag.
 
 ## Chains
 

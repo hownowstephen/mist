@@ -20,6 +20,23 @@ case errors.Is(err, mist.ErrUndefined):
 
 `RenderChain` renders a sequence of templates whose outputs feed later ones, such as snippets, then subject, then body, then layout. It stops at the first step mist can't handle, so only the remaining steps go to the full engine.
 
+## Custom tags
+
+Register inline tags on an `Engine`; the package-level functions use an `Engine` with none:
+
+```go
+e := mist.Engine{Tags: map[string]mist.TagFunc{
+	"link": func(dst []byte, t mist.Tag) ([]byte, error) {
+		url, ok := t.Lookup(t.Args) // {% link product.url %}, resolved in scope
+		if !ok {
+			return nil, mist.ErrUnsupported // let the full engine handle it
+		}
+		return fmt.Appendf(dst, `<a href="%s">`, url), nil
+	},
+}}
+out, err := e.Render(tpl, vars, strict)
+```
+
 ## What's supported
 
 Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons including `== blank`/`!= blank`, `and`/`or`, and whitespace control. No filters yet. [SPEC.md](SPEC.md) is the normative grammar and semantics.
@@ -30,7 +47,7 @@ Check whether templates are in the subset:
 go run github.com/hownowstephen/mist/cmd/mistcheck@latest template.liquid
 ```
 
-`-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
+`-tags a,b` treats those names as registered custom tags. `-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
 
 ```bash
 mistcheck -stats templates.jsonl

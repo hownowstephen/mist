@@ -2,6 +2,7 @@ package mist
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -37,6 +38,7 @@ type renderer struct {
 	strict  bool
 	check   bool   // parse every branch, evaluate nothing
 	undef   *Error // strict undefined, raised once the current tag parses cleanly
+	tags    map[string]TagFunc
 	stack   [maxDepth]frame
 	depth   int
 
@@ -313,9 +315,28 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		return r.raw(next, live), false
 	default:
-		bail(b, "unsupported tag %q", name)
+		fn, ok := r.tags[name]
+		if !ok {
+			bail(b, "unsupported tag %q", name)
+		}
+		if live {
+			r.ws()
+			r.callTag(fn, name, strings.TrimSpace(r.src[r.p:]), b)
+		}
 	}
 	return next, rt
+}
+
+func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
+	if fn == nil {
+		bail(pos, "tag %q is registered without a function", name) // e.g. for Check only
+	}
+	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, assigns: r.assigns, frames: slices.Clone(r.stack[:r.depth])}
+	out, err := fn(r.out, t)
+	if err != nil {
+		panic(bailout{fmt.Errorf("mist: tag %q at offset %d: %w", name, pos, err)})
+	}
+	r.out = out
 }
 
 // skipComment tokenizes (but ignores) everything up to endcomment, as liquidjs does.

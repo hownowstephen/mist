@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hownowstephen/mist"
 )
 
 func TestBlockers(t *testing.T) {
@@ -23,9 +25,16 @@ func TestBlockers(t *testing.T) {
 		"{% endif %}": {"structure"},
 		"{% if x %}{% for y in ys offset:1 %}{% endfor %}{% endif %}{{ z | a }}": {"for:offset", "filter:a"},
 	} {
-		if got := blockers(tpl); !slices.Equal(got, want) {
+		if got := blockers(mist.Engine{}, tpl); !slices.Equal(got, want) {
 			t.Errorf("%s:\n got  %q\n want %q", tpl, got, want)
 		}
+	}
+}
+
+func TestBlockersWithTags(t *testing.T) {
+	e := mist.Engine{Tags: map[string]mist.TagFunc{"unsubscribe_url": nil}}
+	if got := blockers(e, "{% unsubscribe_url %}{{ a | b }}"); !slices.Equal(got, []string{"filter:b"}) {
+		t.Errorf("got %q; want only filter:b", got)
 	}
 }
 
