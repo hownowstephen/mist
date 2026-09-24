@@ -26,26 +26,86 @@ type Error struct {
 func (e *Error) Error() string { return fmt.Sprintf("%v at offset %d: %s", e.Kind, e.Pos, e.Msg) }
 func (e *Error) Unwrap() error { return e.Kind }
 
+// Engine renders templates with custom tags. The zero value has none, and the
+// package-level functions use it.
+type Engine struct {
+	// Tags maps inline tag names, as in {% name args %}, to their implementations.
+	// Built-in tag names can't be overridden.
+	Tags map[string]TagFunc
+}
+
+// TagFunc appends a custom tag's output to dst. Returning an error that wraps
+// ErrUnsupported hands the template to the full engine; any other error stops rendering.
+type TagFunc func(dst []byte, t Tag) ([]byte, error)
+
+// Tag is one use of a custom tag.
+type Tag struct {
+	Name   string
+	Args   string         // raw text after the name, trimmed
+	Vars   map[string]any // the data passed to Render, without assigns or loop variables
+	Strict bool
+
+	assigns map[string]any
+	frames  []frame
+}
+
+// Lookup resolves a variable path such as `product.url` or `items[0]` in the tag's
+// scope: loop variables, then assigns, then Vars. ok is false if it's undefined or
+// not a valid path.
+func (t Tag) Lookup(path string) (v any, ok bool) {
+	defer func() {
+		if e := recover(); e != nil {
+			if _, bailed := e.(bailout); !bailed {
+				panic(e)
+			}
+			v, ok = nil, false
+		}
+	}()
+	r := renderer{tpl: path, vars: t.Vars, assigns: t.assigns}
+	r.depth = copy(r.stack[:], t.frames)
+	r.setSrc(0, len(path))
+	r.ws()
+	v = r.path(true, true)
+	r.end()
+	if _, undefined := v.(undefinedT); undefined {
+		return nil, false
+	}
+	return v, true
+}
+
 // Render renders tpl with vars. strict makes undefined variables in output an error.
 func Render(tpl string, vars map[string]any, strict bool) (string, error) {
-	out, err := Append(make([]byte, 0, len(tpl)+len(tpl)/2), tpl, vars, strict)
-	return string(out), err
+	return Engine{}.Render(tpl, vars, strict)
 }
 
 // Append is Render appending to dst, so callers can reuse a buffer and render
 // without allocating. On error out is nil.
-func Append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
-	defer recoverBail(&err)
-	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict}
-	r.run()
-	return r.out, nil
+func Append(dst []byte, tpl string, vars map[string]any, strict bool) ([]byte, error) {
+	return Engine{}.Append(dst, tpl, vars, strict)
 }
 
 // Check reports whether tpl is inside the subset, parsing every branch without data.
 // Templates that pass can still bail at render time on data-dependent rules (see SPEC.md).
-func Check(tpl string) (err error) {
+func Check(tpl string) error { return Engine{}.Check(tpl) }
+
+// Render is the package-level Render with e's custom tags.
+func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, error) {
+	out, err := e.Append(make([]byte, 0, len(tpl)+len(tpl)/2), tpl, vars, strict)
+	return string(out), err
+}
+
+// Append is the package-level Append with e's custom tags.
+func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
 	defer recoverBail(&err)
-	r := renderer{tpl: tpl, check: true}
+	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict, tags: e.Tags}
+	r.run()
+	return r.out, nil
+}
+
+// Check is the package-level Check, also accepting e's custom tags.
+func (e Engine) Check(tpl string) (err error) {
+	defer recoverBail(&err)
+	r := renderer{tpl: tpl, check: true, tags: e.Tags}
 	r.run()
 	return nil
 }
@@ -60,7 +120,7 @@ type Step struct {
 
 type Result struct {
 	Out string
-	Err error // ErrUndefined; unsupported steps are never returned
+	Err error // ErrUndefined or a custom tag's error; unsupported steps are never returned
 }
 
 // RenderChain renders steps in order, binding each output into the vars seen by
@@ -68,6 +128,11 @@ type Result struct {
 // can't render and returns n, its index; the caller renders steps[n:] with the full
 // engine using the returned vars. The caller's maps are never mutated.
 func RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrated map[string]any) {
+	return Engine{}.RenderChain(steps, vars)
+}
+
+// RenderChain is the package-level RenderChain with e's custom tags.
+func (e Engine) RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrated map[string]any) {
 	res = make([]Result, 0, len(steps))
 	owned := false
 	var buf []byte
@@ -76,7 +141,7 @@ func RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrat
 		if v == nil {
 			v = vars
 		}
-		out, err := Append(buf[:0], st.Body, v, st.Strict)
+		out, err := e.Append(buf[:0], st.Body, v, st.Strict)
 		if errors.Is(err, ErrUnsupported) {
 			return res, i, vars
 		}

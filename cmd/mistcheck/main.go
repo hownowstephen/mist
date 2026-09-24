@@ -1,6 +1,6 @@
 // Command mistcheck reports whether Liquid templates are inside the mist subset.
 //
-//	mistcheck [-stats] FILE...   (reads stdin when no files are given)
+//	mistcheck [-stats] [-tags a,b] FILE...   (reads stdin when no files are given)
 //
 // A .jsonl file holds one template per line as a JSON string. By default each
 // out-of-spec template's first unsupported construct is printed and the exit status
@@ -27,7 +27,15 @@ type template struct {
 
 func main() {
 	stats := flag.Bool("stats", false, "summarize every unsupported construct across templates")
+	tags := flag.String("tags", "", "comma-separated custom tag names to treat as registered")
 	flag.Parse()
+	var e mist.Engine
+	if *tags != "" {
+		e.Tags = map[string]mist.TagFunc{}
+		for name := range strings.SplitSeq(*tags, ",") {
+			e.Tags[strings.TrimSpace(name)] = nil
+		}
+	}
 	files := flag.Args()
 	if len(files) == 0 {
 		files = []string{"-"}
@@ -43,13 +51,13 @@ func main() {
 		}
 		for _, t := range tpls {
 			if *stats {
-				all = append(all, blockers(t.body))
+				all = append(all, blockers(e, t.body))
 				continue
 			}
-			if e, ok := errors.AsType[*mist.Error](mist.Check(t.body)); ok {
-				line := strings.Count(t.body[:e.Pos], "\n") + 1
-				col := e.Pos - strings.LastIndexByte(t.body[:e.Pos], '\n')
-				fmt.Printf("%s:%d:%d: %s\n", t.name, line, col, e.Msg)
+			if err, ok := errors.AsType[*mist.Error](e.Check(t.body)); ok {
+				line := strings.Count(t.body[:err.Pos], "\n") + 1
+				col := err.Pos - strings.LastIndexByte(t.body[:err.Pos], '\n')
+				fmt.Printf("%s:%d:%d: %s\n", t.name, line, col, err.Msg)
 				status = 1
 			}
 		}

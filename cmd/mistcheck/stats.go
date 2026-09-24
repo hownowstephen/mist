@@ -22,7 +22,7 @@ var (
 // checks tpl and replaces the token each error points at with a supported token of
 // the same structural role, so later constructs surface without cascading errors.
 // ponytail: re-checks from the start per blocker, O(n·blockers); fine for a CLI.
-func blockers(tpl string) []string {
+func blockers(eng mist.Engine, tpl string) []string {
 	var kinds []string
 	add := func(k string) {
 		if !slices.Contains(kinds, k) {
@@ -31,7 +31,7 @@ func blockers(tpl string) []string {
 	}
 	unknown := map[string]bool{} // unsupported tags, whose end tags aren't blockers of their own
 	for range 1000 {
-		e, ok := errors.AsType[*mist.Error](mist.Check(tpl))
+		e, ok := errors.AsType[*mist.Error](eng.Check(tpl))
 		if !ok {
 			break
 		}
