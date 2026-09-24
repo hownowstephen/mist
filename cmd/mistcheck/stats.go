@@ -97,7 +97,7 @@ func classify(tok string, isTag bool, msg string, unknown map[string]bool) (stri
 	}
 
 	var kinds []string
-	code := quoted.ReplaceAllString(strings.ReplaceAll(inner, "'", `"`), `""`)
+	code := blankStrings(inner)
 	if segs := strings.Split(code, "|"); len(segs) > 1 {
 		for _, s := range segs[1:] {
 			if m := filterName.FindStringSubmatch(s); m != nil {
@@ -139,6 +139,24 @@ func classify(tok string, isTag bool, msg string, unknown map[string]bool) (stri
 		return "{%" + name + "%}", kinds
 	}
 	return "", kinds
+}
+
+// blankStrings replaces the contents of string literals with spaces, so a | or keyword
+// inside one isn't read as syntax. An apostrophe inside "…" doesn't end the string.
+func blankStrings(s string) string {
+	b := []byte(s)
+	var q byte
+	for i, c := range b {
+		switch {
+		case q != 0 && c == q:
+			q = 0
+		case q != 0:
+			b[i] = ' '
+		case c == '"' || c == '\'':
+			q = c
+		}
+	}
+	return string(b)
 }
 
 func msgKind(msg string) string {

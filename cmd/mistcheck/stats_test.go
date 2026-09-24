@@ -24,6 +24,10 @@ func TestBlockers(t *testing.T) {
 		"{% if x %}":  {"structure"},
 		"{% endif %}": {"structure"},
 		"{% if x %}{% for y in ys offset:1 %}{% endfor %}{% endif %}{{ z | a }}": {"for:offset", "filter:a"},
+		`{{ x | default: "Don't miss | Wagering rules apply" }}`:                 {"filter:default"},
+		`{{ "Offer ends | Valable jusqu'au lundi" | upcase }}`:                   {"filter:upcase"},
+		`{{ 'He said "hi | there"' | escape }}`:                                  {"filter:escape"},
+		`{% if a == "x contains y" %}{{ b | c }}{% endif %}`:                     {"filter:c"},
 	} {
 		if got := blockers(mist.Engine{}, tpl); !slices.Equal(got, want) {
 			t.Errorf("%s:\n got  %q\n want %q", tpl, got, want)
