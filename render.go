@@ -1,0 +1,398 @@
+package mist
+
+import (
+	"fmt"
+	"strings"
+	"unicode/utf8"
+)
+
+const maxDepth = 16
+
+type frameKind uint8
+
+const (
+	kIf frameKind = iota
+	kUnless
+	kFor
+)
+
+type frame struct {
+	kind       frameKind
+	parentLive bool
+	active     bool // current branch (or loop body) executes
+	taken      bool // a branch of this if/unless already executed
+	sawElse    bool
+	rtrim      bool // for: the for tag's -%}, reapplied on each iteration
+	body       int  // for: offset just past the for tag
+	idx        int
+	name       string
+	coll       []any
+}
+
+type renderer struct {
+	tpl     string
+	out     []byte
+	vars    map[string]any
+	assigns map[string]any
+	strict  bool
+	check   bool // parse every branch, evaluate nothing
+	stack   [maxDepth]frame
+	depth   int
+
+	// expression cursor: src is tpl[base:base+len(src)]
+	src  string
+	base int
+	p    int
+}
+
+type bailout struct{ err error }
+
+func recoverBail(err *error) {
+	if e := recover(); e != nil {
+		b, ok := e.(bailout)
+		if !ok {
+			panic(e)
+		}
+		*err = b.err
+	}
+}
+
+func bail(pos int, format string, args ...any) {
+	panic(bailout{&Error{Kind: ErrUnsupported, Pos: pos, Msg: fmt.Sprintf(format, args...)}})
+}
+
+func (r *renderer) live() bool {
+	if r.depth == 0 {
+		return !r.check
+	}
+	f := &r.stack[r.depth-1]
+	return f.parentLive && f.active
+}
+
+func (r *renderer) top() *frame {
+	if r.depth == 0 {
+		return nil
+	}
+	return &r.stack[r.depth-1]
+}
+
+func (r *renderer) push(f frame) {
+	if r.depth == maxDepth {
+		bail(r.base, "nesting deeper than %d", maxDepth)
+	}
+	r.stack[r.depth] = f
+	r.depth++
+}
+
+func (r *renderer) run() {
+	s := r.tpl
+	pos, trimNext := 0, false
+	for pos < len(s) {
+		start, isTag := nextDelim(s, pos)
+		text := s[pos:start]
+		if trimNext {
+			text = trimLeftBlank(text)
+		}
+		if start == len(s) {
+			r.emit(text)
+			break
+		}
+		b, e, next, lt, rt := delimBounds(s, start, isTag)
+		if lt {
+			text = trimRightBlank(text)
+		}
+		r.emit(text)
+		if isTag {
+			pos, trimNext = r.tag(b, e, next, lt, rt)
+		} else {
+			r.output(b, e)
+			pos, trimNext = next, rt
+		}
+	}
+	if r.depth > 0 {
+		bail(len(s), "unclosed block")
+	}
+}
+
+func (r *renderer) emit(text string) {
+	if r.live() {
+		r.out = append(r.out, text...)
+	}
+}
+
+// nextDelim finds the next "{{" or "{%" at or after pos, or len(s).
+func nextDelim(s string, pos int) (int, bool) {
+	for {
+		j := strings.IndexByte(s[pos:], '{')
+		if j < 0 {
+			return len(s), false
+		}
+		j += pos
+		if j+1 < len(s) {
+			switch s[j+1] {
+			case '{':
+				return j, false
+			case '%':
+				return j, true
+			}
+		}
+		pos = j + 1
+	}
+}
+
+// delimBounds returns the body [b,e) of the tag or output at start, excluding
+// trim markers, and the offset just past its closer.
+func delimBounds(s string, start int, isTag bool) (b, e, next int, lt, rt bool) {
+	b = start + 2
+	if b < len(s) && s[b] == '-' {
+		lt = true
+		b++
+	}
+	if isTag {
+		// liquidjs ends tags at the first %}, quotes or not
+		k := strings.Index(s[b:], "%}")
+		if k < 0 {
+			bail(start, "unclosed tag")
+		}
+		e = b + k
+	} else {
+		e = closeOutput(s, b, start)
+	}
+	next = e + 2
+	if e > b && s[e-1] == '-' {
+		rt = true
+		e--
+	}
+	return
+}
+
+// closeOutput finds the "}}" closing an output, skipping quoted strings as liquidjs does.
+func closeOutput(s string, i, start int) int {
+	for i < len(s) {
+		switch c := s[i]; c {
+		case '"', '\'':
+			k := strings.IndexByte(s[i+1:], c)
+			if k < 0 || strings.IndexByte(s[i+1:i+1+k], '\\') >= 0 {
+				bail(i, "unterminated or escaped string")
+			}
+			i += k + 2
+		case '}':
+			if i+1 < len(s) && s[i+1] == '}' {
+				return i
+			}
+			i++
+		default:
+			i++
+		}
+	}
+	bail(start, "unclosed output")
+	return 0
+}
+
+func (r *renderer) output(b, e int) {
+	r.setSrc(b, e)
+	live := r.live()
+	v := r.expr(live, false)
+	r.end()
+	if live {
+		r.write(v)
+	}
+}
+
+func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
+	r.setSrc(b, e)
+	r.ws()
+	name := r.ident()
+	live := r.live()
+	switch name {
+	case "if", "unless":
+		c := r.cond(live)
+		if name == "unless" {
+			c = !c
+		}
+		k := kIf
+		if name == "unless" {
+			k = kUnless
+		}
+		r.push(frame{kind: k, parentLive: live, active: c, taken: c})
+	case "elsif":
+		f := r.top()
+		if f == nil || f.kind == kFor || f.sawElse {
+			bail(b, "unexpected elsif")
+		}
+		eval := f.parentLive && !f.taken
+		f.active = r.cond(eval)
+		f.taken = f.taken || f.active
+	case "else":
+		r.end()
+		f := r.top()
+		if f == nil || f.kind == kFor || f.sawElse {
+			bail(b, "unexpected else")
+		}
+		f.sawElse, f.active, f.taken = true, !f.taken, true
+	case "endif", "endunless":
+		r.end()
+		f := r.top()
+		if f == nil || (f.kind == kIf) != (name == "endif") || f.kind == kFor {
+			bail(b, "unexpected %s", name)
+		}
+		r.depth--
+	case "for":
+		r.ws()
+		v := r.ident()
+		r.ws()
+		if v == "" || r.ident() != "in" {
+			bail(b, "expected: for <ident> in <path>")
+		}
+		r.ws()
+		if !isIdentStart(r.peek()) {
+			bail(r.base+r.p, "for collection must be a variable path")
+		}
+		coll := r.path(live, false)
+		r.end()
+		f := frame{kind: kFor, parentLive: live, body: next, rtrim: rt, name: v}
+		if live {
+			switch c := coll.(type) {
+			case []any:
+				f.coll = c
+			case nil, undefinedT:
+			default:
+				bail(b, "for over non-array %T", coll)
+			}
+		}
+		f.active = len(f.coll) > 0
+		r.push(f)
+	case "endfor":
+		r.end()
+		f := r.top()
+		if f == nil || f.kind != kFor {
+			bail(b, "unexpected endfor")
+		}
+		if f.active && f.idx+1 < len(f.coll) {
+			f.idx++
+			return f.body, f.rtrim
+		}
+		r.depth--
+	case "assign":
+		r.ws()
+		v := r.ident()
+		r.ws()
+		if v == "" || r.peek() != '=' {
+			bail(b, "expected: assign <ident> = <expr>")
+		}
+		r.p++
+		val := r.expr(live, true)
+		r.end()
+		if live {
+			x := val.any()
+			if isNil(val) {
+				x = nil
+			}
+			if r.assigns == nil {
+				r.assigns = map[string]any{}
+			}
+			r.assigns[v] = x
+		}
+	case "comment":
+		r.end()
+		return r.skipComment(next)
+	case "raw":
+		r.end()
+		if lt || rt {
+			bail(b, "trim markers on raw")
+		}
+		return r.raw(next, live), false
+	default:
+		bail(b, "unsupported tag %q", name)
+	}
+	return next, rt
+}
+
+// skipComment tokenizes (but ignores) everything up to endcomment, as liquidjs does.
+func (r *renderer) skipComment(pos int) (int, bool) {
+	s := r.tpl
+	for {
+		start, isTag := nextDelim(s, pos)
+		if start == len(s) {
+			bail(pos, "unclosed comment")
+		}
+		b, e, next, _, rt := delimBounds(s, start, isTag)
+		pos = next
+		if !isTag {
+			continue
+		}
+		r.setSrc(b, e)
+		r.ws()
+		switch r.ident() {
+		case "endcomment":
+			r.end()
+			return next, rt
+		case "comment", "raw":
+			bail(b, "comment or raw inside comment")
+		}
+	}
+}
+
+func (r *renderer) raw(pos int, live bool) int {
+	s := r.tpl
+	for i := pos; ; {
+		k := strings.Index(s[i:], "{%")
+		if k < 0 {
+			bail(pos, "unclosed raw")
+		}
+		k += i
+		j := skipBlank(s, k+2)
+		if strings.HasPrefix(s[j:], "endraw") {
+			j = skipBlank(s, j+6)
+			if !strings.HasPrefix(s[j:], "%}") || s[k+2] == '-' {
+				bail(k, "malformed endraw")
+			}
+			if live {
+				r.out = append(r.out, s[pos:k]...)
+			}
+			return j + 2
+		}
+		i = k + 2
+	}
+}
+
+func skipBlank(s string, i int) int {
+	for i < len(s) && isBlank(s[i]) {
+		i++
+	}
+	return i
+}
+
+func isBlank(c byte) bool { return c == ' ' || (c >= '\t' && c <= '\r') }
+
+// isTrimBlank matches liquidjs's BLANK character class, which whitespace control trims greedily.
+func isTrimBlank(c rune) bool {
+	switch c {
+	case ' ', '\t', '\n', '\v', '\f', '\r',
+		0xA0, 0x1680, 0x180E, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000:
+		return true
+	}
+	return c >= 0x2000 && c <= 0x200A
+}
+
+func trimLeftBlank(s string) string {
+	for len(s) > 0 {
+		c, n := utf8.DecodeRuneInString(s)
+		if !isTrimBlank(c) {
+			break
+		}
+		s = s[n:]
+	}
+	return s
+}
+
+func trimRightBlank(s string) string {
+	for len(s) > 0 {
+		c, n := utf8.DecodeLastRuneInString(s)
+		if !isTrimBlank(c) {
+			break
+		}
+		s = s[:len(s)-n]
+	}
+	return s
+}
