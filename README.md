@@ -7,7 +7,7 @@ A single-pass renderer for a strict subset of [Liquid](https://shopify.github.io
 mist evaluates as it scans: no tokenize, compile or AST step, and no allocations on the hot path. As soon as it meets anything outside the subset it returns `ErrUnsupported`, and you render with your full Liquid engine instead. For every template it accepts, its output matches [liquidjs](https://liquidjs.com) 10 (`lenientIf: true`) byte for byte.
 
 ```go
-out, err := mist.Render(nil, tpl, vars, strict)
+out, err := mist.Render(tpl, vars, strict)
 switch {
 case errors.Is(err, mist.ErrUnsupported):
 	// outside the subset: render with the full engine
@@ -15,6 +15,8 @@ case errors.Is(err, mist.ErrUndefined):
 	// strict mode, undefined variable; the full engine fails too
 }
 ```
+
+`Append(dst, tpl, vars, strict)` does the same into a reusable buffer, with no allocations.
 
 `RenderChain` renders a sequence of templates whose outputs feed later ones, such as snippets, then subject, then body, then layout. It stops at the first step mist can't handle, so only the remaining steps go to the full engine.
 
