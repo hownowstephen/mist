@@ -22,7 +22,7 @@ case errors.Is(err, mist.ErrUndefined):
 
 ## What's supported
 
-Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons, `and`/`or`, and whitespace control. No filters yet. [SPEC.md](SPEC.md) is the normative grammar and semantics.
+Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons including `== blank`/`!= blank`, `and`/`or`, and whitespace control. No filters yet. [SPEC.md](SPEC.md) is the normative grammar and semantics.
 
 Check whether templates are in the subset:
 

@@ -77,7 +77,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, `blank` outside `==`/`!=`, float literals, string escapes, variable indexes (`a[b]`), and every Customer.io tag (`cio_link`, `unsubscribe_url`, `countdown`, …).
+Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, float literals, string escapes, variable indexes (`a[b]`), and every Customer.io tag (`cio_link`, `unsubscribe_url`, `countdown`, …).
 
 ## Chains
 
