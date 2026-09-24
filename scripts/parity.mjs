@@ -18,7 +18,8 @@ for (const c of cases) {
     if (process.argv.includes('-v')) console.log(`info ${c.name}: ${err ? 'ERR ' + err : JSON.stringify(got)}`);
     continue;
   }
-  const ok = c.err === 'undefined' ? /undefined variable/.test(err ?? '') : err === undefined && got === c.out;
+  // mist fails fast on undefined; liquidjs must fail too, but may report a later syntax error.
+  const ok = c.err === 'undefined' ? err !== undefined : err === undefined && got === c.out;
   if (!ok) {
     failed++;
     console.log(`FAIL ${c.name}: want ${c.err ?? JSON.stringify(c.out)}, liquidjs gave ${err ? 'ERR ' + err : JSON.stringify(got)}`);

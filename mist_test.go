@@ -48,7 +48,7 @@ func TestCases(t *testing.T) {
 				}
 			}
 			// Everything that renders or fails authoritatively is in spec.
-			if c.Err != "unsupported" {
+			if c.Err == "" {
 				if err := Check(c.Tpl); err != nil {
 					t.Fatalf("Check: %v", err)
 				}

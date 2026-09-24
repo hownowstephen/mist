@@ -36,7 +36,7 @@ type renderer struct {
 	assigns map[string]any
 	strict  bool
 	check   bool   // parse every branch, evaluate nothing
-	undef   *Error // first strict undefined; reported only if the rest of the template is in spec
+	undef   *Error // strict undefined, raised once the current tag parses cleanly
 	stack   [maxDepth]frame
 	depth   int
 
