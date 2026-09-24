@@ -12,7 +12,8 @@ import (
 var (
 	// ErrUnsupported means the template is outside the subset; render it with the full engine instead.
 	ErrUnsupported = errors.New("mist: unsupported")
-	// ErrUndefined is a strict-mode undefined variable. It is authoritative: the full engine fails the same way.
+	// ErrUndefined is a strict-mode undefined variable. The full engine fails too, though a
+	// syntax error later in the template may take precedence there.
 	ErrUndefined = errors.New("mist: undefined variable")
 )
 
@@ -30,9 +31,6 @@ func Render(dst []byte, tpl string, vars map[string]any, strict bool) (out []byt
 	defer recoverBail(&err)
 	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict}
 	r.run()
-	if r.undef != nil {
-		return nil, r.undef
-	}
 	return r.out, nil
 }
 

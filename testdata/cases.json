@@ -126,7 +126,7 @@
   {"name": "assign nil literal", "tpl": "{% assign x = nil %}{% if x == y %}t{% endif %}", "err": "unsupported"},
   {"name": "reserved root", "tpl": "{{ not }}", "err": "unsupported"},
   {"name": "reserved property ok", "tpl": "{{ a.and }}{{ a.contains }}", "data": {"a": {"and": 1, "contains": 2}}, "out": "12"},
-  {"name": "undefined then later syntax error", "tpl": "{{ x }}{% if %}", "strict": true, "err": "unsupported"},
+  {"name": "undefined then later syntax error", "tpl": "{{ x }}{% if %}", "strict": true, "err": "undefined"},
   {"name": "undefined then unclosed bracket", "tpl": "{{ x[0 }}", "strict": true, "err": "unsupported"},
   {"name": "nameless tag in comment", "tpl": "{% comment %}{%%}{% endcomment %}", "err": "unsupported"},
   {"name": "undefined reported after full scan", "tpl": "{{ x }}{% if true %}{{ y }}{% endif %}", "strict": true, "err": "undefined"},
@@ -135,5 +135,6 @@
   {"name": "lenient strict undefined path is null", "tpl": "{% if n.a == y.z %}eq{% else %}ne{% endif %}", "data": {"n": null}, "strict": true, "out": "eq"},
   {"name": "lax null path vs undefined", "tpl": "{% if n.a == y %}eq{% else %}ne{% endif %}", "data": {"n": null}, "out": "ne"},
   {"name": "escaped string in tag", "tpl": "{% if x == 'a\\'b' %}y{% endif %}", "err": "unsupported"},
-  {"name": "endfor closing if", "tpl": "{% if true %}{% endfor %}", "err": "unsupported"}
+  {"name": "endfor closing if", "tpl": "{% if true %}{% endfor %}", "err": "unsupported"},
+  {"name": "undefined with default filter bails", "tpl": "{{ x | default: 'Guest' }}", "strict": true, "err": "unsupported"}
 ]
