@@ -1,6 +1,7 @@
 package mist
 
 import (
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -76,7 +77,11 @@ func (r *renderer) filters(v val, eval bool) val {
 			}
 		case name == "capitalize" && len(args) == 0:
 			if eval {
-				v = val{s: capitalize(stringify(nil, v, at), at), lit: litStr}
+				s, ok := v.str()
+				if !ok {
+					s = string(stringify(nil, v, at))
+				}
+				v = val{s: capitalize(s, at), lit: litStr}
 			}
 		default:
 			bail(at, "unsupported filter %q", name)
@@ -181,27 +186,36 @@ func stringify(dst []byte, v val, at int) []byte {
 
 // capitalize mirrors JavaScript's s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(),
 // bailing on characters whose JavaScript mapping Go's simple case tables don't match.
-func capitalize(s []byte, at int) string {
-	if len(s) == 0 {
+// It returns s itself when nothing changes, which is common for names.
+func capitalize(s string, at int) string {
+	if s == "" {
 		return ""
 	}
-	out := make([]byte, 0, len(s))
-	first, n := utf8.DecodeRune(s)
-	if first > 0xFFFF {
-		out = append(out, s[:n]...) // charAt(0) is half a surrogate pair, which has no case
-	} else {
+	first, n := utf8.DecodeRuneInString(s)
+	up := first
+	if first <= 0xFFFF { // above, charAt(0) is half a surrogate pair, which has no case
 		if jsUpperDiffers(first) {
 			bail(at, "capitalize of %q, whose JavaScript upper case differs", first)
 		}
-		out = utf8.AppendRune(out, unicode.ToUpper(first))
+		up = unicode.ToUpper(first)
 	}
-	for _, c := range string(s[n:]) {
+	same := up == first
+	for _, c := range s[n:] {
 		if jsLowerDiffers(c) {
 			bail(at, "capitalize of %q, whose JavaScript lower case differs", c)
 		}
-		out = utf8.AppendRune(out, unicode.ToLower(c))
+		same = same && unicode.ToLower(c) == c
 	}
-	return string(out)
+	if same {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + utf8.UTFMax)
+	b.WriteRune(up)
+	for _, c := range s[n:] {
+		b.WriteRune(unicode.ToLower(c))
+	}
+	return b.String()
 }
 
 // jsUpperDiffers covers full-Unicode expansions (ß→SS, ligatures, polytonic Greek) and

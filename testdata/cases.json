@@ -221,4 +221,5 @@
   {"name": "blank filter argument", "tpl": "[{{ x | default: blank }}]", "err": "unsupported"},
   {"name": "nil literal output", "tpl": "[{{ nil }}]", "err": "unsupported"},
   {"name": "null literal output", "tpl": "[{{ null }}]", "err": "unsupported"}
+  {"name": "integers around 2^53", "tpl": "{{ a }}|{{ b }}|{{ c }}|{{ d }}", "data": {"a": 9007199254740991, "b": -9007199254740991, "c": 9007199254740992, "d": 219000977437029504}, "out": "9007199254740991|-9007199254740991|9007199254740992|219000977437029500"}
 ]
