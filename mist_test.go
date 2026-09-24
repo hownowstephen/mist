@@ -119,8 +119,8 @@ func TestUndefinedNamesWholePath(t *testing.T) {
 
 func TestErrorPosition(t *testing.T) {
 	_, err := Render("line1\n{{ a | b }}", nil, false)
-	if e, ok := errors.AsType[*Error](err); !ok || e.Pos != 11 {
-		t.Fatalf("got %v; want unsupported at offset 11", err)
+	if e, ok := errors.AsType[*Error](err); !ok || e.Pos != 13 {
+		t.Fatalf("got %v; want unsupported at offset 13, the filter name", err)
 	}
 }
 

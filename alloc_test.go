@@ -36,3 +36,17 @@ func TestEngineWithUnusedTagsDoesNotAllocate(t *testing.T) {
 		t.Fatalf("Engine.Append allocated %v times per run; want 0", allocs)
 	}
 }
+
+func TestDefaultDoesNotAllocate(t *testing.T) {
+	vars := map[string]any{"customer": map[string]any{"first_name": "Ada"}}
+	tpl := `Hi {{ customer.first_name | default: "there" }}, {{ customer.nickname | default: customer.first_name }}!`
+	buf := make([]byte, 0, 256)
+	if allocs := testing.AllocsPerRun(100, func() {
+		var err error
+		if buf, err = Append(buf[:0], tpl, vars, true); err != nil {
+			t.Fatal(err)
+		}
+	}); allocs != 0 {
+		t.Fatalf("default allocated %v times per run; want 0", allocs)
+	}
+}

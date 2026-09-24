@@ -42,7 +42,7 @@ func blockers(eng mist.Engine, tpl string) []string {
 			}
 			break
 		}
-		repl, ks := classify(tpl[start:end], isTag, e.Msg, unknown)
+		repl, ks := classify(eng, tpl[start:end], isTag, e.Msg, unknown)
 		if len(ks) == 0 && len(kinds) == 0 {
 			ks = []string{"structure"}
 		}
@@ -76,7 +76,7 @@ func token(tpl string, pos int) (start, end int, isTag bool) {
 }
 
 // classify names what makes a token unsupported and returns a supported stand-in.
-func classify(tok string, isTag bool, msg string, unknown map[string]bool) (string, []string) {
+func classify(eng mist.Engine, tok string, isTag bool, msg string, unknown map[string]bool) (string, []string) {
 	inner := strings.Trim(tok[2:len(tok)-2], "-")
 	fields := strings.Fields(inner)
 	name := ""
@@ -100,7 +100,7 @@ func classify(tok string, isTag bool, msg string, unknown map[string]bool) (stri
 	code := blankStrings(inner)
 	if segs := strings.Split(code, "|"); len(segs) > 1 {
 		for _, s := range segs[1:] {
-			if m := filterName.FindStringSubmatch(s); m != nil {
+			if m := filterName.FindStringSubmatch(s); m != nil && !supportedFilter(eng, m[1]) {
 				kinds = append(kinds, "filter:"+m[1])
 			}
 		}
@@ -159,6 +159,11 @@ func blankStrings(s string) string {
 	return string(b)
 }
 
+// supportedFilter reports whether eng renders the named filter, built in or registered.
+func supportedFilter(eng mist.Engine, name string) bool {
+	return eng.Check("{{ x | "+name+" }}") == nil || eng.Check("{{ x | "+name+": x }}") == nil
+}
+
 func msgKind(msg string) string {
 	switch {
 	case msg == "mixed and/or":
@@ -173,6 +178,12 @@ func msgKind(msg string) string {
 		return "reserved word as variable"
 	case strings.HasPrefix(msg, "trim markers on raw"):
 		return "raw with trim markers"
+	case strings.HasPrefix(msg, "named filter arguments"):
+		return "named filter arguments"
+	case strings.HasPrefix(msg, "more than") && strings.HasSuffix(msg, "filter arguments"):
+		return "too many filter arguments"
+	case strings.Contains(msg, "unsupported filter"):
+		return "filter arguments"
 	}
 	return "other: " + digits.ReplaceAllString(quoted.ReplaceAllString(msg, `"…"`), "N")
 }

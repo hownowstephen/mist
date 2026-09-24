@@ -70,8 +70,8 @@ func (r *renderer) end() {
 	if r.p < len(r.src) {
 		bail(r.pos(), "unexpected %q", r.src[r.p:])
 	}
-	if r.undef != nil {
-		panic(bailout{r.undef})
+	if r.undef.set {
+		panic(bailout{&Error{Kind: ErrUndefined, Pos: r.undef.pos, Msg: r.undef.path}})
 	}
 }
 
@@ -247,9 +247,9 @@ func (r *renderer) path(eval, lenient bool) any {
 		if eval && r.strict && v == (undefinedT{}) {
 			if lenient {
 				v = nil // liquidjs catches the strict error and substitutes null
-			} else if r.undef == nil {
+			} else if !r.undef.set {
 				// Raised by end(): a trailing filter such as `| default` makes liquidjs lenient.
-				r.undef = &Error{Kind: ErrUndefined, Pos: r.base + start, Msg: r.src[start:r.p]}
+				r.undef = pendingUndef{true, r.base + start, r.src[start:r.p]}
 			}
 		}
 		switch r.peek() {
@@ -285,8 +285,8 @@ func (r *renderer) path(eval, lenient bool) any {
 			}
 			r.p++
 		default:
-			if r.undef != nil && r.undef.Pos == r.base+start {
-				r.undef.Msg = r.src[start:r.p] // name the whole path, not just the undefined prefix
+			if r.undef.set && r.undef.pos == r.base+start {
+				r.undef.path = r.src[start:r.p] // name the whole path, not just the undefined prefix
 			}
 			return v
 		}
@@ -317,6 +317,14 @@ func literal(name string) bool {
 		return true
 	}
 	return false
+}
+
+// pendingUndef is a strict undefined variable not yet raised. It's kept unallocated
+// because a leading default filter can still make it lenient.
+type pendingUndef struct {
+	set  bool
+	pos  int
+	path string
 }
 
 // reserved words that liquidjs parses as operators even where a variable is expected.

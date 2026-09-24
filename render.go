@@ -31,16 +31,17 @@ type frame struct {
 }
 
 type renderer struct {
-	tpl     string
-	out     []byte
-	vars    map[string]any
-	assigns map[string]any
-	strict  bool
-	check   bool   // parse every branch, evaluate nothing
-	undef   *Error // strict undefined, raised once the current tag parses cleanly
-	tags    map[string]TagFunc
-	stack   [maxDepth]frame
-	depth   int
+	tpl       string
+	out       []byte
+	vars      map[string]any
+	assigns   map[string]any
+	strict    bool
+	check     bool         // parse every branch, evaluate nothing
+	undef     pendingUndef // strict undefined, raised once the current tag parses cleanly
+	tags      map[string]TagFunc
+	filterFns map[string]FilterFunc
+	stack     [maxDepth]frame
+	depth     int
 
 	// expression cursor: src is tpl[base:base+len(src)]
 	src  string
@@ -202,6 +203,7 @@ func (r *renderer) output(b, e int) {
 	if v.isBlank() {
 		bail(b, "blank is only supported with == and !=")
 	}
+	v = r.filters(v, live)
 	r.end()
 	if live {
 		r.write(v)
@@ -294,6 +296,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		if val.isBlank() {
 			bail(b, "blank is only supported with == and !=")
 		}
+		val = r.filters(val, live)
 		r.end()
 		if live {
 			if isNil(val) {
@@ -334,9 +337,13 @@ func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
 	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, assigns: r.assigns, frames: slices.Clone(r.stack[:r.depth])}
 	out, err := fn(r.out, t)
 	if err != nil {
-		panic(bailout{fmt.Errorf("mist: tag %q at offset %d: %w", name, pos, err)})
+		panic(bailout{wrapErr("tag", name, pos, err)})
 	}
 	r.out = out
+}
+
+func wrapErr(kind, name string, pos int, err error) error {
+	return fmt.Errorf("mist: %s %q at offset %d: %w", kind, name, pos, err)
 }
 
 // skipComment tokenizes (but ignores) everything up to endcomment, as liquidjs does.

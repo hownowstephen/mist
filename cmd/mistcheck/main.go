@@ -1,6 +1,6 @@
 // Command mistcheck reports whether Liquid templates are inside the mist subset.
 //
-//	mistcheck [-stats] [-tags a,b] FILE...   (reads stdin when no files are given)
+//	mistcheck [-stats] [-tags a,b] [-filters a,b] FILE...   (reads stdin when no files are given)
 //
 // A .jsonl file holds one template per line as a JSON string. By default each
 // out-of-spec template's first unsupported construct is printed and the exit status
@@ -28,12 +28,19 @@ type template struct {
 func main() {
 	stats := flag.Bool("stats", false, "summarize every unsupported construct across templates")
 	tags := flag.String("tags", "", "comma-separated custom tag names to treat as registered")
+	filters := flag.String("filters", "", "comma-separated custom filter names to treat as registered")
 	flag.Parse()
 	var e mist.Engine
 	if *tags != "" {
 		e.Tags = map[string]mist.TagFunc{}
 		for name := range strings.SplitSeq(*tags, ",") {
 			e.Tags[strings.TrimSpace(name)] = nil
+		}
+	}
+	if *filters != "" {
+		e.Filters = map[string]mist.FilterFunc{}
+		for name := range strings.SplitSeq(*filters, ",") {
+			e.Filters[strings.TrimSpace(name)] = nil
 		}
 	}
 	files := flag.Args()
