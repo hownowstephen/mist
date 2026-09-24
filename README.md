@@ -30,6 +30,12 @@ Check whether templates are in the subset:
 go run github.com/hownowstephen/mist/cmd/mistcheck@latest template.liquid
 ```
 
+`-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
+
+```bash
+mistcheck -stats templates.jsonl
+```
+
 ## Testing
 
 Beyond unit tests, mist is diffed against liquidjs on every template from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) and Shopify/liquid's test suite, plus grammar-generated templates (100k new ones nightly) and fuzzing. See [SPEC.md § Verification](SPEC.md#verification).
