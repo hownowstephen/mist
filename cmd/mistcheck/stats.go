@@ -4,10 +4,10 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/hownowstephen/mist"
 )
@@ -106,7 +106,7 @@ func classify(tok string, isTag bool, msg string, unknown map[string]bool) (stri
 		}
 	}
 	words := strings.FieldsFunc(code, func(r rune) bool {
-		return !(r == '_' || r == '.' || r == '-' || 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9')
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_.-", r)
 	})
 	for _, w := range words {
 		switch {
@@ -161,8 +161,8 @@ func msgKind(msg string) string {
 
 type tally struct{ in, sole int }
 
-// report prints how many templates each blocker appears in, and how many it alone blocks.
-func report(w io.Writer, templates [][]string) {
+// report summarizes how many templates each blocker appears in, and how many it alone blocks.
+func report(templates [][]string) string {
 	counts := map[string]*tally{}
 	clean := 0
 	for _, ks := range templates {
@@ -180,9 +180,9 @@ func report(w io.Writer, templates [][]string) {
 		}
 	}
 	n := len(templates)
-	fmt.Fprintf(w, "%d templates, %d in spec (%.1f%%)\n", n, clean, 100*float64(clean)/float64(max(n, 1)))
+	out := fmt.Appendf(nil, "%d templates, %d in spec (%.1f%%)\n", n, clean, 100*float64(clean)/float64(max(n, 1)))
 	if len(counts) == 0 {
-		return
+		return string(out)
 	}
 	keys := make([]string, 0, len(counts))
 	for k := range counts {
@@ -191,8 +191,9 @@ func report(w io.Writer, templates [][]string) {
 	slices.SortFunc(keys, func(a, b string) int {
 		return cmp.Or(cmp.Compare(counts[b].sole, counts[a].sole), cmp.Compare(counts[b].in, counts[a].in), cmp.Compare(a, b))
 	})
-	fmt.Fprintf(w, "\n%-32s %10s %12s\n", "blocker", "templates", "only blocker")
+	out = fmt.Appendf(out, "\n%-32s %10s %12s\n", "blocker", "templates", "only blocker")
 	for _, k := range keys {
-		fmt.Fprintf(w, "%-32s %10d %12d\n", k, counts[k].in, counts[k].sole)
+		out = fmt.Appendf(out, "%-32s %10d %12d\n", k, counts[k].in, counts[k].sole)
 	}
+	return string(out)
 }

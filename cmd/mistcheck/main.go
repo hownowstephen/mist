@@ -9,7 +9,7 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -55,37 +55,32 @@ func main() {
 		}
 	}
 	if *stats {
-		report(os.Stdout, all)
+		fmt.Print(report(all))
 	}
 	os.Exit(status)
 }
 
 func read(f string) ([]template, error) {
-	var r io.Reader = os.Stdin
-	if f != "-" {
-		file, err := os.Open(f)
-		if err != nil {
-			return nil, err
-		}
-		defer file.Close()
-		r = file
+	var b []byte
+	var err error
+	if f == "-" {
+		b, err = io.ReadAll(os.Stdin)
+	} else {
+		b, err = os.ReadFile(f)
 	}
-	if !strings.HasSuffix(f, ".jsonl") {
-		b, err := io.ReadAll(r)
+	if err != nil || !strings.HasSuffix(f, ".jsonl") {
 		return []template{{f, string(b)}}, err
 	}
 	var tpls []template
-	sc := bufio.NewScanner(r)
-	sc.Buffer(nil, 64<<20)
-	for n := 1; sc.Scan(); n++ {
-		if strings.TrimSpace(sc.Text()) == "" {
+	for i, line := range bytes.Split(b, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
 		var body string
-		if err := json.Unmarshal(sc.Bytes(), &body); err != nil {
-			return nil, fmt.Errorf("%s:%d: %w", f, n, err)
+		if err := json.Unmarshal(line, &body); err != nil {
+			return nil, fmt.Errorf("%s:%d: %w", f, i+1, err)
 		}
-		tpls = append(tpls, template{fmt.Sprintf("%s:%d", f, n), body})
+		tpls = append(tpls, template{fmt.Sprintf("%s:%d", f, i+1), body})
 	}
-	return tpls, sc.Err()
+	return tpls, nil
 }

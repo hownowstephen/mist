@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"slices"
 	"strings"
 	"testing"
@@ -31,9 +30,7 @@ func TestBlockers(t *testing.T) {
 }
 
 func TestReport(t *testing.T) {
-	var buf bytes.Buffer
-	report(&buf, [][]string{nil, {"filter:default"}, {"filter:default", "tag:case"}, {"tag:case"}, {"tag:case"}})
-	out := buf.String()
+	out := report([][]string{nil, {"filter:default"}, {"filter:default", "tag:case"}, {"tag:case"}, {"tag:case"}})
 	for _, want := range []string{
 		"5 templates, 1 in spec (20.0%)",
 		"tag:case                                  3            2",
