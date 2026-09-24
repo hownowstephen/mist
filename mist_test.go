@@ -110,6 +110,14 @@ func TestChainBailStopsEarly(t *testing.T) {
 	}
 }
 
+func TestUndefinedNamesWholePath(t *testing.T) {
+	_, err := Render(nil, "{{ trigger.first_name[0] }}", map[string]any{}, true)
+	var e *Error
+	if !errors.As(err, &e) || e.Kind != ErrUndefined || e.Msg != "trigger.first_name[0]" {
+		t.Fatalf("got %v; want ErrUndefined naming trigger.first_name[0]", err)
+	}
+}
+
 func TestErrorPosition(t *testing.T) {
 	_, err := Render(nil, "line1\n{{ a | b }}", nil, false)
 	var e *Error

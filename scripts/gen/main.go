@@ -26,8 +26,9 @@ type gen struct {
 	b     strings.Builder
 }
 
-func (g *gen) pick(xs []string) string { return xs[g.r.IntN(len(xs))] }
-func (g *gen) ws() string              { return g.pick(blanks) }
+func (g *gen) pick(xs []string) string    { return xs[g.r.IntN(len(xs))] }
+func (g *gen) ws() string                 { return g.pick(blanks) }
+func (g *gen) pickF(xs []float64) float64 { return xs[g.r.IntN(len(xs))] }
 
 func (g *gen) path() string {
 	var p string
@@ -126,8 +127,10 @@ func (g *gen) value(depth int) any {
 		return nil
 	case 1:
 		return g.r.IntN(2) == 0
-	case 2, 3:
+	case 2:
 		return float64(g.r.IntN(21) - 10)
+	case 3:
+		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000})
 	case 4:
 		return g.pick([]string{"", "a", "b", "A", "10", "2", " x "})
 	case 5, 6:

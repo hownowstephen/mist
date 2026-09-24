@@ -70,7 +70,7 @@
   {"name": "filter", "tpl": "{{ x | upcase }}", "data": {"x": "a"}, "err": "unsupported"},
   {"name": "trailing junk", "tpl": "{{ 'a' 'b' }}", "err": "unsupported"},
   {"name": "float literal", "tpl": "{{ 1.5 }}", "err": "unsupported"},
-  {"name": "float output", "tpl": "{{ x }}", "data": {"x": 1.5}, "err": "unsupported"},
+  {"name": "float output", "tpl": "{{ x }}", "data": {"x": 1.5}, "out": "1.5"},
   {"name": "array output", "tpl": "{{ x }}", "data": {"x": [1, 2]}, "err": "unsupported"},
   {"name": "object output", "tpl": "{{ x }}", "data": {"x": {"a": 1}}, "err": "unsupported"},
   {"name": "size magic", "tpl": "{{ a.size }}", "data": {"a": [1, 2]}, "err": "unsupported"},
@@ -107,7 +107,7 @@
   {"name": "root magic", "tpl": "{{ size }}", "err": "unsupported"},
   {"name": "property on literal", "tpl": "{{ true.x }}", "err": "unsupported"},
   {"name": "spaced path", "tpl": "{{ a . b }}", "data": {"a": {"b": 1}}, "err": "unsupported"},
-  {"name": "unsafe int output", "tpl": "{{ x }}", "data": {"x": 1e+21}, "err": "unsupported"},
+  {"name": "exponent output", "tpl": "{{ x }}", "data": {"x": 1e+21}, "out": "1e+21"},
   {"name": "trim else", "tpl": "{% if x %} a {%- else -%} b {% endif %}", "out": "b "},
   {"name": "raw in for", "tpl": "{% for x in xs %}{% raw %}{{x}}{% endraw %}{% endfor %}", "data": {"xs": [1, 2]}, "out": "{{x}}{{x}}"},
   {"name": "comment trim", "tpl": "a {%- comment -%} x {%- endcomment -%} b", "out": "ab"},
@@ -136,5 +136,7 @@
   {"name": "lax null path vs undefined", "tpl": "{% if n.a == y %}eq{% else %}ne{% endif %}", "data": {"n": null}, "out": "ne"},
   {"name": "escaped string in tag", "tpl": "{% if x == 'a\\'b' %}y{% endif %}", "err": "unsupported"},
   {"name": "endfor closing if", "tpl": "{% if true %}{% endfor %}", "err": "unsupported"},
-  {"name": "undefined with default filter bails", "tpl": "{{ x | default: 'Guest' }}", "strict": true, "err": "unsupported"}
+  {"name": "undefined with default filter bails", "tpl": "{{ x | default: 'Guest' }}", "strict": true, "err": "unsupported"},
+  {"name": "float formatting", "tpl": "{{ a }}|{{ b }}|{{ c }}|{{ d }}|{{ e }}|{{ f }}", "data": {"a": 0.30000000000000004, "b": 1e-07, "c": 1e-06, "d": 123456789012345680000, "e": -2.5e-08, "f": 99.99}, "out": "0.30000000000000004|1e-7|0.000001|123456789012345680000|-2.5e-8|99.99"},
+  {"name": "float comparison", "tpl": "{% if x > 1 and x < 2 %}t{% endif %}", "data": {"x": 1.5}, "out": "t"}
 ]

@@ -50,11 +50,12 @@ Structural rules the EBNF doesn't express:
 | Lookup order | Innermost `for` variable, then `assign`ed names, then data. |
 | Undefined in `{{ }}` or a `for` collection | Strict: `ErrUndefined`. Lax: renders `""` / zero iterations. |
 | Undefined in `if`/`elsif`/`unless`/`assign` | Never an error (`lenientIf`). Strict: the value becomes null, because liquidjs catches the error. Lax: it stays undefined. So `null == undefined` is true in strict and false in lax. |
-| Strict undefined error | Returned as soon as the tag containing it parses cleanly, without scanning the rest of the template. If that tag doesn't parse cleanly, for example `{{ x \| default: 'a' }}` which liquidjs treats as lenient, mist bails instead. liquidjs parses everything first, so if the template also has a later syntax error, liquidjs reports that error instead. Either way both fail. |
+| Strict undefined error | `ErrUndefined` names the whole path (`a.b.c`), even if the undefined part is a prefix. |
+| Strict undefined timing | Returned as soon as the tag containing it parses cleanly, without scanning the rest of the template. If that tag doesn't parse cleanly, for example `{{ x \| default: 'a' }}` which liquidjs treats as lenient, mist bails instead. liquidjs parses everything first, so if the template also has a later syntax error, liquidjs reports that error instead. Either way both fail. |
 | Null in a path | `a.b.c` with `a` null is null. Never an error, even under strict. |
 | Missing key / out-of-range index | Undefined. Negative indexes count from the end. |
 | Output: string, bool, nil | As-is; `true`/`false`; `""`. |
-| Output: number | Integral with \|n\| < 2^53: decimal digits. |
+| Output: number | As JavaScript's `String(n)`: shortest round-trip digits, fixed notation for 1e-7 ≤ \|n\| < 1e21, otherwise exponent notation (`1e+21`, `2.5e-8`). |
 | `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
 | `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
@@ -65,7 +66,7 @@ Structural rules the EBNF doesn't express:
 ### Runtime bails
 
 Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
-- Output of a non-integral number, \|n\| ≥ 2^53, an array or an object.
+- Output of an array or an object.
 - `.name` or `["key"]` on anything but an object, and `[n]` on anything but an array.
 - `size`, `first` or `last` when the key is absent, because liquidjs computes them. This includes at the root.
 - `==` with an array or object operand; ordering across types or with non-ASCII strings.
