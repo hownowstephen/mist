@@ -49,6 +49,10 @@ e.Filters = map[string]mist.FilterFunc{
 }
 ```
 
+## Dialects
+
+`Engine.Dialect` adapts mist to a Liquid engine that differs from liquidjs. It has hooks for how values print (`Output`) and compare (`Compare`), a set of constructs to reject, and a switch for `default`'s leniency. Parity with the target engine is then up to the dialect's author; see [SPEC.md § Dialects](SPEC.md#dialects).
+
 ## What's supported
 
 Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons including `== blank`/`!= blank`, `and`/`or`, whitespace control, and the `default` and `capitalize` filters. [SPEC.md](SPEC.md) is the normative grammar and semantics.

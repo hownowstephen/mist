@@ -126,8 +126,13 @@ func (r *renderer) cond(eval bool) bool {
 func (r *renderer) cmp(eval bool) bool {
 	start := r.pos()
 	a := r.expr(eval, true)
+	before := r.p
 	r.ws()
+	spaced := r.p > before
 	op := r.op()
+	if op != "" && !spaced && r.rejects(UnspacedOperators) {
+		bail(r.pos(), "operators without whitespace before them are rejected by the dialect")
+	}
 	if op == "" {
 		if a.isBlank() {
 			bail(start, "blank is only supported with == and !=")
@@ -147,6 +152,9 @@ func (r *renderer) cmp(eval bool) bool {
 		case other.isBlank() || (other.lit == 0 && other.x == nilLit):
 			bail(start, "blank compared with blank or nil") // liquidjs is asymmetric here
 		}
+	}
+	if eval && r.dialect != nil && r.dialect.Compare != nil {
+		return r.dialectCompare(op, a, b, at)
 	}
 	return eval && compare(op, a, b, at)
 }
@@ -182,6 +190,9 @@ func (r *renderer) expr(eval, lenient bool) val {
 		case "nil", "null":
 			v = nilLit
 		case "blank":
+			if r.rejects(BlankKeyword) {
+				bail(at, "blank is rejected by the dialect")
+			}
 			v = blankLit
 		case "empty":
 			bail(at, "empty is not supported")
@@ -216,6 +227,9 @@ func (r *renderer) str() string {
 func (r *renderer) number() float64 {
 	at, i := r.p, r.p
 	if r.src[i] == '-' {
+		if r.rejects(NegativeLiterals) {
+			bail(r.base+at, "negative literals are rejected by the dialect")
+		}
 		i++
 	}
 	j := i
@@ -485,18 +499,21 @@ func (r *renderer) write(v val) {
 		r.out = append(r.out, s...)
 		return
 	}
-	switch x := v.x.(type) {
-	case bool:
-		r.out = strconv.AppendBool(r.out, x)
-		return
-	case nil, undefinedT:
-		if v.lit == 0 {
-			return
-		}
-	case nilLitT:
+	if v.lit == 0 && v.x == nilLit {
 		// liquidjs's nil literal is a Drop: "" by default, but "[object Object]" under
 		// an outputEscape that String()s objects, so the output depends on configuration.
 		bail(r.base, "cannot output the nil literal") // e.g. from default: nil
+	}
+	if isNil(v) {
+		return
+	}
+	if r.dialect != nil && r.dialect.Output != nil {
+		r.dialectOutput(v)
+		return
+	}
+	if x, ok := v.x.(bool); ok {
+		r.out = strconv.AppendBool(r.out, x)
+		return
 	}
 	if f, ok := v.num(r.base); ok {
 		r.out = appendJSNumber(r.out, f)

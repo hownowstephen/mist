@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.4.0
+# mist Liquid subset — v0.5.0
 
 _Last updated 2026-09-24. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`._
 
@@ -105,6 +105,21 @@ Filters other than `default`, `capitalize` and registered ones; filters in `if`/
 - Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Other errors stop rendering and are returned wrapped.
 - A `nil` `FilterFunc` is accepted by `Check` and bails at render time.
 - The parity contract doesn't cover registered filters.
+
+## Dialects
+
+`Engine.Dialect` adapts mist to a Liquid engine that differs from liquidjs, for example one that emulates another implementation. Everything in this spec describes a nil dialect. With a dialect set, matching the target engine is up to the dialect's author, and mist makes no parity claim.
+
+| Hook | Effect |
+|---|---|
+| `Output(dst, v)` | Prints non-string values: numbers, bools, arrays, objects. Strings, nil and undefined are printed by mist as usual. |
+| `Compare(op, a, b)` | Evaluates `==`, `!=`, `<`, `>`, `<=`, `>=` in conditions. Truthiness and `and`/`or` are unchanged. |
+| `Reject` | A set of constructs that bail in both `Render` and `Check`, including in dead branches: `TrimMarkers`, `NegativeLiterals` (including negative indexes), `UnspacedOperators` (a comparison operator with no whitespace before it, such as `x==2`), `RawBlocks`, `BlankKeyword`. |
+| `NoDefaultLeniency` | Turns off the leading-`default` leniency rule. Combine with an overriding `default` in `Engine.Filters` to change `default` itself. |
+
+- **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integer literals, `nil` for nil, undefined and the `nil` literal, and `mist.Blank` for the `blank` keyword.
+- **Errors:** a hook returning an error that wraps `ErrUnsupported` bails; other errors stop rendering and are returned wrapped.
+- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` against `blank` or `nil`, assigning nil, and everything out of spec) still apply.
 
 ## Chains
 

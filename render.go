@@ -40,6 +40,7 @@ type renderer struct {
 	undef     pendingUndef // strict undefined, raised once the current tag parses cleanly
 	tags      map[string]TagFunc
 	filterFns map[string]FilterFunc
+	dialect   *Dialect
 	stack     [maxDepth]frame
 	depth     int
 
@@ -105,6 +106,9 @@ func (r *renderer) run() {
 			break
 		}
 		b, e, next, lt, rt := delimBounds(s, start, isTag)
+		if (lt || rt) && r.rejects(TrimMarkers) {
+			bail(start, "trim markers are rejected by the dialect")
+		}
 		if lt {
 			text = trimRightBlank(text)
 		}
@@ -316,6 +320,9 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		return r.skipComment(next)
 	case "raw":
 		r.end()
+		if r.rejects(RawBlocks) {
+			bail(b, "raw blocks are rejected by the dialect")
+		}
 		if lt || rt {
 			bail(b, "trim markers on raw")
 		}
@@ -357,7 +364,10 @@ func (r *renderer) skipComment(pos int) (int, bool) {
 		if start == len(s) {
 			bail(pos, "unclosed comment")
 		}
-		b, e, next, _, rt := delimBounds(s, start, isTag)
+		b, e, next, lt, rt := delimBounds(s, start, isTag)
+		if (lt || rt) && r.rejects(TrimMarkers) {
+			bail(start, "trim markers are rejected by the dialect")
+		}
 		pos = next
 		if !isTag {
 			continue
