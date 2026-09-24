@@ -11,4 +11,4 @@ updates:
     directory: /
     schedule:
       interval: weekly
-  # scripts/package.json pins liquidjs to the render service's version on purpose; not tracked.
+  # scripts/package.json pins liquidjs to the SPEC.md parity target on purpose; not tracked.

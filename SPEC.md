@@ -1,6 +1,6 @@
 # mist Liquid subset — v0
 
-_Last updated 2026-09-23. Parity target: liquidjs 10.16.1 with `new Liquid({ lenientIf: true })`, the render service configuration._
+_Last updated 2026-09-24. Parity target: liquidjs 10.16.1 configured with `new Liquid({ lenientIf: true })`._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -81,10 +81,10 @@ Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for
 
 ## Chains
 
-`RenderChain` mirrors the render service's `render` array (`liquidController.js` `parse_liquid`):
+`RenderChain` renders a sequence of templates whose outputs feed later ones, such as snippets, then subject, then body, then a layout:
 - Steps run in order. A step's `Vars`, if set, replace the chain vars for that step only.
 - On success, the output is bound at `Key` (for example `["snippets","greeting"]`) into the chain vars, provided the step used them. Nested maps are created as needed.
-- A step whose `Key[0]` is `content` always binds `content` at the top level. If that step errors, the raw template body is bound instead.
+- A step whose `Key[0]` is `content` always binds `content` at the top level, following the layout convention of `{{ content }}`. If that step errors, the raw template body is bound instead, so a layout can still render.
 - `ErrUndefined` is recorded in the step's result and the chain continues.
 - The first unsupported step stops the chain. The caller renders `steps[n:]` with the returned vars.
 - Post-processing such as CSS inlining is the caller's job. A step whose output must be post-processed before later steps read it belongs with the full engine.

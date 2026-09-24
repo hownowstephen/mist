@@ -1,4 +1,4 @@
-// Asserts testdata/cases.json against liquidjs as configured by the render service.
+// Asserts testdata/cases.json against liquidjs as configured in SPEC.md.
 // Cases marked "unsupported" are only printed: mist bails, so liquidjs decides.
 import { Liquid } from 'liquidjs';
 import { readFileSync } from 'node:fs';

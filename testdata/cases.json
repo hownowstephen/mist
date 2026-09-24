@@ -91,7 +91,7 @@
   {"name": "for else", "tpl": "{% for x in xs %}{{ x }}{% else %}none{% endfor %}", "data": {"xs": []}, "err": "unsupported"},
   {"name": "case", "tpl": "{% case x %}{% when 1 %}one{% endcase %}", "data": {"x": 1}, "err": "unsupported"},
   {"name": "capture", "tpl": "{% capture x %}hi{% endcapture %}{{ x }}", "err": "unsupported"},
-  {"name": "custom tag", "tpl": "{% unsubscribe_url %}", "err": "unsupported"},
+  {"name": "custom tag", "tpl": "{% my_custom_tag %}", "err": "unsupported"},
   {"name": "dead branch unknown tag", "tpl": "{% if false %}{% bogus %}{% endif %}", "err": "unsupported"},
   {"name": "dead branch syntax error", "tpl": "{% if false %}{% if %}{% endif %}{% endif %}", "err": "unsupported"},
   {"name": "dead branch unclosed output", "tpl": "{% if false %}{{ x {% endif %}", "err": "unsupported"},

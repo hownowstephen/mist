@@ -50,7 +50,7 @@ func Check(tpl string) (err error) {
 	return nil
 }
 
-// Step mirrors one entry of the render service's `render` array.
+// Step is one template in a RenderChain.
 type Step struct {
 	Body   string
 	Key    []string // where the output is bound for later steps
@@ -64,7 +64,7 @@ type Result struct {
 }
 
 // RenderChain renders steps in order, binding each output into the vars seen by
-// later steps exactly as the render service does. It stops at the first step mist
+// later steps (see SPEC.md § Chains). It stops at the first step mist
 // can't render and returns n, its index; the caller renders steps[n:] with the full
 // engine using the returned vars. The caller's maps are never mutated.
 func RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrated map[string]any) {
