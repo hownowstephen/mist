@@ -205,13 +205,14 @@ func capitalize(s []byte, at int) string {
 }
 
 // jsUpperDiffers covers full-Unicode expansions (ß→SS, ligatures, polytonic Greek) and
-// mappings newer than Go's tables. TestCaseMapping checks every code point against Node.
+// characters whose case mappings Go's and Node's Unicode versions disagree on (Go 1.26
+// is behind Node 22, Go 1.27 ahead). TestCaseMapping checks every code point against Node.
 func jsUpperDiffers(c rune) bool {
 	switch {
 	case c == 0xDF, c == 0x149, c == 0x19B, c == 0x1F0, c == 0x264, c == 0x390, c == 0x3B0,
-		c == 0x587, c == 0x1C8A, c == 0xA7CD, c == 0xA7DB:
+		c == 0x587, c == 0x1C8A:
 		return true
-	case c >= 0x1E96 && c <= 0x1E9A, c >= 0x1F50 && c <= 0x1FFC, c >= 0xFB00 && c <= 0xFB17:
+	case c >= 0x1E96 && c <= 0x1E9A, c >= 0x1F50 && c <= 0x1FFC, c >= 0xA7CB && c <= 0xA7DC, c >= 0xFB00 && c <= 0xFB17:
 		return true
 	}
 	return false
@@ -223,7 +224,7 @@ func jsLowerDiffers(c rune) bool {
 	switch {
 	case c == 0x130, c == 0x3A3, c == 0x1C89:
 		return true
-	case c >= 0xA7CB && c <= 0xA7DC, c >= 0x10D50 && c <= 0x10D65:
+	case c >= 0xA7CB && c <= 0xA7DC, c >= 0x10D50 && c <= 0x10D65, c >= 0x16EA0 && c <= 0x16EB8:
 		return true
 	}
 	return false
