@@ -488,10 +488,14 @@ func (r *renderer) write(v val) {
 	case bool:
 		r.out = strconv.AppendBool(r.out, x)
 		return
-	case nil, undefinedT, nilLitT:
+	case nil, undefinedT:
 		if v.lit == 0 {
 			return
 		}
+	case nilLitT:
+		// liquidjs's nil literal is a Drop: "" by default, but "[object Object]" under
+		// an outputEscape that String()s objects, so the output depends on configuration.
+		bail(r.base, "cannot output the nil literal") // e.g. from default: nil
 	}
 	if f, ok := v.num(r.base); ok {
 		r.out = appendJSNumber(r.out, f)
