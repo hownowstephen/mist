@@ -1,0 +1,56 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Generator seed (defaults to the run ID)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  differential:
+    name: generated differential vs liquidjs
+    runs-on: ubuntu-latest
+    env:
+      SEED: ${{ inputs.seed || github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+        working-directory: scripts
+      - name: generate 100k templates (seed ${{ env.SEED }})
+        run: go run ./scripts/gen -n 100000 -seed "$SEED" > "$RUNNER_TEMP/gen.json"
+      - name: liquidjs oracle
+        run: node scripts/oracle.mjs -o "$RUNNER_TEMP/oracle.json" "$RUNNER_TEMP/gen.json"
+      - name: diff mist against liquidjs
+        run: MIST_CORPUS="$RUNNER_TEMP/oracle.json" go test -run TestCorpus -v . | tail -40
+        shell: bash -o pipefail {0}
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: differential-seed-${{ env.SEED }}
+          path: ${{ runner.temp }}/oracle.json
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - run: go test -run '^$' -fuzz FuzzRender -fuzztime 5m .
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashers
+          path: testdata/fuzz
