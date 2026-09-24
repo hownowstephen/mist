@@ -37,7 +37,7 @@ func (g *gen) path() string {
 	} else {
 		p = g.pick(names)
 	}
-	for i := g.r.IntN(3); i > 0; i-- {
+	for range g.r.IntN(3) {
 		switch g.r.IntN(4) {
 		case 0:
 			p += fmt.Sprintf("[%d]", g.r.IntN(5)-2)
@@ -65,7 +65,7 @@ func (g *gen) expr() string {
 func (g *gen) cond() string {
 	c := g.cmp()
 	join := g.pick([]string{"and", "or"})
-	for i := g.r.IntN(3); i > 0; i-- {
+	for range g.r.IntN(3) {
 		c += " " + join + " " + g.cmp()
 	}
 	return c
@@ -84,7 +84,7 @@ func (g *gen) open(tag string) string {
 }
 
 func (g *gen) block(depth int) {
-	for i := g.r.IntN(4); i >= 0; i-- {
+	for range g.r.IntN(4) + 1 {
 		switch k := g.r.IntN(10); {
 		case k < 3:
 			g.b.WriteString(g.pick(words))
@@ -95,7 +95,7 @@ func (g *gen) block(depth int) {
 			tag := g.pick([]string{"if", "unless"})
 			g.b.WriteString(g.open(tag + " " + g.cond()))
 			g.block(depth + 1)
-			for j := g.r.IntN(3); j > 0; j-- {
+			for range g.r.IntN(3) {
 				g.b.WriteString(g.open("elsif " + g.cond()))
 				g.block(depth + 1)
 			}
@@ -136,7 +136,7 @@ func (g *gen) value(depth int) any {
 	case 5, 6:
 		if depth < 3 {
 			m := map[string]any{}
-			for i := g.r.IntN(4); i > 0; i-- {
+			for range g.r.IntN(4) {
 				m[g.pick(props)] = g.value(depth + 1)
 			}
 			return m
@@ -144,7 +144,7 @@ func (g *gen) value(depth int) any {
 	case 7, 8:
 		if depth < 3 {
 			var a []any
-			for i := g.r.IntN(4); i > 0; i-- {
+			for range g.r.IntN(4) {
 				a = append(a, g.value(depth+1))
 			}
 			return a

@@ -179,7 +179,7 @@ func (r *renderer) str() string {
 		bail(r.pos(), "unterminated string")
 	}
 	s := r.src[r.p+1 : r.p+1+k]
-	if strings.IndexByte(s, '\\') >= 0 {
+	if strings.ContainsRune(s, '\\') {
 		bail(r.pos(), "escapes in strings are not supported")
 	}
 	r.p += k + 2
@@ -533,7 +533,7 @@ func cmpFloat(x, y float64) int {
 
 // ascii strings compare the same in Go (bytes) and JS (UTF-16 units).
 func ascii(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] >= 0x80 {
 			return false
 		}
