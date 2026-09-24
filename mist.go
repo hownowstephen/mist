@@ -52,11 +52,10 @@ func Check(tpl string) (err error) {
 
 // Step mirrors one entry of the render service's `render` array.
 type Step struct {
-	Body      string
-	Key       []string // where the output is bound for later steps
-	Strict    bool
-	Premailer bool           // unsupported: inlined output may feed later steps
-	Vars      map[string]any // replaces the chain vars for this step only
+	Body   string
+	Key    []string // where the output is bound for later steps
+	Strict bool
+	Vars   map[string]any // replaces the chain vars for this step only
 }
 
 type Result struct {
@@ -73,9 +72,6 @@ func RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrat
 	owned := false
 	var buf []byte
 	for i, st := range steps {
-		if st.Premailer {
-			return res, i, vars
-		}
 		v := st.Vars
 		if v == nil {
 			v = vars

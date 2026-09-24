@@ -85,7 +85,8 @@ Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for
 - On success, the output is bound at `Key` (for example `["snippets","greeting"]`) into the chain vars, provided the step used them. Nested maps are created as needed.
 - A step whose `Key[0]` is `content` always binds `content` at the top level. If that step errors, the raw template body is bound instead.
 - `ErrUndefined` is recorded in the step's result and the chain continues.
-- The first unsupported step, or any step with `Premailer`, stops the chain. The caller renders `steps[n:]` with the returned vars.
+- The first unsupported step stops the chain. The caller renders `steps[n:]` with the returned vars.
+- Post-processing such as CSS inlining is the caller's job. A step whose output must be post-processed before later steps read it belongs with the full engine.
 - The caller's maps are never mutated.
 
 ## Verification

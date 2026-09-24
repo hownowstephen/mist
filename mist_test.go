@@ -64,11 +64,11 @@ func TestChain(t *testing.T) {
 		{Body: "{{ snippets.greeting }}, welcome", Key: []string{"message", "subject"}, Strict: true},
 		{Body: "<p>{{ message.subject }}</p>", Key: []string{"content"}},
 		{Body: "{{ content }}|{{ missing }}", Strict: true},
-		{Body: "<html>{{ content }}</html>", Premailer: true},
+		{Body: "<html>{{ content }}</html>"},
 	}
 	res, n, got := RenderChain(steps, vars)
-	if n != 4 {
-		t.Fatalf("n = %d, want 4 (premailer step falls back)", n)
+	if n != 5 {
+		t.Fatalf("n = %d, want 5", n)
 	}
 	want := []string{"Hi Ada", "Hi Ada, welcome", "<p>Hi Ada, welcome</p>"}
 	for i, w := range want {
