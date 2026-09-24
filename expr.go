@@ -1,8 +1,8 @@
 package mist
 
 import (
+	"bytes"
 	"encoding/json"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -260,6 +260,9 @@ func (r *renderer) path(eval, lenient bool) any {
 			}
 			r.p++
 		default:
+			if r.undef != nil && r.undef.Pos == r.base+start {
+				r.undef.Msg = r.src[start:r.p] // name the whole path, not just the undefined prefix
+			}
 			return v
 		}
 	}
@@ -425,11 +428,64 @@ func (r *renderer) write(v val) {
 			return
 		}
 	}
-	if f, ok := v.num(r.base); ok && f == math.Trunc(f) && math.Abs(f) < maxSafeInt {
-		r.out = strconv.AppendInt(r.out, int64(f), 10)
+	if f, ok := v.num(r.base); ok {
+		r.out = appendJSNumber(r.out, f)
 		return
 	}
 	bail(r.base, "cannot output %T %v", v.any(), v.any())
+}
+
+// appendJSNumber formats f as JavaScript's Number.prototype.toString does.
+func appendJSNumber(dst []byte, f float64) []byte {
+	if f == 0 {
+		return append(dst, '0') // including -0
+	}
+	var buf [32]byte
+	e := strconv.AppendFloat(buf[:0], f, 'e', -1, 64) // shortest round-trip digits, as in JS
+	if e[0] == '-' {
+		dst = append(dst, '-')
+		e = e[1:]
+	}
+	i := bytes.IndexByte(e, 'e')
+	var digits [24]byte
+	s := append(digits[:0], e[0])
+	if i > 2 {
+		s = append(s, e[2:i]...)
+	}
+	exp, neg := 0, e[i+1] == '-'
+	for _, c := range e[i+2:] {
+		exp = exp*10 + int(c-'0')
+	}
+	if neg {
+		exp = -exp
+	}
+	k, n := len(s), exp+1 // f = 0.s × 10^n
+	switch {
+	case k <= n && n <= 21:
+		dst = append(dst, s...)
+		for range n - k {
+			dst = append(dst, '0')
+		}
+	case 0 < n && n <= 21:
+		dst = append(append(append(dst, s[:n]...), '.'), s[n:]...)
+	case -6 < n && n <= 0:
+		dst = append(dst, "0."...)
+		for range -n {
+			dst = append(dst, '0')
+		}
+		dst = append(dst, s...)
+	default:
+		dst = append(dst, s[0])
+		if k > 1 {
+			dst = append(append(dst, '.'), s[1:]...)
+		}
+		dst = append(dst, 'e')
+		if n > 0 {
+			dst = append(dst, '+')
+		}
+		dst = strconv.AppendInt(dst, int64(n-1), 10)
+	}
+	return dst
 }
 
 func compare(op string, a, b val, at int) bool {
