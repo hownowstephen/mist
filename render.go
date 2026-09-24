@@ -167,7 +167,7 @@ func delimBounds(s string, start int, isTag bool) (b, e, next int, lt, rt bool) 
 		rt = true
 		e--
 	}
-	return
+	return b, e, next, lt, rt
 }
 
 // closeOutput finds the "}}" closing an output, skipping quoted strings as liquidjs does.
@@ -176,7 +176,7 @@ func closeOutput(s string, i, start int) int {
 		switch c := s[i]; c {
 		case '"', '\'':
 			k := strings.IndexByte(s[i+1:], c)
-			if k < 0 || strings.IndexByte(s[i+1:i+1+k], '\\') >= 0 {
+			if k < 0 || strings.ContainsRune(s[i+1:i+1+k], '\\') {
 				bail(i, "unterminated or escaped string")
 			}
 			i += k + 2

@@ -1,11 +1,12 @@
 package mist
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -52,8 +53,7 @@ func TestCorpus(t *testing.T) {
 				want = *c.Strict
 			}
 			out, err := Render(nil, c.Tpl, c.Data, strict)
-			var e *Error
-			if errors.As(err, &e) && e.Kind == ErrUnsupported {
+			if e, ok := errors.AsType[*Error](err); ok && errors.Is(err, ErrUnsupported) {
 				bailed++
 				reasons[bailNoise.ReplaceAllString(e.Msg, "…")]++
 				continue
@@ -83,8 +83,8 @@ func TestCorpus(t *testing.T) {
 	for k, v := range reasons {
 		top = append(top, kv{k, v})
 	}
-	sort.Slice(top, func(i, j int) bool { return top[i].v > top[j].v })
-	for i := 0; i < len(top) && i < 15; i++ {
-		t.Logf("bail %5d  %s", top[i].v, top[i].k)
+	slices.SortFunc(top, func(a, b kv) int { return cmp.Compare(b.v, a.v) })
+	for _, r := range top[:min(15, len(top))] {
+		t.Logf("bail %5d  %s", r.v, r.k)
 	}
 }

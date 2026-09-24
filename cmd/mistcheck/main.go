@@ -34,8 +34,7 @@ func main() {
 			os.Exit(2)
 		}
 		tpl := string(b)
-		var e *mist.Error
-		if err := mist.Check(tpl); errors.As(err, &e) {
+		if e, ok := errors.AsType[*mist.Error](mist.Check(tpl)); ok {
 			line := strings.Count(tpl[:e.Pos], "\n") + 1
 			col := e.Pos - strings.LastIndexByte(tpl[:e.Pos], '\n')
 			fmt.Printf("%s:%d:%d: %s\n", f, line, col, e.Msg)
