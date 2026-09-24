@@ -63,6 +63,9 @@ func (r *renderer) end() {
 	if r.p < len(r.src) {
 		bail(r.pos(), "unexpected %q", r.src[r.p:])
 	}
+	if r.undef != nil {
+		panic(bailout{r.undef})
+	}
 }
 
 func isIdentStart(c byte) bool { return c == '_' || (c|0x20 >= 'a' && c|0x20 <= 'z') }
@@ -217,13 +220,11 @@ func (r *renderer) path(eval, lenient bool) any {
 	}
 	for {
 		if eval && r.strict && v == (undefinedT{}) {
-			switch {
-			case lenient:
+			if lenient {
 				v = nil // liquidjs catches the strict error and substitutes null
-			case r.undef == nil:
-				// liquidjs parses the whole template first, so a later syntax error wins.
+			} else if r.undef == nil {
+				// Raised by end(): a trailing filter such as `| default` makes liquidjs lenient.
 				r.undef = &Error{Kind: ErrUndefined, Pos: r.base + start, Msg: r.src[start:r.p]}
-				r.check = true
 			}
 		}
 		switch r.peek() {

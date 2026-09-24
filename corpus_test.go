@@ -12,7 +12,8 @@ import (
 
 // corpus.json holds templates harvested from Shopify/liquid-spec and Shopify/liquid's
 // tests with liquidjs's results (scripts/oracle.mjs). Wherever mist doesn't bail it
-// must agree with liquidjs exactly. MIST_CORPUS points the test at another oracle file.
+// must agree with liquidjs exactly, except that ErrUndefined only requires liquidjs to
+// fail too (it may report a later syntax error instead). MIST_CORPUS points the test at another oracle file.
 type corpusCase struct {
 	Src    string         `json:"src"`
 	Name   string         `json:"name"`
@@ -63,7 +64,7 @@ func TestCorpus(t *testing.T) {
 			accepted++
 			switch {
 			case err == nil && want.Out != nil && string(out) == *want.Out:
-			case errors.Is(err, ErrUndefined) && strings.Contains(want.Err, "undefined variable"):
+			case errors.Is(err, ErrUndefined) && want.Err != "":
 			default:
 				wantS := want.Err
 				if want.Out != nil {

@@ -2,7 +2,7 @@
 
 _Last updated 2026-09-23. Parity target: liquidjs 10.16.1 with `new Liquid({ lenientIf: true })`, the render service configuration._
 
-**Contract.** For every template and data where mist returns output or `ErrUndefined`, liquidjs returns the same output or an undefined-variable error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
+**Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
 **Checking a template:** `go run ./cmd/mistcheck FILE...` or `mist.Check(tpl)`. The checker is the renderer with evaluation switched off, so it cannot drift from this document's grammar. A template that passes can still bail at render time on the [runtime bails](#runtime-bails) below.
 
@@ -50,7 +50,7 @@ Structural rules the EBNF doesn't express:
 | Lookup order | Innermost `for` variable, then `assign`ed names, then data. |
 | Undefined in `{{ }}` or a `for` collection | Strict: `ErrUndefined`. Lax: renders `""` / zero iterations. |
 | Undefined in `if`/`elsif`/`unless`/`assign` | Never an error (`lenientIf`). Strict: the value becomes null, because liquidjs catches the error. Lax: it stays undefined. So `null == undefined` is true in strict and false in lax. |
-| Strict undefined error | Reported only after the whole template scans clean. liquidjs parses everything first, so a later syntax error wins and mist bails. |
+| Strict undefined error | Returned as soon as the tag containing it parses cleanly, without scanning the rest of the template. If that tag doesn't parse cleanly, for example `{{ x \| default: 'a' }}` which liquidjs treats as lenient, mist bails instead. liquidjs parses everything first, so if the template also has a later syntax error, liquidjs reports that error instead. Either way both fail. |
 | Null in a path | `a.b.c` with `a` null is null. Never an error, even under strict. |
 | Missing key / out-of-range index | Undefined. Negative indexes count from the end. |
 | Output: string, bool, nil | As-is; `true`/`false`; `""`. |
