@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.2.0
+# mist Liquid subset — v0.3.0
 
 _Last updated 2026-09-24. Parity target: liquidjs 10.16.1 configured with `new Liquid({ lenientIf: true })`._
 
