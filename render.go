@@ -35,7 +35,8 @@ type renderer struct {
 	vars    map[string]any
 	assigns map[string]any
 	strict  bool
-	check   bool // parse every branch, evaluate nothing
+	check   bool   // parse every branch, evaluate nothing
+	undef   *Error // first strict undefined; reported only if the rest of the template is in spec
 	stack   [maxDepth]frame
 	depth   int
 
@@ -62,8 +63,11 @@ func bail(pos int, format string, args ...any) {
 }
 
 func (r *renderer) live() bool {
+	if r.check {
+		return false
+	}
 	if r.depth == 0 {
-		return !r.check
+		return true
 	}
 	f := &r.stack[r.depth-1]
 	return f.parentLive && f.active
@@ -220,7 +224,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		if f == nil || f.kind == kFor || f.sawElse {
 			bail(b, "unexpected elsif")
 		}
-		eval := f.parentLive && !f.taken
+		eval := f.parentLive && !f.taken && !r.check
 		f.active = r.cond(eval)
 		f.taken = f.taken || f.active
 	case "else":
@@ -268,7 +272,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		if f == nil || f.kind != kFor {
 			bail(b, "unexpected endfor")
 		}
-		if f.active && f.idx+1 < len(f.coll) {
+		if f.active && !r.check && f.idx+1 < len(f.coll) {
 			f.idx++
 			return f.body, f.rtrim
 		}
@@ -277,17 +281,17 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		r.ws()
 		v := r.ident()
 		r.ws()
-		if v == "" || r.peek() != '=' {
+		if v == "" || reserved(v) || r.peek() != '=' {
 			bail(b, "expected: assign <ident> = <expr>")
 		}
 		r.p++
 		val := r.expr(live, true)
 		r.end()
 		if live {
-			x := val.any()
 			if isNil(val) {
-				x = nil
+				bail(b, "assigning nil") // liquidjs stores distinct null-ish values per source
 			}
+			x := val.any()
 			if r.assigns == nil {
 				r.assigns = map[string]any{}
 			}
@@ -324,6 +328,8 @@ func (r *renderer) skipComment(pos int) (int, bool) {
 		r.setSrc(b, e)
 		r.ws()
 		switch r.ident() {
+		case "":
+			bail(b, "tag without a name inside comment")
 		case "endcomment":
 			r.end()
 			return next, rt

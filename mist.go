@@ -30,6 +30,9 @@ func Render(dst []byte, tpl string, vars map[string]any, strict bool) (out []byt
 	defer recoverBail(&err)
 	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict}
 	r.run()
+	if r.undef != nil {
+		return nil, r.undef
+	}
 	return r.out, nil
 }
 

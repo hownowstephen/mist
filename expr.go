@@ -208,16 +208,23 @@ func (r *renderer) number() float64 {
 func (r *renderer) path(eval, lenient bool) any {
 	start := r.p
 	name := r.ident()
-	if name == "forloop" {
-		bail(r.base+start, "forloop is not supported")
+	if name == "forloop" || reserved(name) || literal(name) {
+		bail(r.base+start, "%q is not supported as a variable", name)
 	}
 	var v any
 	if eval {
 		v = r.root(name, start)
 	}
 	for {
-		if eval && r.strict && !lenient && v == (undefinedT{}) {
-			panic(bailout{&Error{Kind: ErrUndefined, Pos: r.base + start, Msg: r.src[start:r.p]}})
+		if eval && r.strict && v == (undefinedT{}) {
+			switch {
+			case lenient:
+				v = nil // liquidjs catches the strict error and substitutes null
+			case r.undef == nil:
+				// liquidjs parses the whole template first, so a later syntax error wins.
+				r.undef = &Error{Kind: ErrUndefined, Pos: r.base + start, Msg: r.src[start:r.p]}
+				r.check = true
+			}
 		}
 		switch r.peek() {
 		case '.':
@@ -273,6 +280,19 @@ func (r *renderer) root(name string, at int) any {
 		bail(r.base+at, "%q resolves to a liquidjs built-in", name)
 	}
 	return undefinedT{}
+}
+
+func literal(name string) bool {
+	switch name {
+	case "true", "false", "nil", "null", "empty", "blank":
+		return true
+	}
+	return false
+}
+
+// reserved words that liquidjs parses as operators even where a variable is expected.
+func reserved(name string) bool {
+	return name == "contains" || name == "and" || name == "or" || name == "not"
 }
 
 // magic keys that liquidjs computes when the property is absent.
