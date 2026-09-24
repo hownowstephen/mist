@@ -26,12 +26,15 @@ type Error struct {
 func (e *Error) Error() string { return fmt.Sprintf("%v at offset %d: %s", e.Kind, e.Pos, e.Msg) }
 func (e *Error) Unwrap() error { return e.Kind }
 
-// Engine renders templates with custom tags. The zero value has none, and the
-// package-level functions use it.
+// Engine renders templates with custom tags and filters. The zero value has none,
+// and the package-level functions use it.
 type Engine struct {
 	// Tags maps inline tag names, as in {% name args %}, to their implementations.
 	// Built-in tag names can't be overridden.
 	Tags map[string]TagFunc
+	// Filters maps filter names, as in {{ x | name: arg }}, to their implementations.
+	// They override built-in filters of the same name, as registerFilter does in liquidjs.
+	Filters map[string]FilterFunc
 }
 
 // TagFunc appends a custom tag's output to dst. Returning an error that wraps
@@ -97,7 +100,7 @@ func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, er
 // Append is the package-level Append with e's custom tags.
 func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
 	defer recoverBail(&err)
-	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict, tags: e.Tags}
+	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters}
 	r.run()
 	return r.out, nil
 }
@@ -105,7 +108,7 @@ func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool)
 // Check is the package-level Check, also accepting e's custom tags.
 func (e Engine) Check(tpl string) (err error) {
 	defer recoverBail(&err)
-	r := renderer{tpl: tpl, check: true, tags: e.Tags}
+	r := renderer{tpl: tpl, check: true, tags: e.Tags, filterFns: e.Filters}
 	r.run()
 	return nil
 }

@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.3.0
+# mist Liquid subset — v0.4.0
 
 _Last updated 2026-09-24. Parity target: liquidjs 10.16.1 configured with `new Liquid({ lenientIf: true })`._
 
@@ -13,13 +13,15 @@ LL(1) EBNF. Each production is one function in `render.go`/`expr.go`. Anything t
 ```ebnf
 template = { text | output | tag } ;
 text     = ? bytes up to the next "{{" or "{%" ? ;
-output   = "{{" [ "-" ] ws expr ws [ "-" ] "}}" ;
+output   = "{{" [ "-" ] ws expr { filter } ws [ "-" ] "}}" ;
+filter   = "|" ident [ ":" farg { "," farg } ] ;              (* at most 4 positional args *)
+farg     = expr | "allow_false" ":" ( "true" | "false" ) ;    (* named: only default's allow_false *)
 tag      = "{%" [ "-" ] ws tagbody ws [ "-" ] "%}" ;
 
 tagbody  = "if" cond | "elsif" cond | "else" | "endif"
          | "unless" cond | "endunless"
          | "for" ident "in" path | "endfor"
-         | "assign" ident "=" expr
+         | "assign" ident "=" expr { filter }
          | "comment" | "endcomment"
          | "raw" | "endraw"
          | custom ;
@@ -62,6 +64,10 @@ Structural rules the EBNF doesn't express:
 | `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
 | `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank` or `nil` bails, because liquidjs is asymmetric there. |
+| Filters | Applied left to right in `{{ }}` and `assign`. Built in: `default` and `capitalize`. Registered filters (`Engine.Filters`) override built-ins of the same name. Any other filter name bails, even in a dead branch. Filter arguments are never lenient: under strict an undefined argument is `ErrUndefined`. |
+| Leading `default` | When `default` is the first filter, an undefined input is lenient under strict (liquidjs's `lenientIf`). Later in a chain it isn't: `{{ x \| capitalize \| default: 'd' }}` is `ErrUndefined` for an undefined `x`. |
+| `default: d` | Replaces nil, undefined, `false`, `""` and `[]` with `d` (nil with no argument). Whitespace-only strings, `0` and `{}` are kept. `allow_false: true` keeps `false`. |
+| `capitalize` | Stringifies the input (nil → `""`, booleans → `true`/`false`, numbers as JavaScript prints them, arrays joined), then upper-cases the first character and lower-cases the rest, exactly as JavaScript's `toUpperCase`/`toLowerCase` do. A first character outside the BMP is left as is (`charAt(0)` sees half a surrogate pair). |
 | `<` `>` `<=` `>=` | Two numbers, or two ASCII strings (byte order). |
 | `and` / `or` | Evaluated as written. Mixing them bails, which sidesteps Liquid's right-to-left associativity. |
 | Whitespace control | `{{-`/`{%-` trim the template text before; `-}}`/`-%}` trim the template text after. Rendered values are never trimmed. The trimmed set is ASCII whitespace plus U+00A0, U+1680, U+180E, U+2000–200A, U+2028, U+2029, U+202F, U+205F, U+3000. |
@@ -70,6 +76,7 @@ Structural rules the EBNF doesn't express:
 
 Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - Output of an array or an object.
+- `capitalize` of an object, or of a string whose case mapping Go can't reproduce exactly: full-Unicode expansions such as `ß` → `SS` or polytonic Greek as the first character, and `İ`, `Σ` (final-sigma depends on position) or characters newer than Go's Unicode tables in the rest.
 - `.name` or `["key"]` on anything but an object, and `[n]` on anything but an array.
 - `size`, `first` or `last` when the key is absent, because liquidjs computes them. This includes at the root.
 - `==` with an array or object operand; ordering across types or with non-ASCII strings.
@@ -79,7 +86,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
+Filters other than `default`, `capitalize` and registered ones; filters in `if`/`unless` conditions; named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
 
 ## Custom tags
 
@@ -89,6 +96,15 @@ Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for
 - Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Any other error stops rendering and is returned wrapped, so `errors.Is` still matches it.
 - Built-in tag names can't be overridden, and names that aren't registered bail as before. `Engine.Check` accepts registered names without calling them. Their arguments aren't checked.
 - The parity contract doesn't cover custom tags. Matching the full engine's output for them is up to whoever implements the tag.
+
+## Custom filters
+
+`Engine.Filters` registers filters. A `FilterFunc` receives a `Filter` with the input, positional arguments and the strict flag.
+- Undefined and nil both arrive as `nil`. Returned values render as built-in values do: strings, booleans, numbers and nil output, while arrays and objects bail.
+- Registered names take precedence over built-in filters, so an application can supply its own `default` or `capitalize`.
+- Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Other errors stop rendering and are returned wrapped.
+- A `nil` `FilterFunc` is accepted by `Check` and bails at render time.
+- The parity contract doesn't cover registered filters.
 
 ## Chains
 
@@ -108,6 +124,7 @@ Filters (`|`), `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for
 | `testdata/cases.json` | Hand-written cases, one or more per rule above. `node scripts/parity.mjs` checks each expected output against liquidjs. |
 | `testdata/corpus.json` | Every template with plain-JSON data from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) (including production recordings and the Dawn theme) and Shopify/liquid's integration tests, plus 5,000 grammar-generated templates, each with liquidjs's lax and strict result. `TestCorpus` requires exact agreement wherever mist doesn't bail. |
 | `scripts/gen` | Random templates from the grammar above with random data. Run large batches on demand (below). |
+| `testdata/jscase.json` | JavaScript's `toUpperCase`/`toLowerCase` for every code point (`node scripts/jscase.mjs`). `TestCaseMapping` requires `capitalize` to match or bail for each one. |
 | `FuzzRender` | No panics. `Check` rejects ⇒ `Render` fails, and `Check` accepts ⇒ `Render` never bails on syntax. |
 
 Regenerate the corpus (needs Ruby, Node, and clones of both Shopify repos):

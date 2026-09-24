@@ -62,6 +62,24 @@ func (g *gen) expr() string {
 	return g.path()
 }
 
+// filters returns an optional chain of the supported built-in filters.
+func (g *gen) filters() string {
+	var f string
+	for range g.r.IntN(3) {
+		switch g.r.IntN(5) {
+		case 0:
+			f += " | default"
+		case 1:
+			f += " | default: " + g.expr() + g.pick([]string{"", ", allow_false: true", ", allow_false: false"})
+		case 2, 3:
+			f += " | default: " + g.expr()
+		default:
+			f += " | capitalize"
+		}
+	}
+	return f
+}
+
 func (g *gen) cond() string {
 	c := g.cmp()
 	join := g.pick([]string{"and", "or"})
@@ -94,7 +112,7 @@ func (g *gen) block(depth int) {
 			g.b.WriteString(g.pick(words))
 		case k < 5:
 			l, r := g.pick([]string{"{{", "{{-"}), g.pick([]string{"}}", "-}}"})
-			g.b.WriteString(l + g.ws() + g.expr() + g.ws() + r)
+			g.b.WriteString(l + g.ws() + g.expr() + g.filters() + g.ws() + r)
 		case k == 5 && depth < 4:
 			tag := g.pick([]string{"if", "unless"})
 			g.b.WriteString(g.open(tag + " " + g.cond()))
@@ -116,7 +134,7 @@ func (g *gen) block(depth int) {
 			g.loops = g.loops[:len(g.loops)-1]
 			g.b.WriteString(g.open("endfor"))
 		case k == 7:
-			g.b.WriteString(g.open("assign " + g.pick(names[:6]) + g.ws() + "=" + g.ws() + g.expr()))
+			g.b.WriteString(g.open("assign " + g.pick(names[:6]) + g.ws() + "=" + g.ws() + g.expr() + g.filters()))
 		case k == 8:
 			g.b.WriteString("{% comment %}" + g.pick(words) + "{{ x }}{% endcomment %}")
 		default:
@@ -136,7 +154,7 @@ func (g *gen) value(depth int) any {
 	case 3:
 		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000})
 	case 4:
-		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085"})
+		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085", "hELLO wORLD", "élodie", "иВАН", "ßtraße", "ΣΟΦΙΑΣ"})
 	case 5, 6:
 		if depth < 3 {
 			m := map[string]any{}

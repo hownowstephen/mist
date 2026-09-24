@@ -20,9 +20,9 @@ case errors.Is(err, mist.ErrUndefined):
 
 `RenderChain` renders a sequence of templates whose outputs feed later ones, such as snippets, then subject, then body, then layout. It stops at the first step mist can't handle, so only the remaining steps go to the full engine.
 
-## Custom tags
+## Custom tags and filters
 
-Register inline tags on an `Engine`; the package-level functions use an `Engine` with none:
+Register inline tags and filters on an `Engine`; the package-level functions use an `Engine` with none. Registered filters override built-in ones.
 
 ```go
 e := mist.Engine{Tags: map[string]mist.TagFunc{
@@ -37,9 +37,21 @@ e := mist.Engine{Tags: map[string]mist.TagFunc{
 out, err := e.Render(tpl, vars, strict)
 ```
 
+```go
+e.Filters = map[string]mist.FilterFunc{
+	"shout": func(f mist.Filter) (any, error) {
+		s, ok := f.Input.(string)
+		if !ok {
+			return nil, mist.ErrUnsupported
+		}
+		return strings.ToUpper(s) + "!", nil
+	},
+}
+```
+
 ## What's supported
 
-Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons including `== blank`/`!= blank`, `and`/`or`, and whitespace control. No filters yet. [SPEC.md](SPEC.md) is the normative grammar and semantics.
+Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons including `== blank`/`!= blank`, `and`/`or`, whitespace control, and the `default` and `capitalize` filters. [SPEC.md](SPEC.md) is the normative grammar and semantics.
 
 Check whether templates are in the subset:
 
@@ -47,7 +59,7 @@ Check whether templates are in the subset:
 go run github.com/hownowstephen/mist/cmd/mistcheck@latest template.liquid
 ```
 
-`-tags a,b` treats those names as registered custom tags. `-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
+`-tags a,b` and `-filters a,b` treat those names as registered custom tags and filters. `-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
 
 ```bash
 mistcheck -stats templates.jsonl

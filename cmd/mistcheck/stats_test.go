@@ -11,7 +11,7 @@ import (
 func TestBlockers(t *testing.T) {
 	for tpl, want := range map[string][]string{
 		"Hi {{ name }}{% if x %}y{% endif %}":                          nil,
-		"{{ name | upcase | default: 'x' }}":                           {"filter:upcase", "filter:default"},
+		"{{ name | upcase | default: 'x' }}":                           {"filter:upcase"},
 		"{{ a | upcase }} {{ b | upcase }}":                            {"filter:upcase"},
 		"{% case x %}{% when 1 %}one{% else %}other{% endcase %}":      {"tag:case", "tag:when"},
 		"{% if a contains 'b' %}y{% endif %}{{ c | escape }}":          {"contains", "filter:escape"},
@@ -24,7 +24,7 @@ func TestBlockers(t *testing.T) {
 		"{% if x %}":  {"structure"},
 		"{% endif %}": {"structure"},
 		"{% if x %}{% for y in ys offset:1 %}{% endfor %}{% endif %}{{ z | a }}": {"for:offset", "filter:a"},
-		`{{ x | default: "Don't miss | Wagering rules apply" }}`:                 {"filter:default"},
+		`{{ x | default: "Don't miss | Wagering rules apply" | date: "%b" }}`:    {"filter:date"},
 		`{{ "Offer ends | Valable jusqu'au lundi" | upcase }}`:                   {"filter:upcase"},
 		`{{ 'He said "hi | there"' | escape }}`:                                  {"filter:escape"},
 		`{% if a == "x contains y" %}{{ b | c }}{% endif %}`:                     {"filter:c"},
@@ -39,6 +39,13 @@ func TestBlockersWithTags(t *testing.T) {
 	e := mist.Engine{Tags: map[string]mist.TagFunc{"unsubscribe_url": nil}}
 	if got := blockers(e, "{% unsubscribe_url %}{{ a | b }}"); !slices.Equal(got, []string{"filter:b"}) {
 		t.Errorf("got %q; want only filter:b", got)
+	}
+}
+
+func TestBlockersWithFilters(t *testing.T) {
+	e := mist.Engine{Filters: map[string]mist.FilterFunc{"titlecase": nil}}
+	if got := blockers(e, "{{ a | titlecase | capitalize | date: 'x' }}"); !slices.Equal(got, []string{"filter:date"}) {
+		t.Errorf("got %q; want only filter:date", got)
 	}
 }
 
