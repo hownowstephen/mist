@@ -499,6 +499,11 @@ func (r *renderer) write(v val) {
 		r.out = append(r.out, s...)
 		return
 	}
+	if v.lit == 0 && v.x == nilLit {
+		// liquidjs's nil literal is a Drop: "" by default, but "[object Object]" under
+		// an outputEscape that String()s objects, so the output depends on configuration.
+		bail(r.base, "cannot output the nil literal") // e.g. from default: nil
+	}
 	if isNil(v) {
 		return
 	}

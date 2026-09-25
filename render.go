@@ -207,6 +207,9 @@ func (r *renderer) output(b, e int) {
 	if v.isBlank() {
 		bail(b, "blank is only supported with == and !=")
 	}
+	if r.ws(); v.lit == 0 && v.x == nilLit && r.peek() != '|' {
+		bail(b, "output of the nil literal") // see write
+	}
 	v = r.filters(v, live)
 	r.end()
 	if live {

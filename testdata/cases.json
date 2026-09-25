@@ -9,7 +9,7 @@
   {"name": "string literal", "tpl": "{{ 'x' }}{{ \"it's\" }}", "out": "xit's"},
   {"name": "string with braces", "tpl": "{{ \"}}\" }}", "out": "}}"},
   {"name": "int literal", "tpl": "{{ -3 }}{{ 007 }}", "out": "-37"},
-  {"name": "bool and nil output", "tpl": "{{ true }}{{ false }}{{ nil }}{{ null }}", "out": "truefalse"},
+  {"name": "bool and nil output", "tpl": "{{ true }}{{ false }}{{ x }}{{ y }}", "out": "truefalse", "data": {"y": null}},
   {"name": "integral float", "tpl": "{{ x }}", "data": {"x": 3.0}, "out": "3"},
   {"name": "large int", "tpl": "{{ x }}", "data": {"x": 123456789012}, "out": "123456789012"},
   {"name": "null var", "tpl": "[{{ x }}]", "data": {"x": null}, "strict": true, "out": "[]"},
@@ -187,7 +187,7 @@
   {"name": "default allow_false nil", "tpl": "[{{ x | default: 'd', allow_false: true }}]", "data": {"x": null}, "out": "[d]"},
   {"name": "default no arg", "tpl": "[{{ x | default }}]", "data": {}, "out": "[]"},
   {"name": "default number arg", "tpl": "[{{ x | default: 1 }}]", "data": {}, "out": "[1]"},
-  {"name": "default nil arg", "tpl": "[{{ x | default: nil }}]", "data": {}, "out": "[]"},
+  {"name": "default nil arg", "tpl": "[{{ x | default: nil }}]", "data": {}, "err": "unsupported"},
   {"name": "default compact", "tpl": "[{{ x|default:'d' }}]", "data": {}, "out": "[d]"},
   {"name": "default literal number input", "tpl": "[{{ 5 | default: 'd' }}]", "data": {}, "out": "[5]"},
   {"name": "default chain", "tpl": "[{{ x | default: 'd' | capitalize }}]", "data": {}, "strict": true, "out": "[D]"},
@@ -219,5 +219,7 @@
   {"name": "allow_false non literal", "tpl": "[{{ x | default: 'd', allow_false: y }}]", "data": {"y": true}, "err": "unsupported"},
   {"name": "capitalize number literal", "tpl": "[{{ 5 | capitalize }}]", "out": "[5]"},
   {"name": "blank filter argument", "tpl": "[{{ x | default: blank }}]", "err": "unsupported"},
+  {"name": "nil literal output", "tpl": "[{{ nil }}]", "err": "unsupported"},
+  {"name": "null literal output", "tpl": "[{{ null }}]", "err": "unsupported"},
   {"name": "integers around 2^53", "tpl": "{{ a }}|{{ b }}|{{ c }}|{{ d }}", "data": {"a": 9007199254740991, "b": -9007199254740991, "c": 9007199254740992, "d": 219000977437029504}, "out": "9007199254740991|-9007199254740991|9007199254740992|219000977437029500"}
 ]

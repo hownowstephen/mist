@@ -1,6 +1,6 @@
 # mist Liquid subset — v0.5.0
 
-_Last updated 2026-09-24. Parity target: liquidjs 10.16.1 configured with `new Liquid({ lenientIf: true })`._
+_Last updated 2026-09-24. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -58,7 +58,7 @@ Structural rules the EBNF doesn't express:
 | Strict undefined timing | Returned as soon as the tag containing it parses cleanly, without scanning the rest of the template. If that tag doesn't parse cleanly, for example `{{ x \| default: 'a' }}` which liquidjs treats as lenient, mist bails instead. liquidjs parses everything first, so if the template also has a later syntax error, liquidjs reports that error instead. Either way both fail. |
 | Null in a path | `a.b.c` with `a` null is null. Never an error, even under strict. |
 | Missing key / out-of-range index | Undefined. Negative indexes count from the end. |
-| Output: string, bool, nil | As-is; `true`/`false`; `""`. |
+| Output: string, bool, nil | As-is; `true`/`false`; `""` for a nil or undefined variable. Printing the `nil`/`null` literal itself (including through `default: nil`) bails: liquidjs represents it as a Drop, which prints differently depending on the `outputEscape` configuration. |
 | Output: number | As JavaScript's `String(n)`: shortest round-trip digits, fixed notation for 1e-7 ≤ \|n\| < 1e21, otherwise exponent notation (`1e+21`, `2.5e-8`). |
 | `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
 | `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
@@ -75,7 +75,7 @@ Structural rules the EBNF doesn't express:
 ### Runtime bails
 
 Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
-- Output of an array or an object.
+- Output of an array or an object, or of the nil literal coming out of a filter (`{{ x | default: nil }}` with `x` empty).
 - `capitalize` of an object, or of a string whose case mapping Go can't reproduce exactly: full-Unicode expansions such as `ß` → `SS` or polytonic Greek as the first character, and `İ`, `Σ` (final-sigma depends on position) or characters newer than Go's Unicode tables in the rest.
 - `.name` or `["key"]` on anything but an object, and `[n]` on anything but an array.
 - `size`, `first` or `last` when the key is absent, because liquidjs computes them. This includes at the root.
