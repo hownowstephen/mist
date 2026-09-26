@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // corpus.json holds templates harvested from Shopify/liquid-spec and Shopify/liquid's
@@ -28,6 +29,9 @@ type oracle struct {
 	Out *string `json:"out"`
 	Err string  `json:"err"`
 }
+
+// corpusEngine uses oracle.mjs's fixed Date.now.
+var corpusEngine = Engine{Now: func() time.Time { return time.UnixMilli(1700000000123) }}
 
 var bailNoise = regexp.MustCompile(`"[^"]*"|\d+`)
 
@@ -52,7 +56,7 @@ func TestCorpus(t *testing.T) {
 			if strict && c.Strict != nil {
 				want = *c.Strict
 			}
-			out, err := Render(c.Tpl, c.Data, strict)
+			out, err := corpusEngine.Render(c.Tpl, c.Data, strict)
 			if e, ok := errors.AsType[*Error](err); ok && errors.Is(err, ErrUnsupported) {
 				bailed++
 				reasons[bailNoise.ReplaceAllString(e.Msg, "…")]++

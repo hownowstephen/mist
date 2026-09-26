@@ -5,6 +5,11 @@
 import { Liquid } from 'liquidjs';
 import { readFileSync, writeFileSync } from 'node:fs';
 
+// The SPEC parity config runs with TZ=UTC. A fixed clock keeps 'now' reproducible;
+// corpus_test.go's corpusNow must match.
+process.env.TZ = 'UTC';
+Date.now = () => 1700000000123;
+
 // renderLimit only guards corpus generation against resource-limit specs.
 const engine = new Liquid({ lenientIf: true, renderLimit: 2000 });
 const args = process.argv.slice(2);

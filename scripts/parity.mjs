@@ -3,12 +3,15 @@
 import { Liquid } from 'liquidjs';
 import { readFileSync } from 'node:fs';
 
+process.env.TZ = 'UTC'; // the SPEC parity config
 const engine = new Liquid({ lenientIf: true });
+const realNow = Date.now;
 const cases = JSON.parse(readFileSync(new URL('../testdata/cases.json', import.meta.url)));
 let failed = 0;
 
 for (const c of cases) {
   let got, err;
+  Date.now = c.now === undefined ? realNow : () => c.now;
   try {
     got = await engine.parseAndRender(c.tpl, structuredClone(c.data ?? {}), { strictVariables: !!c.strict });
   } catch (e) {

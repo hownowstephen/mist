@@ -55,7 +55,7 @@ e.Filters = map[string]mist.FilterFunc{
 
 ## What's supported
 
-Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons including `== blank`/`!= blank`, `and`/`or`, whitespace control, and the `default` and `capitalize` filters. [SPEC.md](SPEC.md) is the normative grammar and semantics.
+Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons including `== blank`/`!= blank`, `and`/`or`, whitespace control, and the `default`, `capitalize` and `date` filters. [SPEC.md](SPEC.md) is the normative grammar and semantics.
 
 Check whether templates are in the subset:
 

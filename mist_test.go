@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 type tcase struct {
@@ -15,6 +16,7 @@ type tcase struct {
 	Strict bool           `json:"strict"`
 	Out    string         `json:"out"`
 	Err    string         `json:"err"`
+	Now    *int64         `json:"now"` // Date.now in ms, for 'now' and 'today'
 }
 
 func loadCases(t testing.TB) []tcase {
@@ -32,7 +34,11 @@ func loadCases(t testing.TB) []tcase {
 func TestCases(t *testing.T) {
 	for _, c := range loadCases(t) {
 		t.Run(c.Name, func(t *testing.T) {
-			out, err := Render(c.Tpl, c.Data, c.Strict)
+			var e Engine
+			if c.Now != nil {
+				e.Now = func() time.Time { return time.UnixMilli(*c.Now) }
+			}
+			out, err := e.Render(c.Tpl, c.Data, c.Strict)
 			switch c.Err {
 			case "":
 				if err != nil || out != c.Out {
@@ -161,7 +167,7 @@ func FuzzRender(f *testing.F) {
 
 // runtimeBail reports data-dependent bails, which Check can't see.
 func runtimeBail(err error) bool {
-	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of"} {
+	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of", "date "} {
 		if strings.Contains(err.Error(), s) {
 			return true
 		}

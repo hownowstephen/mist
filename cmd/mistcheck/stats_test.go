@@ -24,8 +24,8 @@ func TestBlockers(t *testing.T) {
 		"{% if x %}":  {"structure"},
 		"{% endif %}": {"structure"},
 		"{% if x %}{% for y in ys offset:1 %}{% endfor %}{% endif %}{{ z | a }}": {"for:offset", "filter:a"},
-		`{{ x | default: "Don't miss | Wagering rules apply" | date: "%b" }}`:    {"filter:date"},
-		`{{ "Offer ends | Valable jusqu'au lundi" | upcase }}`:                   {"filter:upcase"},
+		`{{ x | default: "Don't stop | keep going" | truncate: 5 }}`:             {"filter:truncate"},
+		`{{ "Ends soon | C'est la fin" | upcase }}`:                              {"filter:upcase"},
 		`{{ 'He said "hi | there"' | escape }}`:                                  {"filter:escape"},
 		`{% if a == "x contains y" %}{{ b | c }}{% endif %}`:                     {"filter:c"},
 	} {
@@ -44,8 +44,8 @@ func TestBlockersWithTags(t *testing.T) {
 
 func TestBlockersWithFilters(t *testing.T) {
 	e := mist.Engine{Filters: map[string]mist.FilterFunc{"titlecase": nil}}
-	if got := blockers(e, "{{ a | titlecase | capitalize | date: 'x' }}"); !slices.Equal(got, []string{"filter:date"}) {
-		t.Errorf("got %q; want only filter:date", got)
+	if got := blockers(e, "{{ a | titlecase | capitalize | truncate: 3 }}"); !slices.Equal(got, []string{"filter:truncate"}) {
+		t.Errorf("got %q; want only filter:truncate", got)
 	}
 }
 

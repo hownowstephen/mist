@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -41,6 +42,7 @@ type renderer struct {
 	tags      map[string]TagFunc
 	filterFns map[string]FilterFunc
 	dialect   *Dialect
+	now       func() time.Time
 	stack     [maxDepth]frame
 	depth     int
 
