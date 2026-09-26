@@ -190,7 +190,9 @@ func ianaName(s string) bool {
 	}
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || strings.IndexByte("_+-/", c) >= 0) {
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', strings.IndexByte("_+-/", c) >= 0:
+		default:
 			return false
 		}
 	}
@@ -200,9 +202,6 @@ func ianaName(s string) bool {
 // strftime appends liquidjs's strftime of the instant ms displayed in z.
 func strftime(dst []byte, ms int64, z zone, format string, at int) []byte {
 	disp := ms + int64(z.east)*60000
-	if math.Abs(float64(disp)) > maxMs {
-		bail(at, "date out of range")
-	}
 	d := time.UnixMilli(disp).UTC()
 	if y := d.Year(); y < 1000 || y > 9999 {
 		bail(at, "date outside years 1000–9999") // liquidjs's %y and %C assume four digits

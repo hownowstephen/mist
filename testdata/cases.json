@@ -234,7 +234,7 @@
   {"name": "date out of JavaScript range passes through", "tpl": "{{ x | date: '%Y' }}", "data": {"x": 1e+20}, "out": "100000000000000000000"},
   {"name": "date padding and flags", "tpl": "{{ ts | date: '%e|%-d|%_m|%05d|%^a|%#B|%#p|%k|%l|%I|%j|%-j' }}", "data": {"ts": 1709715600}, "out": " 6|6| 3|00006|WED|MARCH|am| 9| 9|09|066|66"},
   {"name": "date week numbers and weekdays", "tpl": "{{ ts | date: '%U %W %u %w %a %A' }}", "data": {"ts": 1704585600}, "out": "01 01 7 0 Sun Sunday"},
-  {"name": "date century, year and ordinal", "tpl": "{{ ts | date: '%C %y %Y %q' }}|{{ ts2 | date: '%-d%q' }}", "data": {"ts": 1709715600, "ts2": 1710288000}, "out": "20 24 2024 th|13th"},
+  {"name": "date century, year and ordinal", "tpl": "{{ ts | date: '%C %y %Y %q' }}|{% for d in ds %}{{ d | date: '%-d%q ' }}{% endfor %}", "data": {"ts": 1709715600, "ds": ["2024-03-01", "2024-03-02", "2024-03-03", "2024-03-11", "2024-03-13", "2024-03-22", "2024-03-31"]}, "out": "20 24 2024 th|1st 2nd 3rd 11th 13th 22nd 31st "},
   {"name": "date literal text, %% and unknown directives", "tpl": "{{ 0 | date: '100%% at %H' }}|{{ 0 | date: '%Q %' }}|{{ 0 | date: '1999' }}|{{ 0 | date: '%t%n' }}", "out": "100% at 00|%Q %|1999|\t\n"},
   {"name": "date timezone by name", "tpl": "{{ ts | date: '%H:%M %z %:z %Z', 'Asia/Kolkata' }}|{{ ts | date: '%H:%M %Z', 'US/Pacific' }}", "data": {"ts": 1710498030}, "out": "15:50 +0530 +05:30 Asia/Kolkata|03:20 US/Pacific"},
   {"name": "date timezone across a DST change", "tpl": "{{ a | date: '%H:%M %z', 'America/New_York' }}|{{ b | date: '%H:%M %z', 'America/New_York' }}", "data": {"a": "2024-03-10T06:59:00Z", "b": "2024-03-10T07:00:00Z"}, "out": "01:59 -0500|03:00 -0400"},
@@ -249,5 +249,13 @@
   {"name": "date year outside 1000-9999", "tpl": "{{ x | date: '%Y' }}", "data": {"x": 253402300800}, "err": "unsupported"},
   {"name": "date with three arguments", "tpl": "{{ 0 | date: '%Y', 'UTC', 1 }}", "err": "unsupported"},
   {"name": "date truncated directives print as written", "tpl": "{{ 0 | date: '%-\n%Y|%5E|%é|%%%' }}", "out": "%-\n1970|%5E|%é|%%"},
-  {"name": "date timezone Go loads but Intl rejects", "tpl": "{{ 0 | date: '%Y', 'posixrules' }}", "err": "unsupported"}
+  {"name": "date timezone Go loads but Intl rejects", "tpl": "{{ 0 | date: '%Y', 'posixrules' }}", "err": "unsupported"},
+  {"name": "date %N narrower than the milliseconds", "tpl": "{{ 'now' | date: '%1N|%2N' }}", "now": 1710498030123, "out": "1|12"},
+  {"name": "date of malformed ISO strings", "tpl": "{% for s in xs %}{{ s | date: '%Y' }}{% endfor %}", "data": {"xs": ["2024-03-15X10:20"]}, "err": "unsupported"},
+  {"name": "date of an ISO string with a bad fraction", "tpl": "{{ '2024-03-15T10:20:30.Z' | date: '%Y' }}", "err": "unsupported"},
+  {"name": "date of an ISO string with a bad offset", "tpl": "{{ '2024-03-15T10:20:30+24:00' | date: '%Y' }}", "err": "unsupported"},
+  {"name": "date of an ISO string with a non-digit", "tpl": "{{ '2024-0a-15' | date: '%Y' }}", "err": "unsupported"},
+  {"name": "date format width over 1024", "tpl": "{{ 0 | date: '%2000d' }}", "err": "unsupported"},
+  {"name": "date timezone name with a stray character", "tpl": "{{ 0 | date: '%Y', 'Etc/GMT.5' }}", "err": "unsupported"},
+  {"name": "date timezone with a local mean time offset", "tpl": "{{ x | date: '%Y', 'Europe/Amsterdam' }}", "data": {"x": -5364662400}, "err": "unsupported"}
 ]
