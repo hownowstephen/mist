@@ -83,6 +83,10 @@ func (r *renderer) filters(v val, eval bool) val {
 				}
 				v = val{s: capitalize(s, at), lit: litStr}
 			}
+		case name == "date" && len(args) <= 2:
+			if eval {
+				v = r.dateFilter(v, args, at)
+			}
 		default:
 			bail(at, "unsupported filter %q", name)
 		}

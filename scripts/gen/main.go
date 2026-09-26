@@ -14,10 +14,12 @@ import (
 )
 
 var (
-	names  = []string{"a", "b", "c", "x", "xs", "n", "s", "user", "items", "size", "first", "f-g"}
+	names  = []string{"a", "b", "c", "x", "xs", "n", "s", "user", "items", "size", "first", "f-g", "f", "tz"}
 	props  = []string{"a", "b", "name", "id", "k", "size", "first", "last", "nested"}
 	words  = []string{"", " ", "hi", "  \n ", "\t", " ", "é", "{", "}", "%", "<p>"}
 	blanks = []string{"", " ", "  ", "\n", " \t "}
+	dates  = []string{"'%Y-%m-%d'", "'%s'", "'%H:%M:%S.%L %N'", "'%a %b %e %-l%P %z'", "'%A %B %-d, %Y %I:%M %p'", "'%j %U %W %u %w %y %C %q'", "'%:z %^a %#B %_5d %-m%%'", "'%Q %'", "f"}
+	zones  = []string{"'UTC'", "'America/New_York'", "'Asia/Kolkata'", "'Australia/Adelaide'", "'US/Pacific'", "-330", "300", "tz"}
 )
 
 type gen struct {
@@ -53,7 +55,7 @@ func (g *gen) path() string {
 func (g *gen) expr() string {
 	switch g.r.IntN(8) {
 	case 0:
-		return fmt.Sprintf("'%s'", g.pick([]string{"", "a", "b", "A", "10", "2"}))
+		return fmt.Sprintf("'%s'", g.pick([]string{"", "a", "b", "A", "10", "2", "now"}))
 	case 1:
 		return fmt.Sprint(g.r.IntN(21) - 10)
 	case 2:
@@ -66,9 +68,17 @@ func (g *gen) expr() string {
 func (g *gen) filters() string {
 	var f string
 	for range g.r.IntN(3) {
-		switch g.r.IntN(5) {
+		switch g.r.IntN(6) {
 		case 0:
 			f += " | default"
+		case 5:
+			f += " | date"
+			if g.r.IntN(4) > 0 {
+				f += ": " + g.pick(dates)
+				if g.r.IntN(2) == 0 {
+					f += ", " + g.pick(zones)
+				}
+			}
 		case 1:
 			f += " | default: " + g.expr() + g.pick([]string{"", ", allow_false: true", ", allow_false: false"})
 		case 2, 3:
@@ -152,9 +162,10 @@ func (g *gen) value(depth int) any {
 	case 2:
 		return float64(g.r.IntN(21) - 10)
 	case 3:
-		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000})
+		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000, 1700000000, 1710460800.5, -86400})
 	case 4:
-		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085", "hELLO wORLD", "élodie", "иВАН", "ßtraße", "ΣΟΦΙΑΣ"})
+		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085", "hELLO wORLD", "élodie", "иВАН", "ßtraße", "ΣΟΦΙΑΣ",
+			"now", "1700000000", "2024-02-29", "2024-03-10T07:30:00Z", "2024-11-03 01:30:00", "2024-03-15T10:20:30.5+05:45", "2024-02-30", "Mar 5 2024", "%d/%m", "Europe/Paris"})
 	case 5, 6:
 		if depth < 3 {
 			m := map[string]any{}
