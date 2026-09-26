@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.7.0
+# mist Liquid subset — v0.8.0
 
 _Last updated 2026-09-26. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -22,6 +22,7 @@ tagbody  = "if" cond | "elsif" cond | "else" | "endif"
          | "unless" cond | "endunless"
          | "for" ident "in" path | "endfor"
          | "assign" ident "=" expr { filter }
+         | "capture" ( ident | string ) | "endcapture"
          | "comment" | "endcomment"
          | "raw" | "endraw"
          | custom ;
@@ -29,8 +30,8 @@ custom   = ident { ? any ? } ;                     (* only names registered in E
 
 cond     = cmp { "and" cmp } | cmp { "or" cmp } ;      (* one connective per condition *)
 cmp      = expr [ op expr ] ;
-op       = "==" | "!=" | "<=" | ">=" | "<" | ">" ;
-expr     = path | string | int | "true" | "false" | "nil" | "null" | "blank" ;   (* blank: only as an operand of == or != *)
+op       = "==" | "!=" | "<=" | ">=" | "<" | ">" | "contains" ;   (* contains: not followed by an ident character *)
+expr     = path | string | int | "true" | "false" | "nil" | "null" | "blank" | "empty" ;   (* blank, empty: only as operands of == or != *)
 path     = ident { "." ident | "[" int "]" | "[" string "]" } ;   (* no spaces inside *)
 ident    = ( letter | "_" ) { letter | digit | "_" | "-" } ;      (* ASCII only *)
 string   = "'" { ? any but ' or \ ? } "'" | '"' { ? any but " or \ ? } '"' ;
@@ -39,7 +40,7 @@ ws       = { " " | "\t" | "\n" | "\v" | "\f" | "\r" } ;
 ```
 
 Structural rules the EBNF doesn't express:
-- Blocks must nest and close: `if…endif` and `unless…endunless`, each with optional `elsif`s and at most one final `else`, and `for…endfor` with no `else`. The maximum nesting depth is 16.
+- Blocks must nest and close: `if…endif` and `unless…endunless`, each with optional `elsif`s and at most one final `else`, `for…endfor` with no `else`, and `capture…endcapture`. The maximum nesting depth is 16.
 - `comment … endcomment`: the body is tokenized but ignored. A nested `comment` or `raw`, or a tag with no name, bails.
 - `contains`, `and`, `or` and `not` can't be variable names at the root of a path; liquidjs parses them as operators. They are fine as properties (`a.and`). Literal keywords can't start a path either (`for x in nil` bails).
 - `raw … endraw`: the body is emitted verbatim. Trim markers on either tag bail.
@@ -61,9 +62,12 @@ Structural rules the EBNF doesn't express:
 | Output: string, bool, nil | As-is; `true`/`false`; `""` for a nil or undefined variable. Printing the `nil`/`null` literal itself (including through `default: nil`) bails: liquidjs represents it as a Drop, which prints differently depending on the `outputEscape` configuration. |
 | Output: number | As JavaScript's `String(n)`: shortest round-trip digits, fixed notation for 1e-7 ≤ \|n\| < 1e21, otherwise exponent notation (`1e+21`, `2.5e-8`). |
 | `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
+| `capture` | Renders its body instead of printing it, and assigns the result as a string, exactly as `assign` would (so it replaces data and earlier assigns of the same name). A quoted name is stored as written. In a dead branch nothing is rendered or assigned. |
 | `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
-| `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank` or `nil` bails, because liquidjs is asymmetric there. |
+| `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank`, `empty` or `nil` bails, because liquidjs is asymmetric there. |
+| `== empty` / `!= empty` | Only `""`, `[]` and `{}` are empty; whitespace, nil, undefined, `0` and `false` aren't. Works on either side. `empty` against `blank`, `empty` or `nil` bails. |
+| `contains` | Same precedence as `==`. An array contains an element equal by JavaScript's `===` (same type and value; arrays and objects are never equal to a scalar). A string contains the right side's string form, as `indexOf` coerces it: numbers as JavaScript prints them, booleans as `true`/`false`, nil as `null` and undefined (lax) as `undefined`; the empty string is always contained. Anything else contains nothing. |
 | Filters | Applied left to right in `{{ }}` and `assign`. Built in: `default`, `capitalize`, `date` and the string, array and math filters below. Registered filters (`Engine.Filters`) override built-ins of the same name. Any other filter name bails, even in a dead branch. Filter arguments are never lenient: under strict an undefined argument is `ErrUndefined`. |
 | Leading `default` | When `default` is the first filter, an undefined input is lenient under strict (liquidjs's `lenientIf`). Later in a chain it isn't: `{{ x \| capitalize \| default: 'd' }}` is `ErrUndefined` for an undefined `x`. |
 | `default: d` | Replaces nil, undefined, `false`, `""` and `[]` with `d` (nil with no argument). Whitespace-only strings, `0` and `{}` are kept. `allow_false: true` keeps `false`. |
@@ -87,6 +91,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - `capitalize` of an object, or of a string whose case mapping Go can't reproduce exactly: full-Unicode expansions such as `ß` → `SS` or polytonic Greek as the first character, and `İ`, `Σ` (final-sigma depends on position) or characters newer than Go's Unicode tables in the rest.
 - `.name` or `["key"]` on anything but an object, and `[n]` on anything but an array.
 - `size`, `first` or `last` when the key is absent, because liquidjs computes them. This includes at the root.
+- `contains` with an array or object on the right.
 - `==` with an array or object operand; ordering across types or with non-ASCII strings.
 - `for` over anything but an array or nil.
 - `assign` of nil, null or undefined. liquidjs stores a different null-ish value depending on the source, and each one compares differently.
@@ -100,7 +105,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); filters in `if`/`unless` conditions; named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
+Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); filters in `if`/`unless` conditions; named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
 
 ## Custom tags
 
@@ -128,12 +133,12 @@ Filters other than the built-ins above and registered ones; built-ins with more 
 |---|---|
 | `Output(dst, v)` | Prints non-string values: numbers, bools, arrays, objects. Strings, nil and undefined are printed by mist as usual. |
 | `Compare(op, a, b)` | Evaluates `==`, `!=`, `<`, `>`, `<=`, `>=` in conditions. Truthiness and `and`/`or` are unchanged. |
-| `Reject` | A set of constructs that bail in both `Render` and `Check`, including in dead branches: `TrimMarkers`, `NegativeLiterals` (including negative indexes), `UnspacedOperators` (a comparison operator with no whitespace before it, such as `x==2`), `RawBlocks`, `BlankKeyword`. |
+| `Reject` | A set of constructs that bail in both `Render` and `Check`, including in dead branches: `TrimMarkers`, `NegativeLiterals` (including negative indexes), `UnspacedOperators` (a comparison operator with no whitespace before it, such as `x==2`), `RawBlocks`, `BlankKeyword`, `EmptyKeyword`. |
 | `NoDefaultLeniency` | Turns off the leading-`default` leniency rule. Combine with an overriding `default` in `Engine.Filters` to change `default` itself. |
 
-- **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integer literals, `nil` for nil, undefined and the `nil` literal, and `mist.Blank` for the `blank` keyword.
+- **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integer literals, `nil` for nil, undefined and the `nil` literal, and `mist.Blank` and `mist.Empty` for those keywords.
 - **Errors:** a hook returning an error that wraps `ErrUnsupported` bails; other errors stop rendering and are returned wrapped.
-- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` against `blank` or `nil`, assigning nil, and everything out of spec) still apply.
+- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` or `empty` against a keyword or `nil`, assigning nil, and everything out of spec) still apply. `contains` bails when `Compare` is set, since the hook doesn't cover it.
 
 ## Chains
 

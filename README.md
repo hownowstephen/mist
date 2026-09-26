@@ -55,7 +55,7 @@ e.Filters = map[string]mist.FilterFunc{
 
 ## What's supported
 
-Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, comparisons including `== blank`/`!= blank`, `and`/`or`, whitespace control, and the `default`, `capitalize`, `date`, `downcase`, `upcase`, `append`, `prepend`, `replace`, `replace_first`, `remove`, `remove_first`, `strip`, `lstrip`, `rstrip`, `truncate`, `truncatewords`, `escape`, `escape_once`, `url_encode`, `json`, `split`, `slice`, `first`, `last`, `plus`, `minus`, `times`, `divided_by` and `modulo` filters. [SPEC.md](SPEC.md) is the normative grammar and semantics.
+Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, `capture`, comparisons including `contains` and `== blank`/`== empty`, `and`/`or`, whitespace control, and the `default`, `capitalize`, `date`, `downcase`, `upcase`, `append`, `prepend`, `replace`, `replace_first`, `remove`, `remove_first`, `strip`, `lstrip`, `rstrip`, `truncate`, `truncatewords`, `escape`, `escape_once`, `url_encode`, `json`, `split`, `slice`, `first`, `last`, `plus`, `minus`, `times`, `divided_by` and `modulo` filters. [SPEC.md](SPEC.md) is the normative grammar and semantics.
 
 Check whether templates are in the subset:
 

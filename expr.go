@@ -17,10 +17,16 @@ type nilLitT struct{}
 
 var nilLit = nilLitT{}
 
-// blankT is the blank literal, supported only as an operand of == and !=.
-type blankT struct{}
+// blankT and emptyT are the blank and empty literals, supported only as operands of == and !=.
+type (
+	blankT struct{}
+	emptyT struct{}
+)
 
-var blankLit = blankT{}
+var (
+	blankLit = blankT{}
+	emptyLit = emptyT{}
+)
 
 // val carries literals unboxed so evaluating them doesn't allocate.
 type val struct {
@@ -35,7 +41,17 @@ const (
 	litNum
 )
 
-func (v val) isBlank() bool { return v.lit == 0 && v.x == blankLit }
+// keyword names v if it's the blank or empty literal.
+func (v val) keyword() string {
+	switch {
+	case v.lit != 0:
+	case v.x == blankLit:
+		return "blank"
+	case v.x == emptyLit:
+		return "empty"
+	}
+	return ""
+}
 
 func (v val) any() any {
 	switch v.lit {
@@ -134,24 +150,32 @@ func (r *renderer) cmp(eval bool) bool {
 		bail(r.pos(), "operators without whitespace before them are rejected by the dialect")
 	}
 	if op == "" {
-		if a.isBlank() {
-			bail(start, "blank is only supported with == and !=")
+		if k := a.keyword(); k != "" {
+			bail(start, "%s is only supported with == and !=", k)
 		}
 		return eval && truthy(a, r.pos())
 	}
 	at := r.pos()
 	b := r.expr(eval, true)
-	if a.isBlank() || b.isBlank() {
-		other := a
-		if a.isBlank() {
-			other = b
+	if k, other := a.keyword(), b; k != "" || b.keyword() != "" {
+		if k == "" {
+			k, other = b.keyword(), a
 		}
 		switch {
 		case op != "==" && op != "!=":
-			bail(start, "blank is only supported with == and !=")
-		case other.isBlank() || (other.lit == 0 && other.x == nilLit):
-			bail(start, "blank compared with blank or nil") // liquidjs is asymmetric here
+			bail(start, "%s is only supported with == and !=", k)
+		case other.keyword() != "" || (other.lit == 0 && other.x == nilLit):
+			bail(start, "%s compared with blank, empty or nil", k) // liquidjs is asymmetric here
 		}
+	}
+	if op == "contains" {
+		if b.lit == 0 && b.x == nilLit {
+			bail(at, "contains nil") // liquidjs searches for "null"
+		}
+		if r.dialect != nil && r.dialect.Compare != nil {
+			bail(at, "contains with a dialect Compare hook")
+		}
+		return eval && contains(a, b, at)
 	}
 	if eval && r.dialect != nil && r.dialect.Compare != nil {
 		return r.dialectCompare(op, a, b, at)
@@ -161,8 +185,11 @@ func (r *renderer) cmp(eval bool) bool {
 
 func (r *renderer) op() string {
 	rest := r.src[r.p:]
-	for _, op := range [...]string{"==", "!=", "<=", ">=", "<", ">"} {
+	for _, op := range [...]string{"==", "!=", "<=", ">=", "<", ">", "contains"} {
 		if strings.HasPrefix(rest, op) {
+			if op == "contains" && len(rest) > len(op) && isIdentChar(rest[len(op)]) {
+				bail(r.pos(), "contains followed by an identifier character") // liquidjs splits containsx into contains x
+			}
 			r.p += len(op)
 			return op
 		}
@@ -195,7 +222,10 @@ func (r *renderer) expr(eval, lenient bool) val {
 			}
 			v = blankLit
 		case "empty":
-			bail(at, "empty is not supported")
+			if r.rejects(EmptyKeyword) {
+				bail(at, "empty is rejected by the dialect")
+			}
+			v = emptyLit
 		default:
 			r.p = save
 			return val{x: r.path(eval, lenient)}
@@ -633,11 +663,14 @@ func ascii(s string) bool {
 
 // eq mirrors liquidjs: === on scalars, except the nil literal matches null and undefined.
 func eq(a, b val, at int) bool {
-	if a.isBlank() {
+	if a.keyword() != "" {
 		a, b = b, a
 	}
-	if b.isBlank() { // cmp has ruled out blank vs blank or nil
+	switch b.keyword() { // cmp has ruled out a keyword against a keyword or nil
+	case "blank":
 		return blankValue(a.check(at))
+	case "empty":
+		return emptyValue(a.check(at))
 	}
 	a, b = a.check(at), b.check(at)
 	if (a.lit == 0 && a.x == nilLit) || (b.lit == 0 && b.x == nilLit) {
@@ -661,4 +694,47 @@ func eq(a, b val, at int) bool {
 		return false
 	}
 	return a.x == b.x // nil, undefined, bool
+}
+
+// emptyValue mirrors liquidjs's EmptyDrop: only "", [] and {} equal empty.
+func emptyValue(v val) bool {
+	if s, ok := v.str(); ok {
+		return s == ""
+	}
+	switch x := v.x.(type) {
+	case []any:
+		return len(x) == 0
+	case map[string]any:
+		return len(x) == 0
+	}
+	return false
+}
+
+// contains mirrors liquidjs: array elements by ===, substrings of a string (the right side
+// coerced as indexOf does), and false for anything else.
+func contains(a, b val, at int) bool {
+	a, b = a.check(at), b.check(at)
+	if isObj(b) {
+		bail(at, "contains with an object or array on the right")
+	}
+	if arr, ok := a.x.([]any); ok {
+		for _, e := range arr {
+			if ev := (val{x: e}).check(at); !isObj(ev) && eq(ev, b, at) {
+				return true
+			}
+		}
+		return false
+	}
+	s, ok := a.str()
+	if !ok {
+		return false
+	}
+	needle := "null"
+	switch _, undef := b.x.(undefinedT); {
+	case b.lit != 0 || b.x != nil && !undef:
+		needle = string(stringify(nil, b, at))
+	case undef:
+		needle = "undefined"
+	}
+	return strings.Contains(s, needle)
 }

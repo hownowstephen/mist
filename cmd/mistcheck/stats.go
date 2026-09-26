@@ -108,13 +108,8 @@ func classify(eng mist.Engine, tok string, isTag bool, msg string, unknown map[s
 	words := strings.FieldsFunc(code, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_.-", r)
 	})
-	for _, w := range words {
-		switch {
-		case strings.HasPrefix(w, "forloop"):
-			kinds = append(kinds, "forloop")
-		case w == "contains", w == "empty":
-			kinds = append(kinds, w)
-		}
+	if slices.ContainsFunc(words, func(w string) bool { return strings.HasPrefix(w, "forloop") }) {
+		kinds = append(kinds, "forloop")
 	}
 	if name == "for" {
 		if strings.Contains(code, "(") {
@@ -172,8 +167,8 @@ func msgKind(msg string) string {
 		return "string escapes"
 	case strings.HasPrefix(msg, "only integer literals"):
 		return "float literal"
-	case strings.HasPrefix(msg, "blank"):
-		return "blank outside ==/!="
+	case strings.HasPrefix(msg, "blank"), strings.HasPrefix(msg, "empty"):
+		return msg[:strings.IndexByte(msg, ' ')] + " outside ==/!="
 	case strings.Contains(msg, "is not supported as a variable"):
 		return "reserved word as variable"
 	case strings.HasPrefix(msg, "trim markers on raw"):

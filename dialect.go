@@ -28,20 +28,24 @@ const (
 	UnspacedOperators                        // a comparison operator with no whitespace before it: x==2
 	RawBlocks                                // {% raw %}…{% endraw %}
 	BlankKeyword                             // == blank, != blank
+	EmptyKeyword                             // == empty, != empty
 )
 
 // Keyword is how a keyword literal reaches Dialect.Compare.
 type Keyword string
 
-// Blank is the blank keyword as Dialect.Compare sees it.
-const Blank Keyword = "blank"
+// Blank and Empty are the blank and empty keywords as Dialect.Compare sees them.
+const (
+	Blank Keyword = "blank"
+	Empty Keyword = "empty"
+)
 
 func (r *renderer) rejects(c Constructs) bool {
 	return r.dialect != nil && r.dialect.Reject&c != 0
 }
 
 // hookValue is v as dialect hooks see it: nil for nil, undefined and the nil
-// literal, int64 for integer literals, Blank for the blank keyword.
+// literal, int64 for integer literals, Blank and Empty for those keywords.
 func (v val) hookValue() any {
 	switch v.lit {
 	case litStr:
@@ -54,6 +58,8 @@ func (v val) hookValue() any {
 		return nil
 	case blankT:
 		return Blank
+	case emptyT:
+		return Empty
 	}
 	return v.x
 }
