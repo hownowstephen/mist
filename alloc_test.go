@@ -50,3 +50,14 @@ func TestDefaultDoesNotAllocate(t *testing.T) {
 		t.Fatalf("default allocated %v times per run; want 0", allocs)
 	}
 }
+
+func TestRenderWithoutLiquidDoesNotAllocate(t *testing.T) {
+	tpl := "Your order { has } been filled."
+	if allocs := testing.AllocsPerRun(100, func() {
+		if out, err := Render(tpl, nil, true); err != nil || out != tpl {
+			t.Fatalf("Render = %q, %v", out, err)
+		}
+	}); allocs != 0 {
+		t.Fatalf("Render allocated %v times per run; want 0", allocs)
+	}
+}
