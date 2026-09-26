@@ -107,7 +107,7 @@ func TestChainContentOnError(t *testing.T) {
 func TestChainBailStopsEarly(t *testing.T) {
 	steps := []Step{
 		{Body: "a", Key: []string{"x"}},
-		{Body: "{{ x | upcase }}", Key: []string{"y"}},
+		{Body: "{{ x | strip_html }}", Key: []string{"y"}},
 		{Body: "{{ y }}"},
 	}
 	res, n, vars := RenderChain(steps, map[string]any{})
@@ -167,7 +167,7 @@ func FuzzRender(f *testing.F) {
 
 // runtimeBail reports data-dependent bails, which Check can't see.
 func runtimeBail(err error) bool {
-	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of", "date "} {
+	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of", "date ", "math filter", "filter argument", "slice without", "first or last", "last of", "first of", "number from", "json of", "case mapping", "string filter", "url_encode of", "nil literal as a filter"} {
 		if strings.Contains(err.Error(), s) {
 			return true
 		}

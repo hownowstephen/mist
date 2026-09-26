@@ -75,20 +75,8 @@ func (r *renderer) filters(v val, eval bool) val {
 			if eval {
 				v = defaultFilter(v, args, allowFalse, at)
 			}
-		case name == "capitalize" && len(args) == 0:
-			if eval {
-				s, ok := v.str()
-				if !ok {
-					s = string(stringify(nil, v, at))
-				}
-				v = val{s: capitalize(s, at), lit: litStr}
-			}
-		case name == "date" && len(args) <= 2:
-			if eval {
-				v = r.dateFilter(v, args, at)
-			}
 		default:
-			bail(at, "unsupported filter %q", name)
+			v = r.builtinFilter(name, v, args, eval, at)
 		}
 	}
 }
@@ -132,7 +120,7 @@ func (v val) data() any {
 // defaultFilter mirrors liquidjs: empty strings and arrays, nil, undefined and
 // false (unless allow_false) are replaced.
 func defaultFilter(v val, args []val, allowFalse bool, at int) val {
-	var d val
+	d := val{x: undefinedT{}} // the JavaScript default parameter
 	if len(args) == 1 {
 		d = args[0]
 	}
@@ -230,7 +218,8 @@ func jsUpperDiffers(c rune) bool {
 	case c == 0xDF, c == 0x149, c == 0x19B, c == 0x1F0, c == 0x264, c == 0x390, c == 0x3B0,
 		c == 0x587, c == 0x1C8A:
 		return true
-	case c >= 0x1E96 && c <= 0x1E9A, c >= 0x1F50 && c <= 0x1FFC, c >= 0xA7CB && c <= 0xA7DC, c >= 0xFB00 && c <= 0xFB17:
+	case c >= 0x1E96 && c <= 0x1E9A, c >= 0x1F50 && c <= 0x1FFC, c >= 0xA7CB && c <= 0xA7DC, c >= 0xFB00 && c <= 0xFB17,
+		c >= 0x10D70 && c <= 0x10D85, c >= 0x16EBB && c <= 0x16ED3:
 		return true
 	}
 	return false

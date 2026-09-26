@@ -11,10 +11,10 @@ import (
 func TestBlockers(t *testing.T) {
 	for tpl, want := range map[string][]string{
 		"Hi {{ name }}{% if x %}y{% endif %}":                          nil,
-		"{{ name | upcase | default: 'x' }}":                           {"filter:upcase"},
-		"{{ a | upcase }} {{ b | upcase }}":                            {"filter:upcase"},
+		"{{ name | strip_html | default: 'x' }}":                       {"filter:strip_html"},
+		"{{ a | strip_html }} {{ b | strip_html }}":                    {"filter:strip_html"},
 		"{% case x %}{% when 1 %}one{% else %}other{% endcase %}":      {"tag:case", "tag:when"},
-		"{% if a contains 'b' %}y{% endif %}{{ c | escape }}":          {"contains", "filter:escape"},
+		"{% if a contains 'b' %}y{% endif %}{{ c | xml_escape }}":      {"contains", "filter:xml_escape"},
 		"{% for x in xs limit:2 %}{{ forloop.index }}{% endfor %}":     {"for:limit", "forloop"},
 		"{% for i in (1..3) %}{{ i }}{% endfor %}":                     {"for:range"},
 		"{% if a or b and c %}y{% endif %}":                            {"mixed and/or"},
@@ -24,9 +24,9 @@ func TestBlockers(t *testing.T) {
 		"{% if x %}":  {"structure"},
 		"{% endif %}": {"structure"},
 		"{% if x %}{% for y in ys offset:1 %}{% endfor %}{% endif %}{{ z | a }}": {"for:offset", "filter:a"},
-		`{{ x | default: "Don't stop | keep going" | truncate: 5 }}`:             {"filter:truncate"},
-		`{{ "Ends soon | C'est la fin" | upcase }}`:                              {"filter:upcase"},
-		`{{ 'He said "hi | there"' | escape }}`:                                  {"filter:escape"},
+		`{{ x | default: "Don't stop | keep going" | join: 5 }}`:                 {"filter:join"},
+		`{{ "Ends soon | C'est la fin" | strip_html }}`:                          {"filter:strip_html"},
+		`{{ 'He said "hi | there"' | xml_escape }}`:                              {"filter:xml_escape"},
 		`{% if a == "x contains y" %}{{ b | c }}{% endif %}`:                     {"filter:c"},
 	} {
 		if got := blockers(mist.Engine{}, tpl); !slices.Equal(got, want) {
@@ -44,8 +44,8 @@ func TestBlockersWithTags(t *testing.T) {
 
 func TestBlockersWithFilters(t *testing.T) {
 	e := mist.Engine{Filters: map[string]mist.FilterFunc{"titlecase": nil}}
-	if got := blockers(e, "{{ a | titlecase | capitalize | truncate: 3 }}"); !slices.Equal(got, []string{"filter:truncate"}) {
-		t.Errorf("got %q; want only filter:truncate", got)
+	if got := blockers(e, "{{ a | titlecase | capitalize | join: 3 }}"); !slices.Equal(got, []string{"filter:join"}) {
+		t.Errorf("got %q; want only filter:join", got)
 	}
 }
 
