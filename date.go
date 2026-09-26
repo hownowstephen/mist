@@ -2,11 +2,11 @@ package mist
 
 import (
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // defaultDateFormat is liquidjs's dateFormat option default.
@@ -14,12 +14,7 @@ const defaultDateFormat = "%A, %B %-e, %Y at %-l:%M %P %z"
 
 const maxMs = 8.64e15 // JavaScript's Date range
 
-var (
-	strftimeToken = regexp.MustCompile(`%([-_0^#:]+)?(\d+)?([EO])?(.)`)
-	isoDate       = regexp.MustCompile(`^(\d{4})-(\d\d)-(\d\d)(?:[T ](\d\d):(\d\d)(?::(\d\d)(?:\.(\d{1,9}))?)?(Z|[+-]\d\d:\d\d)?)?$`)
-	tzName        = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$`)
-	zones         sync.Map // name → *time.Location
-)
+var zones sync.Map // name → *time.Location
 
 var (
 	dayNames   = [...]string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
@@ -68,34 +63,81 @@ func (r *renderer) dateInput(v val, at int) (int64, bool) {
 		f, _ := strconv.ParseFloat(s, 64)
 		return clipMs(f * 1000)
 	}
-	m := isoDate.FindStringSubmatch(s)
-	if m == nil {
+	t, ok := isoMs(s)
+	if !ok {
 		// ponytail: V8's legacy parser accepts far more; widen this if real inputs need it.
-		bail(at, "date of a string that isn't ISO 8601")
-	}
-	n := func(i int) int { x, _ := strconv.Atoi(m[i]); return x }
-	y, mo, d := n(1), n(2), n(3)
-	h, mi, sec := n(4), n(5), n(6)
-	frac := (m[7] + "000")[:3]
-	fms, _ := strconv.Atoi(frac)
-	// V8 rolls over or rejects out-of-range fields; neither is worth mirroring.
-	if mo < 1 || mo > 12 || d < 1 || d > time.Date(y, time.Month(mo)+1, 0, 0, 0, 0, 0, time.UTC).Day() || h > 23 || mi > 59 || sec > 59 {
-		bail(at, "date of an out-of-range ISO 8601 string")
-	}
-	t := time.Date(y, time.Month(mo), d, h, mi, sec, fms*1e6, time.UTC).UnixMilli()
-	if off := m[8]; len(off) == 6 {
-		oh, _ := strconv.Atoi(off[1:3])
-		om, _ := strconv.Atoi(off[4:6])
-		if oh > 23 || om > 59 {
-			bail(at, "date with an out-of-range offset")
-		}
-		mins := int64(oh*60 + om)
-		if off[0] == '-' {
-			mins = -mins
-		}
-		t -= mins * 60000
+		bail(at, "date of a string outside the ISO 8601 subset")
 	}
 	return t, true
+}
+
+// isoMs parses YYYY-MM-DD[(T| )HH:MM[:SS[.fraction]][Z|±HH:MM]] with in-range fields.
+// V8 rolls over or rejects out-of-range fields; neither is worth mirroring.
+func isoMs(s string) (int64, bool) {
+	if len(s) < 10 || s[4] != '-' || s[7] != '-' {
+		return 0, false
+	}
+	y, ok1 := digits(s[:4])
+	mo, ok2 := digits(s[5:7])
+	d, ok3 := digits(s[8:10])
+	var h, mi, sec, ms, off int
+	ok4, ok5, ok6 := true, true, true
+	rest := s[10:]
+	if rest != "" {
+		if len(rest) < 6 || (rest[0] != 'T' && rest[0] != ' ') || rest[3] != ':' {
+			return 0, false
+		}
+		h, ok4 = digits(rest[1:3])
+		mi, ok5 = digits(rest[4:6])
+		rest = rest[6:]
+		if len(rest) >= 3 && rest[0] == ':' {
+			sec, ok6 = digits(rest[1:3])
+			rest = rest[3:]
+			if rest != "" && rest[0] == '.' {
+				n := 1
+				for n < len(rest) && rest[n] >= '0' && rest[n] <= '9' {
+					n++
+				}
+				if n == 1 || n > 10 {
+					return 0, false
+				}
+				ms, _ = digits((rest[1:n] + "00")[:3]) // V8 truncates to milliseconds
+				rest = rest[n:]
+			}
+		}
+		switch {
+		case rest == "" || rest == "Z":
+		case len(rest) == 6 && (rest[0] == '+' || rest[0] == '-') && rest[3] == ':':
+			oh, ok7 := digits(rest[1:3])
+			om, ok8 := digits(rest[4:6])
+			if !ok7 || !ok8 || oh > 23 || om > 59 {
+				return 0, false
+			}
+			off = oh*60 + om
+			if rest[0] == '-' {
+				off = -off
+			}
+		default:
+			return 0, false
+		}
+	}
+	if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || mo < 1 || mo > 12 || d < 1 ||
+		d > time.Date(y, time.Month(mo)+1, 0, 0, 0, 0, 0, time.UTC).Day() || h > 23 || mi > 59 || sec > 59 {
+		return 0, false
+	}
+	return time.Date(y, time.Month(mo), d, h, mi, sec, ms*1e6, time.UTC).UnixMilli() - int64(off)*60000, true
+}
+
+// digits parses a non-empty run of ASCII digits.
+func digits(s string) (int, bool) {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return 0, false
+		}
+		n = n*10 + int(s[i]-'0')
+	}
+	return n, s != ""
 }
 
 // clipMs is JavaScript's TimeClip: false for an invalid date.
@@ -116,7 +158,7 @@ type zone struct {
 
 func tzArg(v val, ms int64, at int) zone {
 	if s, ok := v.str(); ok {
-		if !tzName.MatchString(s) || s == "Local" {
+		if !ianaName(s) {
 			bail(at, "date timezone %q", s)
 		}
 		loc, ok := zones.Load(s)
@@ -140,6 +182,21 @@ func tzArg(v val, ms int64, at int) zone {
 	return zone{east: -int(f), fixed: true} // minutes west, as in getTimezoneOffset
 }
 
+// ianaName rejects what Go's LoadLocation would load but Intl rejects: Local, Factory,
+// and zoneinfo's lower-case and dotted support files.
+func ianaName(s string) bool {
+	if s == "" || s[0] < 'A' || s[0] > 'Z' || s == "Local" || s == "Factory" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || strings.IndexByte("_+-/", c) >= 0) {
+			return false
+		}
+	}
+	return true
+}
+
 // strftime appends liquidjs's strftime of the instant ms displayed in z.
 func strftime(dst []byte, ms int64, z zone, format string, at int) []byte {
 	disp := ms + int64(z.east)*60000
@@ -150,23 +207,44 @@ func strftime(dst []byte, ms int64, z zone, format string, at int) []byte {
 	if y := d.Year(); y < 1000 || y > 9999 {
 		bail(at, "date outside years 1000–9999") // liquidjs's %y and %C assume four digits
 	}
-	last := 0
-	for _, m := range strftimeToken.FindAllStringSubmatchIndex(format, -1) {
-		dst = append(dst, format[last:m[0]]...)
-		last = m[1]
-		var flags, width string
-		if m[2] >= 0 {
-			flags = format[m[2]:m[3]]
+	for i := 0; i < len(format); {
+		j := strings.IndexByte(format[i:], '%')
+		if j < 0 {
+			return append(dst, format[i:]...)
 		}
-		if m[4] >= 0 {
-			width = format[m[4]:m[5]]
+		dst = append(dst, format[i:i+j]...)
+		i += j
+		// A directive is %[-_0^#:]*[0-9]*[EO]? then any character but a newline.
+		k := i + 1
+		for k < len(format) && strings.IndexByte("-_0^#:", format[k]) >= 0 {
+			k++
 		}
-		conv := format[m[8]:m[9]]
-		ret, ok := strftimeConv(d, disp, z, conv, flags, width, at)
-		if !ok {
-			dst = append(dst, format[m[0]:m[1]]...)
+		flags := format[i+1 : k]
+		w := k
+		for k < len(format) && format[k] >= '0' && format[k] <= '9' {
+			k++
+		}
+		width := format[w:k]
+		if k < len(format) && (format[k] == 'E' || format[k] == 'O') {
+			k++
+		}
+		if k == len(format) || format[k] == '\n' {
+			// liquidjs's regex backtracks onto a flag, digit or modifier, none of which
+			// converts, so the text prints as written.
+			dst = append(dst, '%')
+			i++
 			continue
 		}
+		_, size := utf8.DecodeRuneInString(format[k:])
+		conv := format[k : k+size]
+		k += size
+		ret, ok := strftimeConv(d, disp, z, conv, flags, width, at)
+		if !ok {
+			dst = append(dst, format[i:k]...)
+			i = k
+			continue
+		}
+		i = k
 		pad := byte('0')
 		if strings.Contains("aAbBceklpP", conv) {
 			pad = ' '
@@ -202,7 +280,7 @@ func strftime(dst []byte, ms int64, z zone, format string, at int) []byte {
 		}
 		dst = append(dst, ret...)
 	}
-	return append(dst, format[last:]...)
+	return dst
 }
 
 func strWidth(w string, at int) int {

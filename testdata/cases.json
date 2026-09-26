@@ -247,5 +247,7 @@
   {"name": "date %Z without a timezone", "tpl": "{{ 0 | date: '%Z' }}", "err": "unsupported"},
   {"name": "date unknown timezone", "tpl": "{{ 0 | date: '%Y', 'Nowhere/Special' }}", "err": "unsupported"},
   {"name": "date year outside 1000-9999", "tpl": "{{ x | date: '%Y' }}", "data": {"x": 253402300800}, "err": "unsupported"},
-  {"name": "date with three arguments", "tpl": "{{ 0 | date: '%Y', 'UTC', 1 }}", "err": "unsupported"}
+  {"name": "date with three arguments", "tpl": "{{ 0 | date: '%Y', 'UTC', 1 }}", "err": "unsupported"},
+  {"name": "date truncated directives print as written", "tpl": "{{ 0 | date: '%-\n%Y|%5E|%é|%%%' }}", "out": "%-\n1970|%5E|%é|%%"},
+  {"name": "date timezone Go loads but Intl rejects", "tpl": "{{ 0 | date: '%Y', 'posixrules' }}", "err": "unsupported"}
 ]
