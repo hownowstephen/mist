@@ -99,6 +99,9 @@ func Check(tpl string) error { return Engine{}.Check(tpl) }
 
 // Render is the package-level Render with e's custom tags.
 func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, error) {
+	if start, _ := nextDelim(tpl, 0); start == len(tpl) {
+		return tpl, nil
+	}
 	out, err := e.Append(make([]byte, 0, len(tpl)+len(tpl)/2), tpl, vars, strict)
 	return string(out), err
 }
