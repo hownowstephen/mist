@@ -57,8 +57,8 @@ func (r *renderer) filters(v val, eval bool) val {
 					bail(at, "more than %d filter arguments", maxFilterArgs)
 				}
 				arg := r.expr(eval, false)
-				if arg.isBlank() {
-					bail(at, "blank is only supported with == and !=")
+				if k := arg.keyword(); k != "" {
+					bail(at, "%s is only supported with == and !=", k)
 				}
 				args = append(args, arg)
 			}

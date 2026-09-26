@@ -82,15 +82,17 @@ func TestDialectCompare(t *testing.T) {
 	}
 
 	calls = nil
-	if _, err := e.Render("{% if missing == z %}{% endif %}{% if 3 == s %}{% endif %}{% if s == blank %}{% endif %}{% if z == nil %}{% endif %}", vars, true); err != nil {
+	if _, err := e.Render("{% if missing == z %}{% endif %}{% if 3 == s %}{% endif %}{% if s == blank %}{% endif %}{% if z == nil %}{% endif %}{% if s != empty %}{% endif %}", vars, true); err != nil {
 		t.Fatal(err)
 	}
-	want := []call{{"==", nil, nil}, {"==", int64(3), ""}, {"==", "", Blank}, {"==", nil, nil}}
+	want := []call{{"==", nil, nil}, {"==", int64(3), ""}, {"==", "", Blank}, {"==", nil, nil}, {"!=", "", Empty}}
 	if !reflect.DeepEqual(calls, want) {
 		t.Errorf("hook arguments: got %#v; want %#v", calls, want)
 	}
-	if _, err := e.Render("{% if 3 < 4 %}{% endif %}", vars, false); !errors.Is(err, ErrUnsupported) {
-		t.Errorf("unsupported comparison: got %v; want ErrUnsupported", err)
+	for _, tpl := range []string{"{% if 3 < 4 %}{% endif %}", "{% if s contains 'a' %}{% endif %}"} {
+		if _, err := e.Render(tpl, vars, false); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
+		}
 	}
 }
 
@@ -101,6 +103,7 @@ func TestDialectReject(t *testing.T) {
 		UnspacedOperators: {"{% if x==2 %}{% endif %}", "{% if x== 2 %}{% endif %}", "{% if false %}{% if a<b %}{% endif %}{% endif %}"},
 		RawBlocks:         {"{% raw %}{{ x }}{% endraw %}"},
 		BlankKeyword:      {"{% if x == blank %}{% endif %}"},
+		EmptyKeyword:      {"{% if x == empty %}{% endif %}"},
 	} {
 		strict := Engine{Dialect: &Dialect{Reject: c}}
 		for _, tpl := range tpls {

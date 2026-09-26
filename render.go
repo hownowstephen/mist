@@ -16,6 +16,7 @@ const (
 	kIf frameKind = iota
 	kUnless
 	kFor
+	kCapture
 )
 
 type frame struct {
@@ -25,7 +26,7 @@ type frame struct {
 	taken      bool // a branch of this if/unless already executed
 	sawElse    bool
 	rtrim      bool // for: the for tag's -%}, reapplied on each iteration
-	body       int  // for: offset just past the for tag
+	body       int  // for: offset just past the for tag; capture: where its output starts
 	idx        int
 	name       string
 	coll       []any
@@ -206,8 +207,8 @@ func (r *renderer) output(b, e int) {
 	r.setSrc(b, e)
 	live := r.live()
 	v := r.expr(live, false)
-	if v.isBlank() {
-		bail(b, "blank is only supported with == and !=")
+	if k := v.keyword(); k != "" {
+		bail(b, "%s is only supported with == and !=", k)
 	}
 	if r.ws(); v.lit == 0 && v.x == nilLit && r.peek() != '|' {
 		bail(b, "output of the nil literal") // see write
@@ -237,7 +238,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		r.push(frame{kind: k, parentLive: live, active: c, taken: c})
 	case "elsif":
 		f := r.top()
-		if f == nil || f.kind == kFor || f.sawElse {
+		if f == nil || f.kind >= kFor || f.sawElse {
 			bail(b, "unexpected elsif")
 		}
 		eval := f.parentLive && !f.taken && !r.check
@@ -246,14 +247,17 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "else":
 		r.end()
 		f := r.top()
-		if f == nil || f.kind == kFor || f.sawElse {
+		if f == nil || f.kind >= kFor || f.sawElse {
 			bail(b, "unexpected else")
 		}
 		f.sawElse, f.active, f.taken = true, !f.taken, true
 	case "endif", "endunless":
 		r.end()
-		f := r.top()
-		if f == nil || (f.kind == kIf) != (name == "endif") || f.kind == kFor {
+		want := kIf
+		if name == "endunless" {
+			want = kUnless
+		}
+		if f := r.top(); f == nil || f.kind != want {
 			bail(b, "unexpected %s", name)
 		}
 		r.depth--
@@ -293,6 +297,27 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			return f.body, f.rtrim
 		}
 		r.depth--
+	case "capture":
+		r.ws()
+		var v string
+		if c := r.peek(); c == '"' || c == '\'' {
+			v = r.str()
+		} else if v = r.ident(); v == "" || reserved(v) {
+			bail(b, "expected: capture <ident>")
+		}
+		r.end()
+		r.push(frame{kind: kCapture, parentLive: live, active: true, body: len(r.out), name: v})
+	case "endcapture":
+		r.end()
+		f := r.top()
+		if f == nil || f.kind != kCapture {
+			bail(b, "unexpected endcapture")
+		}
+		r.depth--
+		if f.parentLive {
+			r.setAssign(f.name, string(r.out[f.body:]))
+			r.out = r.out[:f.body]
+		}
 	case "assign":
 		r.ws()
 		v := r.ident()
@@ -302,8 +327,8 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		r.p++
 		val := r.expr(live, true)
-		if val.isBlank() {
-			bail(b, "blank is only supported with == and !=")
+		if k := val.keyword(); k != "" {
+			bail(b, "%s is only supported with == and !=", k)
 		}
 		val = r.filters(val, live)
 		r.end()
@@ -311,11 +336,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			if isNil(val) {
 				bail(b, "assigning nil") // liquidjs stores distinct null-ish values per source
 			}
-			x := val.any()
-			if r.assigns == nil {
-				r.assigns = map[string]any{}
-			}
-			r.assigns[v] = x
+			r.setAssign(v, val.any())
 		}
 	case "comment":
 		r.end()
@@ -340,6 +361,13 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 	}
 	return next, rt
+}
+
+func (r *renderer) setAssign(name string, x any) {
+	if r.assigns == nil {
+		r.assigns = map[string]any{}
+	}
+	r.assigns[name] = x
 }
 
 func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {

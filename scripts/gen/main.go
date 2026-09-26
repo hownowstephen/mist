@@ -110,9 +110,12 @@ func (g *gen) cmp() string {
 	if g.r.IntN(2) == 0 {
 		return g.expr()
 	}
-	op := g.pick([]string{"==", "!=", "<", ">", "<=", ">="})
+	op := g.pick([]string{"==", "!=", "<", ">", "<=", ">=", "contains", "contains"})
 	if (op == "==" || op == "!=") && g.r.IntN(4) == 0 {
-		return g.expr() + g.ws() + op + g.ws() + "blank"
+		return g.expr() + g.ws() + op + g.ws() + g.pick([]string{"blank", "empty"})
+	}
+	if op == "contains" {
+		return g.expr() + " " + g.ws() + op + " " + g.ws() + g.expr()
 	}
 	return g.expr() + g.ws() + op + g.ws() + g.expr()
 }
@@ -152,6 +155,10 @@ func (g *gen) block(depth int) {
 			g.b.WriteString(g.open("endfor"))
 		case k == 7:
 			g.b.WriteString(g.open("assign " + g.pick(names[:6]) + g.ws() + "=" + g.ws() + g.expr() + g.filters()))
+		case k == 8 && g.r.IntN(2) == 0 && depth < 4:
+			g.b.WriteString(g.open("capture " + g.pick(names[:6])))
+			g.block(depth + 1)
+			g.b.WriteString(g.open("endcapture"))
 		case k == 8:
 			g.b.WriteString("{% comment %}" + g.pick(words) + "{{ x }}{% endcomment %}")
 		default:
