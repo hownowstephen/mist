@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.6.0
+# mist Liquid subset — v0.7.0
 
-_Last updated 2026-09-25. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-09-26. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -14,7 +14,7 @@ LL(1) EBNF. Each production is one function in `render.go`/`expr.go`. Anything t
 template = { text | output | tag } ;
 text     = ? bytes up to the next "{{" or "{%" ? ;
 output   = "{{" [ "-" ] ws expr { filter } ws [ "-" ] "}}" ;
-filter   = "|" ident [ ":" farg { "," farg } ] ;              (* at most 4 positional args; date takes at most 2 *)
+filter   = "|" ident [ ":" farg { "," farg } ] ;              (* at most 4 positional args; built-ins take the counts below *)
 farg     = expr | "allow_false" ":" ( "true" | "false" ) ;    (* named: only default's allow_false *)
 tag      = "{%" [ "-" ] ws tagbody ws [ "-" ] "%}" ;
 
@@ -64,10 +64,15 @@ Structural rules the EBNF doesn't express:
 | `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
 | `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank` or `nil` bails, because liquidjs is asymmetric there. |
-| Filters | Applied left to right in `{{ }}` and `assign`. Built in: `default`, `capitalize` and `date`. Registered filters (`Engine.Filters`) override built-ins of the same name. Any other filter name bails, even in a dead branch. Filter arguments are never lenient: under strict an undefined argument is `ErrUndefined`. |
+| Filters | Applied left to right in `{{ }}` and `assign`. Built in: `default`, `capitalize`, `date` and the string, array and math filters below. Registered filters (`Engine.Filters`) override built-ins of the same name. Any other filter name bails, even in a dead branch. Filter arguments are never lenient: under strict an undefined argument is `ErrUndefined`. |
 | Leading `default` | When `default` is the first filter, an undefined input is lenient under strict (liquidjs's `lenientIf`). Later in a chain it isn't: `{{ x \| capitalize \| default: 'd' }}` is `ErrUndefined` for an undefined `x`. |
 | `default: d` | Replaces nil, undefined, `false`, `""` and `[]` with `d` (nil with no argument). Whitespace-only strings, `0` and `{}` are kept. `allow_false: true` keeps `false`. |
 | `capitalize` | Stringifies the input (nil → `""`, booleans → `true`/`false`, numbers as JavaScript prints them, arrays joined), then upper-cases the first character and lower-cases the rest, exactly as JavaScript's `toUpperCase`/`toLowerCase` do. A first character outside the BMP is left as is (`charAt(0)` sees half a surrogate pair). |
+| String filters | All stringify their input and string arguments as `capitalize` does, and a missing string argument is `""`. `append: s` and `prepend: s` (exactly one argument). `downcase` and `upcase` use JavaScript's case mapping with the same bails as `capitalize`. `replace: a, b` replaces every `a` and `replace_first: a, b` the first, both literally (no `$` patterns); an empty `a` puts `b` between every UTF-16 unit for `replace` and before the string for `replace_first`. `remove: a` and `remove_first: a` delete them. `strip`, `lstrip` and `rstrip` trim what `String.prototype.trim` does, or, given a truthy argument, the characters of its string (`0`, `false` and `""` are falsy, so they trim whitespace). `escape` replaces `& < > " '` with `&amp; &lt; &gt; &#34; &#39;`; `escape_once` first unescapes exactly those five entities. `url_encode` is `encodeURIComponent` with spaces as `+`. |
+| `truncate: n, e` / `truncatewords: n, e` | Lengths are UTF-16 units, `n` defaults to 50 (or 15 words) and `e` to `...`; an undefined argument takes the default and a nil one stringifies to `""`. `truncate` returns its input unchanged (even a number) when it fits in `n`, else the first `n − len(e)` units plus `e`. `truncatewords` splits on runs of JavaScript whitespace (leading or trailing whitespace makes an empty first or last word), keeps `max(n, 1)` words joined by single spaces, and appends `e` whenever there are at least `n` words, even exactly `n`. |
+| `split: s` / `slice: i, n` / `first` / `last` | `split` returns an array, splitting UTF-16 units for an empty separator, and drops trailing empty strings. `slice` takes a string (in UTF-16 units) or an array: a negative `i` counts from the end, `n` defaults to 1, and nil gives `[]`. `first` is the first element or unit, or `""` for anything else; `last` is the last element or unit. Arrays can't be printed, so these results must feed a `for`, an assign or another filter. |
+| `json` | `JSON.stringify` of strings, numbers, booleans, nil and arrays of them, with no spacing. Undefined, including what `default` returns without an argument, prints nothing. |
+| `plus` `minus` `times` `divided_by` `modulo` | Exactly one argument. Both operands go through liquidjs's `toNumber` (`+x \|\| 0`): numbers as is, booleans as 1 and 0, nil and undefined as 0, and strings as JavaScript's `Number` reads them after trimming whitespace: decimals, unsigned `0x`/`0o`/`0b` integers, and 0 for anything else. `divided_by` is float division, as in liquidjs (not Liquid's integer division); `modulo` is JavaScript's `%`. |
 | `date: format, tz` | Input: nil passes through (`""`); `'now'` and `'today'` are both the current instant (`Engine.Now`, default `time.Now`); numbers and all-digit strings are epoch seconds; `""` and numbers outside JavaScript's Date range pass through unchanged; other strings must be ISO 8601 (below). A nil or missing format is `%A, %B %-e, %Y at %-l:%M %P %z`; other formats are stringified. Output is liquidjs's strftime: directives match `%[-_0^#:]*[0-9]*[EO]?.`, unknown ones print as written, and the flags pad without (`-`), with spaces (`_`) or zeros (`0`), upcase (`^`), swap case (`#`) or add a colon to `%z` (`:`). `%N` is the milliseconds right-padded with zeros, because JavaScript dates have no finer precision. |
 | `date` ISO 8601 input | `YYYY-MM-DD`, optionally followed by `T` or a space, `HH:MM`, optional `:SS` and `.fraction` (1–9 digits, truncated to milliseconds), and optional `Z` or `±HH:MM`. Without an offset the time is UTC, as it is for `new Date` under `TZ=UTC`. |
 | `date` timezone | Without one, times print in UTC and `%z` is `+0000`. A string is an IANA name or alias resolved with Go's `time.LoadLocation`; `%Z` prints it as written. A number is minutes west of UTC, as JavaScript's `getTimezoneOffset` counts them; `%Z` prints the offset. Either way `%s` shifts by the offset, as it does in liquidjs. Programs deployed without a system tz database can import `time/tzdata`. |
@@ -85,6 +90,9 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - `==` with an array or object operand; ordering across types or with non-ASCII strings.
 - `for` over anything but an array or nil.
 - `assign` of nil, null or undefined. liquidjs stores a different null-ish value depending on the source, and each one compares differently.
+- String filters splitting a character outside the BMP, as `truncate`, `slice`, `first`, `last`, `split: ''`, `replace: ''` or `strip` with such a character can; string filters on invalid UTF-8; `downcase` or `upcase` of a character whose JavaScript mapping differs; `strip` whose argument is the `nil` literal (liquidjs passes it as a truthy Drop).
+- `truncate`, `truncatewords` or `slice` with a non-numeric count; `first` or `last` of an empty array, `last` of anything but a non-empty string or array, `first` of an object; `json` of an object.
+- Math filters on arrays, objects, the `nil` literal or `Infinity`, on hex strings above 2^64, or whose result is `NaN` or infinite.
 - `date` of a bool, array or object; of a string that isn't `now`, `today`, all digits or the ISO 8601 form above (V8's fallback parser accepts far more); of an ISO string with an out-of-range field (V8 rolls `2024-02-30` over to March); or of an instant that displays outside the years 1000–9999.
 - `date` formats with `%c`, `%x` or `%X` (they print with the ICU locale), `%Z` without a timezone (it prints the process's zone name), or a width over 1024.
 - `date` timezones Go can't load, `Local`, names that aren't plain IANA paths, zones whose offset at that instant has seconds, and non-integer, boolean or other non-string timezone arguments. Go's tz database can lag or lead Node's ICU; recent rule changes may differ.
@@ -92,7 +100,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters other than `default`, `capitalize`, `date` and registered ones; `date` with more than two arguments; filters in `if`/`unless` conditions; named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
+Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); filters in `if`/`unless` conditions; named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `capture`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains`, `empty`, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
 
 ## Custom tags
 
@@ -107,7 +115,7 @@ Filters other than `default`, `capitalize`, `date` and registered ones; `date` w
 
 `Engine.Filters` registers filters. A `FilterFunc` receives a `Filter` with the input, positional arguments and the strict flag.
 - Undefined and nil both arrive as `nil`. Returned values render as built-in values do: strings, booleans, numbers and nil output, while arrays and objects bail.
-- Registered names take precedence over built-in filters, so an application can supply its own `default` or `capitalize`.
+- Registered names take precedence over built-in filters, so an application can supply its own `default`, `divided_by` and so on.
 - Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Other errors stop rendering and are returned wrapped.
 - A `nil` `FilterFunc` is accepted by `Check` and bails at render time.
 - The parity contract doesn't cover registered filters.
@@ -145,7 +153,7 @@ Filters other than `default`, `capitalize`, `date` and registered ones; `date` w
 | `testdata/cases.json` | Hand-written cases, one or more per rule above. `node scripts/parity.mjs` checks each expected output against liquidjs. A case's `now` fixes `Date.now` for `'now'` and `'today'`. |
 | `testdata/corpus.json` | Every template with plain-JSON data from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) (including production recordings and the Dawn theme) and Shopify/liquid's integration tests, plus 5,000 grammar-generated templates, each with liquidjs's lax and strict result, rendered with `TZ=UTC` and a fixed `Date.now` that `TestCorpus` shares. `TestCorpus` requires exact agreement wherever mist doesn't bail. |
 | `scripts/gen` | Random templates from the grammar above with random data. Run large batches on demand (below). |
-| `testdata/jscase.json` | JavaScript's `toUpperCase`/`toLowerCase` for every code point (`node scripts/jscase.mjs`). `TestCaseMapping` requires `capitalize` to match or bail for each one. |
+| `testdata/jscase.json` | JavaScript's `toUpperCase`/`toLowerCase` for every code point (`node scripts/jscase.mjs`). `TestCaseMapping` requires `capitalize`, `downcase` and `upcase` to match or bail for each one. |
 | `FuzzRender` | No panics. `Check` rejects ⇒ `Render` fails, and `Check` accepts ⇒ `Render` never bails on syntax. |
 
 Regenerate the corpus (needs Ruby, Node, and clones of both Shopify repos):

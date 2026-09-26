@@ -68,7 +68,14 @@ func (g *gen) expr() string {
 func (g *gen) filters() string {
 	var f string
 	for range g.r.IntN(3) {
-		switch g.r.IntN(6) {
+		switch g.r.IntN(9) {
+		case 6, 7:
+			f += " | " + g.pick([]string{"downcase", "upcase", "strip", "lstrip", "rstrip", "escape", "escape_once", "url_encode", "json", "first", "last"})
+		case 8:
+			f += " | " + g.pick([]string{"append", "prepend", "replace", "replace_first", "remove", "remove_first", "strip", "truncate", "truncatewords", "split", "slice", "plus", "minus", "times", "divided_by", "modulo"}) + ": " + g.expr()
+			if g.r.IntN(3) == 0 {
+				f += ", " + g.expr()
+			}
 		case 0:
 			f += " | default"
 		case 5:
@@ -165,7 +172,8 @@ func (g *gen) value(depth int) any {
 		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000, 1700000000, 1710460800.5, -86400})
 	case 4:
 		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085", "hELLO wORLD", "élodie", "иВАН", "ßtraße", "ΣΟΦΙΑΣ",
-			"now", "1700000000", "2024-02-29", "2024-03-10T07:30:00Z", "2024-11-03 01:30:00", "2024-03-15T10:20:30.5+05:45", "2024-02-30", "Mar 5 2024", "%d/%m", "Europe/Paris"})
+			"now", "1700000000", "2024-02-29", "2024-03-10T07:30:00Z", "2024-11-03 01:30:00", "2024-03-15T10:20:30.5+05:45", "2024-02-30", "Mar 5 2024", "%d/%m", "Europe/Paris",
+			"a,b,,c", "one two  three", "a&amp;b<c>", "😀 hi", " 12 ", "0x1f", "Hello World, and more words than fit"})
 	case 5, 6:
 		if depth < 3 {
 			m := map[string]any{}

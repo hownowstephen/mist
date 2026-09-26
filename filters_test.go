@@ -32,7 +32,7 @@ func TestCaseMapping(t *testing.T) {
 		if c >= 0xD800 && c <= 0xDFFF {
 			continue
 		}
-		if c <= 0xFFFF && !jsUpperDiffers(c) && string(unicode.ToUpper(c)) != want(js.Upper, c) {
+		if !jsUpperDiffers(c) && string(unicode.ToUpper(c)) != want(js.Upper, c) {
 			bad = append(bad, "upper "+strconv.QuoteRune(c))
 		}
 		if !jsLowerDiffers(c) && string(unicode.ToLower(c)) != want(js.Lower, c) {
@@ -97,5 +97,14 @@ func TestRegisteredFilters(t *testing.T) {
 	}
 	if err := Check("{{ name | shout }}"); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("package Check: got %v; want ErrUnsupported", err)
+	}
+}
+
+func TestStringFiltersBailOnInvalidUTF8(t *testing.T) {
+	vars := map[string]any{"s": "a\xffb"}
+	for _, tpl := range []string{"{{ s | truncate: 1 }}", "{{ s | split: '' }}", "{{ 'x' | strip: s }}", "{{ s | url_encode }}"} {
+		if _, err := Render(tpl, vars, false); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
+		}
 	}
 }
