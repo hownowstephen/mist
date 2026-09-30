@@ -1,6 +1,7 @@
 package mist
 
 import (
+	"bytes"
 	"math"
 	"strconv"
 	"strings"
@@ -32,13 +33,14 @@ func (r *renderer) dateFilter(v val, args []val, at int) val {
 	}
 	format := defaultDateFormat
 	if len(args) > 0 && !isNil(args[0]) {
-		format = string(stringify(nil, args[0], at))
+		format = toStr(args[0], at)
 	}
 	z := zone{}
 	if len(args) > 1 && !isNil(args[1]) {
 		z = tzArg(args[1], ms, at)
 	}
-	return val{s: string(strftime(nil, ms, z, format, at)), lit: litStr}
+	var buf [64]byte
+	return val{s: string(strftime(buf[:0], ms, z, format, at)), lit: litStr}
 }
 
 // dateInput returns v as epoch milliseconds, or false where liquidjs's parseDate fails.
@@ -237,7 +239,8 @@ func strftime(dst []byte, ms int64, z zone, format string, at int) []byte {
 		_, size := utf8.DecodeRuneInString(format[k:])
 		conv := format[k : k+size]
 		k += size
-		ret, ok := strftimeConv(d, disp, z, conv, flags, width, at)
+		var scratch [32]byte
+		ret, ok := strftimeConv(scratch[:0], d, disp, z, conv, flags, width, at)
 		if !ok {
 			dst = append(dst, format[i:k]...)
 			i = k
@@ -258,12 +261,12 @@ func strftime(dst []byte, ms int64, z zone, format string, at int) []byte {
 			padWidth = 3
 		}
 		if strings.Contains(flags, "^") {
-			ret = strings.ToUpper(ret)
+			ret = bytes.ToUpper(ret)
 		} else if strings.Contains(flags, "#") {
-			if strings.ContainsFunc(ret, func(c rune) bool { return c >= 'a' && c <= 'z' }) {
-				ret = strings.ToUpper(ret)
+			if bytes.ContainsFunc(ret, func(c rune) bool { return c >= 'a' && c <= 'z' }) {
+				ret = bytes.ToUpper(ret)
 			} else {
-				ret = strings.ToLower(ret)
+				ret = bytes.ToLower(ret)
 			}
 		}
 		if strings.Contains(flags, "_") {
@@ -290,22 +293,22 @@ func strWidth(w string, at int) int {
 	return n
 }
 
-// strftimeConv is one of liquidjs's formatCodes; false means print the directive as is.
-func strftimeConv(d time.Time, disp int64, z zone, conv, flags, width string, at int) (string, bool) {
-	itoa := strconv.Itoa
+// strftimeConv appends one of liquidjs's formatCodes to b; false means print the directive as is.
+func strftimeConv(b []byte, d time.Time, disp int64, z zone, conv, flags, width string, at int) ([]byte, bool) {
+	itoa := func(n int) []byte { return strconv.AppendInt(b, int64(n), 10) }
 	h12 := d.Hour() % 12
 	if h12 == 0 {
 		h12 = 12
 	}
 	switch conv {
 	case "a":
-		return dayNames[d.Weekday()][:3], true
+		return append(b, dayNames[d.Weekday()][:3]...), true
 	case "A":
-		return dayNames[d.Weekday()], true
+		return append(b, dayNames[d.Weekday()]...), true
 	case "b", "h":
-		return monthNames[d.Month()-1][:3], true
+		return append(b, monthNames[d.Month()-1][:3]...), true
 	case "B":
-		return monthNames[d.Month()-1], true
+		return append(b, monthNames[d.Month()-1]...), true
 	case "c", "x", "X":
 		bail(at, "date %%%s, which prints with the ICU locale", conv)
 	case "C":
@@ -331,38 +334,41 @@ func strftimeConv(d time.Time, disp int64, z zone, conv, flags, width string, at
 		}
 		s := itoa(d.Nanosecond() / 1e6)
 		if len(s) > w {
-			s = s[:w]
+			return s[:w], true
 		}
-		return s + strings.Repeat("0", w-len(s)), true
+		for range w - len(s) {
+			s = append(s, '0')
+		}
+		return s, true
 	case "p":
 		if d.Hour() < 12 {
-			return "AM", true
+			return append(b, "AM"...), true
 		}
-		return "PM", true
+		return append(b, "PM"...), true
 	case "P":
 		if d.Hour() < 12 {
-			return "am", true
+			return append(b, "am"...), true
 		}
-		return "pm", true
+		return append(b, "pm"...), true
 	case "q":
 		switch day := d.Day(); {
 		case day >= 11 && day <= 13:
-			return "th", true
+			return append(b, "th"...), true
 		case day%10 == 1:
-			return "st", true
+			return append(b, "st"...), true
 		case day%10 == 2:
-			return "nd", true
+			return append(b, "nd"...), true
 		case day%10 == 3:
-			return "rd", true
+			return append(b, "rd"...), true
 		}
-		return "th", true
+		return append(b, "th"...), true
 	case "s":
-		return strconv.FormatInt(int64(math.Floor(float64(disp+500)/1000)), 10), true // Math.round(ms / 1000)
+		return strconv.AppendInt(b, int64(math.Floor(float64(disp+500)/1000)), 10), true // Math.round(ms / 1000)
 	case "S":
 		return itoa(d.Second()), true
 	case "u":
 		if d.Weekday() == 0 {
-			return "7", true
+			return append(b, "7"...), true
 		}
 		return itoa(int(d.Weekday())), true
 	case "U":
@@ -376,42 +382,42 @@ func strftimeConv(d time.Time, disp int64, z zone, conv, flags, width string, at
 	case "Y":
 		return itoa(d.Year()), true
 	case "z":
-		return tzOffset(z.east, strings.Contains(flags, ":")), true
+		return tzOffset(b, z.east, strings.Contains(flags, ":")), true
 	case "Z":
 		if !z.fixed {
 			bail(at, "date %%Z without a timezone, which prints the process's zone name")
 		}
 		if z.name != "" {
-			return z.name, true
+			return append(b, z.name...), true
 		}
-		return tzOffset(z.east, strings.Contains(flags, ":")), true
+		return tzOffset(b, z.east, strings.Contains(flags, ":")), true
 	case "t":
-		return "\t", true
+		return append(b, "\t"...), true
 	case "n":
-		return "\n", true
+		return append(b, "\n"...), true
 	case "%":
-		return "%", true
+		return append(b, "%"...), true
 	}
-	return "", false
+	return nil, false
 }
 
-func tzOffset(east int, colon bool) string {
-	sign := "+"
+func tzOffset(b []byte, east int, colon bool) []byte {
+	sign := byte('+')
 	if east < 0 {
-		sign, east = "-", -east
+		sign, east = '-', -east
 	}
-	sep := ""
+	b = pad2(append(b, sign), east/60)
 	if colon {
-		sep = ":"
+		b = append(b, ':')
 	}
-	return sign + pad2(east/60) + sep + pad2(east%60)
+	return pad2(b, east%60)
 }
 
-func pad2(n int) string {
+func pad2(b []byte, n int) []byte {
 	if n < 10 {
-		return "0" + strconv.Itoa(n)
+		b = append(b, '0')
 	}
-	return strconv.Itoa(n)
+	return strconv.AppendInt(b, int64(n), 10)
 }
 
 // weekOfYear is liquidjs's getWeekOfYear: weeks starting on startDay (0 Sunday, 1 Monday).
