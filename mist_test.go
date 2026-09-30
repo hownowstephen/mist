@@ -265,3 +265,27 @@ func BenchmarkFilters(b *testing.B) {
 		}
 	}
 }
+
+// heavyTpl exercises the allocating filters: date with a zone, capture, truncate, escape, url_encode, json.
+
+const heavyTpl = `{% capture greeting %}Hi {{ customer.first_name | strip | capitalize }}{% endcapture %}{{ greeting }}
+Today is {{ 'now' | date: '%A, %B %-d, %Y at %l:%M %p %:z', 'Europe/Paris' }} ({{ 'now' | date: '%s' | plus: 86400 | date: '%Y-%m-%d' }}).
+{% if customer.tags contains 'vip' %}VIP{% endif %}{% if customer.notes == empty %}none{% endif %}
+{{ customer.bio | truncate: 20 }} {{ customer.score | times: 2 | plus: 2 }}
+<a href="https://example.com/?q={{ customer.name | url_encode }}">{{ customer.name | escape }}</a>
+<script>var c = {{ customer.tags | json }};</script>`
+
+func BenchmarkHeavy(b *testing.B) {
+	vars := map[string]any{"customer": map[string]any{
+		"first_name": "  ada ", "tags": []any{"a", "vip"}, "notes": "",
+		"bio": "A long biography that goes on for a while", "score": 3.0, "name": "Ada & <Co>",
+	}}
+	buf := make([]byte, 0, 2048)
+	b.ReportAllocs()
+	for b.Loop() {
+		var err error
+		if buf, err = Append(buf[:0], heavyTpl, vars, true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

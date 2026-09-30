@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -154,20 +153,33 @@ func units(s string, at int) []rune {
 	return rs
 }
 
-// utf16s is s as JavaScript's UTF-16 code units.
-func utf16s(s string, at int) []uint16 {
+// sub16 is s.slice(i, j) in UTF-16 code units, bailing where that would split a surrogate pair.
+func sub16(s string, i, j, at int) string {
 	if !utf8.ValidString(s) {
 		bail(at, "string filter on invalid UTF-8")
 	}
-	return utf16.Encode([]rune(s))
+	if i >= j {
+		return ""
+	}
+	return s[off16(s, i, at):off16(s, j, at)]
 }
 
-// sub16 is u.slice(i, j) as a string, bailing where that would split a surrogate pair.
-func sub16(u []uint16, i, j, at int) string {
-	if i < j && (u[i] >= 0xDC00 && u[i] <= 0xDFFF || u[j-1] >= 0xD800 && u[j-1] <= 0xDBFF) {
-		bail(at, "string filter splitting a character outside the BMP")
+// off16 is the byte offset of UTF-16 index i in s.
+func off16(s string, i, at int) int {
+	n := 0
+	for b, c := range s {
+		if n == i {
+			return b
+		}
+		n++
+		if c > 0xFFFF {
+			if n == i {
+				bail(at, "string filter splitting a character outside the BMP")
+			}
+			n++
+		}
 	}
-	return string(utf16.Decode(u[i:j]))
+	return len(s)
 }
 
 // len16 is JavaScript's string length.
@@ -258,8 +270,7 @@ func truncate(v val, a []val, at int) val {
 	if float64(len16(s)) <= l {
 		return v
 	}
-	u := utf16s(s, at)
-	return strVal(sub16(u, 0, jsIndex(l-float64(len16(o)), len(u)), at) + o)
+	return strVal(sub16(s, 0, jsIndex(l-float64(len16(o)), len16(s)), at) + o)
 }
 
 // argOrDefault stringifies v, or returns d where JavaScript's default parameter applies.
@@ -316,6 +327,7 @@ func urlEncode(s string, at int) string {
 	}
 	const hex = "0123456789ABCDEF"
 	var b strings.Builder
+	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {
 		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', strings.IndexByte("-_.!~*'()", c) >= 0:
@@ -422,11 +434,11 @@ func slice(v val, a []val, at int) val {
 		return val{x: []any{}}
 	}
 	arr, isArr := v.check(at).x.([]any)
-	var u []uint16
+	var str string
 	n := len(arr)
 	if !isArr {
-		u = utf16s(toStr(v, at), at)
-		n = len(u)
+		str = toStr(v, at)
+		n = len16(str)
 	}
 	if begin < 0 {
 		begin += float64(n)
@@ -438,7 +450,7 @@ func slice(v val, a []val, at int) val {
 	if isArr {
 		return val{x: arr[i:j]}
 	}
-	return strVal(sub16(u, i, j, at))
+	return strVal(sub16(str, i, j, at))
 }
 
 // jsRel resolves a relative index the way Array.prototype.slice does.
@@ -462,11 +474,11 @@ func endOf(v val, first bool, at int) val {
 		return val{x: arr[len(arr)-1]}
 	}
 	if s, ok := v.str(); ok && s != "" {
-		u := utf16s(s, at)
 		if first {
-			return strVal(sub16(u, 0, 1, at))
+			return strVal(sub16(s, 0, 1, at))
 		}
-		return strVal(sub16(u, len(u)-1, len(u), at))
+		n := len16(s)
+		return strVal(sub16(s, n-1, n, at))
 	}
 	if first {
 		if isObj(v) {
