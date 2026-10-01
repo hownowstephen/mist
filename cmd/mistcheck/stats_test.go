@@ -13,7 +13,7 @@ func TestBlockers(t *testing.T) {
 		"Hi {{ name }}{% if x %}y{% endif %}":                      nil,
 		"{{ name | md5 | default: 'x' }}":                          {"filter:md5"},
 		"{{ a | md5 }} {{ b | md5 }}":                              {"filter:md5"},
-		"{% case x %}{% when 1 %}one{% else %}other{% endcase %}":  {"tag:case", "tag:when"},
+		"{% tablerow i in xs %}{% cycle 1, 2 %}{% endtablerow %}":  {"tag:tablerow", "tag:cycle"},
 		"{% if a %}{% cycle 'b' %}{% endif %}{{ c | xml_escape }}": {"tag:cycle", "filter:xml_escape"},
 		"{% for x in xs limit:2 %}{{ forloop.index }}{% endfor %}": {"for:limit", "forloop"},
 		"{% for i in (1..3) %}{{ i }}{% endfor %}":                 {"for:range"},
@@ -55,6 +55,7 @@ func TestReport(t *testing.T) {
 		"5 templates, 1 in spec (20.0%)",
 		"tag:case                                  3            2",
 		"filter:default                            2            1",
+		"filter:default + tag:case",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report missing %q:\n%s", want, out)
@@ -62,5 +63,13 @@ func TestReport(t *testing.T) {
 	}
 	if strings.Index(out, "tag:case") > strings.Index(out, "filter:default") {
 		t.Errorf("want rows sorted by templates it alone blocks:\n%s", out)
+	}
+}
+
+func TestReportCountsBlockersThatOnlyAppearTogether(t *testing.T) {
+	out := report([][]string{{"tag:x", "tag:y"}, {"tag:y", "tag:x"}, {"tag:x", "tag:y", "filter:z"}})
+	want := "tag:x + tag:y                                                       2"
+	if !strings.Contains(out, want) {
+		t.Errorf("report missing %q:\n%s", want, out)
 	}
 }

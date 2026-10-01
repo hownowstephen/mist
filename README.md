@@ -55,7 +55,7 @@ e.Filters = map[string]mist.FilterFunc{
 
 ## What's supported
 
-Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `for … in`, `assign`, `comment`, `raw`, `capture`, comparisons including `contains` and `== blank`/`== empty`, `and`/`or`, whitespace control, and the `default`, `capitalize`, `date`, `downcase`, `upcase`, `append`, `prepend`, `replace`, `replace_first`, `remove`, `remove_first`, `strip`, `lstrip`, `rstrip`, `truncate`, `truncatewords`, `escape`, `escape_once`, `url_encode`, `strip_newlines`, `newline_to_br`, `strip_html`, `json`, `split`, `slice`, `first`, `last`, `join`, `size`, `where`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `abs`, `ceil`, `floor`, `round` and `at_least` filters. [SPEC.md](SPEC.md) is the normative grammar and semantics.
+Variables and paths (`{{ a.b[0]['k'] }}`), string/integer/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `case`/`when`, `for … in`, `assign`, `comment`, `raw`, `capture`, comparisons including `contains` and `== blank`/`== empty`, `and`/`or`, whitespace control, and the `default`, `capitalize`, `date`, `downcase`, `upcase`, `append`, `prepend`, `replace`, `replace_first`, `remove`, `remove_first`, `strip`, `lstrip`, `rstrip`, `truncate`, `truncatewords`, `escape`, `escape_once`, `url_encode`, `strip_newlines`, `newline_to_br`, `strip_html`, `json`, `split`, `slice`, `first`, `last`, `join`, `size`, `where`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `abs`, `ceil`, `floor`, `round` and `at_least` filters. [SPEC.md](SPEC.md) is the normative grammar and semantics.
 
 Check whether templates are in the subset:
 
@@ -63,7 +63,7 @@ Check whether templates are in the subset:
 go run github.com/hownowstephen/mist/cmd/mistcheck@latest template.liquid
 ```
 
-`-tags a,b` and `-filters a,b` treat those names as registered custom tags and filters. `-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
+`-tags a,b` and `-filters a,b` treat those names as registered custom tags and filters. `-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks, and which sets of blockers most often appear together. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
 
 ```bash
 mistcheck -stats templates.jsonl
