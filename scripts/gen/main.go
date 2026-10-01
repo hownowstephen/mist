@@ -68,11 +68,19 @@ func (g *gen) expr() string {
 func (g *gen) filters() string {
 	var f string
 	for range g.r.IntN(3) {
-		switch g.r.IntN(9) {
+		switch g.r.IntN(10) {
+		case 9:
+			// strip_html only on generated data: liquidjs hangs on an unclosed '<' after text.
+			if f == "" {
+				f = " | strip_html"
+				continue
+			}
+			f += " | " + g.pick([]string{"where: '" + g.pick(props) + "'", "where: '" + g.pick(props) + "', " + g.expr(), "join", "join: " + g.expr()})
 		case 6, 7:
-			f += " | " + g.pick([]string{"downcase", "upcase", "strip", "lstrip", "rstrip", "escape", "escape_once", "url_encode", "json", "first", "last"})
+			f += " | " + g.pick([]string{"downcase", "upcase", "strip", "lstrip", "rstrip", "escape", "escape_once", "url_encode", "json", "first", "last",
+				"strip_newlines", "newline_to_br", "size", "abs", "ceil", "floor", "round"})
 		case 8:
-			f += " | " + g.pick([]string{"append", "prepend", "replace", "replace_first", "remove", "remove_first", "strip", "truncate", "truncatewords", "split", "slice", "plus", "minus", "times", "divided_by", "modulo"}) + ": " + g.expr()
+			f += " | " + g.pick([]string{"append", "prepend", "replace", "replace_first", "remove", "remove_first", "strip", "truncate", "truncatewords", "split", "slice", "plus", "minus", "times", "divided_by", "modulo", "at_least", "round"}) + ": " + g.expr()
 			if g.r.IntN(3) == 0 {
 				f += ", " + g.expr()
 			}
@@ -180,7 +188,8 @@ func (g *gen) value(depth int) any {
 	case 4:
 		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085", "hELLO wORLD", "élodie", "иВАН", "ßtraße", "ΣΟΦΙΑΣ",
 			"now", "1700000000", "2024-02-29", "2024-03-10T07:30:00Z", "2024-11-03 01:30:00", "2024-03-15T10:20:30.5+05:45", "2024-02-30", "Mar 5 2024", "%d/%m", "Europe/Paris",
-			"a,b,,c", "one two  three", "a&amp;b<c>", "😀 hi", " 12 ", "0x1f", "Hello World, and more words than fit"})
+			"a,b,,c", "one two  three", "a&amp;b<c>", "😀 hi", " 12 ", "0x1f", "Hello World, and more words than fit",
+			"a\r\nb\rc\n", "<b>hi</b> <script>s</script>t<!-- c -->", "<style>x</style><p>p"})
 	case 5, 6:
 		if depth < 3 {
 			m := map[string]any{}
