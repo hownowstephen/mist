@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.9.0
+# mist Liquid subset — v0.10.0
 
-_Last updated 2026-10-01. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-02. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -21,6 +21,7 @@ tag      = "{%" [ "-" ] ws tagbody ws [ "-" ] "%}" ;
 tagbody  = "if" cond | "elsif" cond | "else" | "endif"
          | "unless" cond | "endunless"
          | "for" ident "in" path | "endfor"
+         | "case" expr { filter } | "when" expr { ( "," | "or" ) expr } | "endcase"
          | "assign" ident "=" expr { filter }
          | "capture" ( ident | string ) | "endcapture"
          | "comment" | "endcomment"
@@ -40,7 +41,7 @@ ws       = { " " | "\t" | "\n" | "\v" | "\f" | "\r" } ;
 ```
 
 Structural rules the EBNF doesn't express:
-- Blocks must nest and close: `if…endif` and `unless…endunless`, each with optional `elsif`s and at most one final `else`, `for…endfor` with no `else`, and `capture…endcapture`. The maximum nesting depth is 16.
+- Blocks must nest and close: `if…endif` and `unless…endunless`, each with optional `elsif`s and at most one final `else`, `case…endcase` with any number of `when`s and at most one final `else`, `for…endfor` with no `else`, and `capture…endcapture`. The maximum nesting depth is 16.
 - `comment … endcomment`: the body is tokenized but ignored. A nested `comment` or `raw`, or a tag with no name, bails.
 - `contains`, `and`, `or` and `not` can't be variable names at the root of a path; liquidjs parses them as operators. They are fine as properties (`a.and`). Literal keywords can't start a path either (`for x in nil` bails).
 - `raw … endraw`: the body is emitted verbatim. Trim markers on either tag bail.
@@ -63,6 +64,7 @@ Structural rules the EBNF doesn't express:
 | Output: number | As JavaScript's `String(n)`: shortest round-trip digits, fixed notation for 1e-7 ≤ \|n\| < 1e21, otherwise exponent notation (`1e+21`, `2.5e-8`). |
 | `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
 | `capture` | Renders its body instead of printing it, and assigns the result as a string, exactly as `assign` would (so it replaces data and earlier assigns of the same name). A quoted name is stored as written. In a dead branch nothing is rendered or assigned. |
+| `case` / `when` | The `case` value (with any filters) and each `when` value are evaluated as conditions are: undefined variables are lenient under strict. Every `when` with a value `==` to the `case` value renders, in order, not just the first; a `when` stops evaluating its values at the first match. `else` renders only when no `when` matched. The body between `case` and the first `when` is parsed but never rendered. A `nil` case value is null, so it doesn't match an undefined `when` value. |
 | `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
 | `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank`, `empty` or `nil` bails, because liquidjs is asymmetric there. |
@@ -109,7 +111,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); filters in `if`/`unless` conditions; named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `case`, `cycle`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
+Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); filters in `if`/`unless` conditions; named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `cycle`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
 
 ## Custom tags
 
@@ -142,7 +144,7 @@ Filters other than the built-ins above and registered ones; built-ins with more 
 
 - **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integer literals, `nil` for nil, undefined and the `nil` literal, and `mist.Blank` and `mist.Empty` for those keywords.
 - **Errors:** a hook returning an error that wraps `ErrUnsupported` bails; other errors stop rendering and are returned wrapped.
-- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` or `empty` against a keyword or `nil`, assigning nil, and everything out of spec) still apply. `contains` bails when `Compare` is set, since the hook doesn't cover it.
+- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` or `empty` against a keyword or `nil`, assigning nil, and everything out of spec) still apply. `contains` and `case` bail when `Compare` is set, since the hook doesn't cover them.
 
 ## Chains
 

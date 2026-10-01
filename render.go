@@ -17,19 +17,21 @@ const (
 	kUnless
 	kFor
 	kCapture
+	kCase
 )
 
 type frame struct {
 	kind       frameKind
 	parentLive bool
 	active     bool // current branch (or loop body) executes
-	taken      bool // a branch of this if/unless already executed
+	taken      bool // a branch of this if/unless already executed, or a when of this case matched
 	sawElse    bool
 	rtrim      bool // for: the for tag's -%}, reapplied on each iteration
 	body       int  // for: offset just past the for tag; capture: where its output starts
 	idx        int
 	name       string
 	coll       []any
+	subject    val // case: the value each when compares against
 }
 
 type renderer struct {
@@ -247,10 +249,55 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "else":
 		r.end()
 		f := r.top()
-		if f == nil || f.kind >= kFor || f.sawElse {
+		if f == nil || f.kind == kFor || f.kind == kCapture || f.sawElse {
 			bail(b, "unexpected else")
 		}
 		f.sawElse, f.active, f.taken = true, !f.taken, true
+	case "case":
+		if r.dialect != nil && r.dialect.Compare != nil {
+			bail(b, "case with a dialect Compare hook")
+		}
+		v := r.expr(live, true) // lenientIf, as for conditions
+		if k := v.keyword(); k != "" {
+			bail(b, "%s is only supported with == and !=", k)
+		}
+		v = r.filters(v, live)
+		r.end()
+		if v.lit == 0 && v.x == nilLit {
+			v = val{} // liquidjs unwraps the nil Drop to null, which no longer matches undefined
+		}
+		// Until the first when, the body is parsed but never rendered.
+		r.push(frame{kind: kCase, parentLive: live, subject: v})
+	case "when":
+		f := r.top()
+		if f == nil || f.kind != kCase || f.sawElse {
+			bail(b, "unexpected when") // liquidjs ignores a when after else
+		}
+		// Every matching when renders, but each stops evaluating at its first matching value.
+		eval, match := f.parentLive && !r.check, false
+		for {
+			at := r.pos()
+			v := r.expr(eval && !match, true)
+			match = match || eval && eq(f.subject, v, at)
+			r.ws()
+			if r.p == len(r.src) {
+				break
+			}
+			if r.peek() == ',' {
+				r.p++
+			} else if w := r.ident(); w != "or" {
+				bail(r.pos(), "expected , or or between when values") // liquidjs skips to the next "or"
+			}
+		}
+		r.end()
+		f.active = match
+		f.taken = f.taken || match
+	case "endcase":
+		r.end()
+		if f := r.top(); f == nil || f.kind != kCase {
+			bail(b, "unexpected endcase")
+		}
+		r.depth--
 	case "endif", "endunless":
 		r.end()
 		want := kIf

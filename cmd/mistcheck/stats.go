@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -218,6 +219,23 @@ func report(templates [][]string) string {
 	out = fmt.Appendf(out, "\n%-32s %10s %12s\n", "blocker", "templates", "only blocker")
 	for _, k := range keys {
 		out = fmt.Appendf(out, "%-32s %10d %12d\n", k, counts[k].in, counts[k].sole)
+	}
+
+	// Blockers that always appear together never count as an only blocker, so list
+	// the most common exact sets: fixing every blocker in a set unlocks its templates.
+	sets := map[string]int{}
+	for _, ks := range templates {
+		if len(ks) > 1 {
+			sets[strings.Join(slices.Sorted(slices.Values(ks)), " + ")]++
+		}
+	}
+	setKeys := slices.Collect(maps.Keys(sets))
+	slices.SortFunc(setKeys, func(a, b string) int { return cmp.Or(cmp.Compare(sets[b], sets[a]), cmp.Compare(a, b)) })
+	if len(setKeys) > 0 {
+		out = fmt.Appendf(out, "\n%-58s %10s\n", "blocker set", "templates")
+		for _, k := range setKeys[:min(len(setKeys), 20)] {
+			out = fmt.Appendf(out, "%-58s %10d\n", k, sets[k])
+		}
 	}
 	return string(out)
 }

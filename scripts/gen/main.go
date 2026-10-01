@@ -161,6 +161,24 @@ func (g *gen) block(depth int) {
 			g.block(depth + 1)
 			g.loops = g.loops[:len(g.loops)-1]
 			g.b.WriteString(g.open("endfor"))
+		case k == 7 && g.r.IntN(3) == 0 && depth < 4:
+			g.b.WriteString(g.open("case " + g.expr() + g.filters()))
+			if g.r.IntN(4) == 0 {
+				g.block(depth + 1) // never rendered
+			}
+			for range g.r.IntN(4) {
+				vals := g.expr()
+				for range g.r.IntN(3) {
+					vals += g.pick([]string{", ", " or ", ","}) + g.expr()
+				}
+				g.b.WriteString(g.open("when " + vals))
+				g.block(depth + 1)
+			}
+			if g.r.IntN(2) == 0 {
+				g.b.WriteString(g.open("else"))
+				g.block(depth + 1)
+			}
+			g.b.WriteString(g.open("endcase"))
 		case k == 7:
 			g.b.WriteString(g.open("assign " + g.pick(names[:6]) + g.ws() + "=" + g.ws() + g.expr() + g.filters()))
 		case k == 8 && g.r.IntN(2) == 0 && depth < 4:
