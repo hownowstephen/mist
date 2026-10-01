@@ -11,8 +11,8 @@ import (
 func TestBlockers(t *testing.T) {
 	for tpl, want := range map[string][]string{
 		"Hi {{ name }}{% if x %}y{% endif %}":                      nil,
-		"{{ name | strip_html | default: 'x' }}":                   {"filter:strip_html"},
-		"{{ a | strip_html }} {{ b | strip_html }}":                {"filter:strip_html"},
+		"{{ name | md5 | default: 'x' }}":                          {"filter:md5"},
+		"{{ a | md5 }} {{ b | md5 }}":                              {"filter:md5"},
 		"{% case x %}{% when 1 %}one{% else %}other{% endcase %}":  {"tag:case", "tag:when"},
 		"{% if a %}{% cycle 'b' %}{% endif %}{{ c | xml_escape }}": {"tag:cycle", "filter:xml_escape"},
 		"{% for x in xs limit:2 %}{{ forloop.index }}{% endfor %}": {"for:limit", "forloop"},
@@ -24,8 +24,8 @@ func TestBlockers(t *testing.T) {
 		"{% if x %}":  {"structure"},
 		"{% endif %}": {"structure"},
 		"{% if x %}{% for y in ys offset:1 %}{% endfor %}{% endif %}{{ z | a }}": {"for:offset", "filter:a"},
-		`{{ x | default: "Don't stop | keep going" | join: 5 }}`:                 {"filter:join"},
-		`{{ "Ends soon | C'est la fin" | strip_html }}`:                          {"filter:strip_html"},
+		`{{ x | default: "Don't stop | keep going" | sha1: 5 }}`:                 {"filter:sha1"},
+		`{{ "Ends soon | C'est la fin" | md5 }}`:                                 {"filter:md5"},
 		`{{ 'He said "hi | there"' | xml_escape }}`:                              {"filter:xml_escape"},
 		`{% if a == "x contains y" %}{{ b | c }}{% endif %}`:                     {"filter:c"},
 	} {
@@ -44,8 +44,8 @@ func TestBlockersWithTags(t *testing.T) {
 
 func TestBlockersWithFilters(t *testing.T) {
 	e := mist.Engine{Filters: map[string]mist.FilterFunc{"titlecase": nil}}
-	if got := blockers(e, "{{ a | titlecase | capitalize | join: 3 }}"); !slices.Equal(got, []string{"filter:join"}) {
-		t.Errorf("got %q; want only filter:join", got)
+	if got := blockers(e, "{{ a | titlecase | capitalize | sha1: 3 }}"); !slices.Equal(got, []string{"filter:sha1"}) {
+		t.Errorf("got %q; want only filter:sha1", got)
 	}
 }
 

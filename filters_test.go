@@ -108,3 +108,12 @@ func TestStringFiltersBailOnInvalidUTF8(t *testing.T) {
 		}
 	}
 }
+
+// liquidjs's strip_html never returns on these, so they can't be parity cases.
+func TestStripHTMLBailsWhereLiquidJSHangs(t *testing.T) {
+	for _, s := range []string{"ab<c", "a<", "a<!-- x", "<b>x</b>y<z", "<script>a</script>b<c"} {
+		if _, err := Render(`{{ s | strip_html }}`, map[string]any{"s": s}, false); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%q: got %v; want ErrUnsupported", s, err)
+		}
+	}
+}

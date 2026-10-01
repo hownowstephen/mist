@@ -12,6 +12,29 @@ Date.now = () => 1700000000123;
 
 // renderLimit only guards corpus generation against resource-limit specs.
 const engine = new Liquid({ lenientIf: true, renderLimit: 2000 });
+
+// liquidjs's strip_html loops forever on an unclosed '<' after text, where mist bails;
+// throw there instead so generated cases can't hang the oracle.
+const stripHTML = engine.filters.strip_html;
+engine.registerFilter('strip_html', function (v) {
+  const s = Array.isArray(v) ? v.flat(Infinity).join('') : String(v ?? '');
+  const blocks = new Map([['<script', '</script>'], ['<style', '</style>'], ['<!--', '-->'], ['<', '>']]);
+  for (let i = 0; i < s.length; ) {
+    const lt = s.indexOf('<', i);
+    if (lt < 0) break;
+    let next = i;
+    for (const [open, close] of blocks) {
+      if (!s.startsWith(open, lt)) continue;
+      const e = s.indexOf(close, lt + open.length);
+      if (e >= 0) { next = e + close.length; break; }
+      blocks.delete(open);
+    }
+    if (next !== i) i = next;
+    else if (i === lt) break;
+    else throw new Error('strip_html would loop forever');
+  }
+  return stripHTML.call(this, v);
+});
 const args = process.argv.slice(2);
 let out = new URL('../testdata/corpus.json', import.meta.url);
 if (args[0] === '-o') [, out] = args.splice(0, 2);

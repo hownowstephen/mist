@@ -4,6 +4,7 @@ import (
 	"errors"
 	"html"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -17,14 +18,19 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 	arity := func(min, max int) bool { return n >= min && n <= max }
 	var ok bool
 	switch name {
-	case "capitalize", "downcase", "upcase", "escape", "escape_once", "url_encode", "json", "first", "last":
+	case "capitalize", "downcase", "upcase", "escape", "escape_once", "url_encode", "json", "first", "last",
+		"strip_newlines", "newline_to_br", "strip_html", "size", "abs", "ceil", "floor":
 		ok = arity(0, 0)
 	case "date", "replace", "replace_first", "truncate", "truncatewords":
 		ok = arity(0, 2)
 	case "remove", "remove_first", "strip", "lstrip", "rstrip", "split":
 		ok = arity(0, 1)
-	case "append", "prepend", "plus", "minus", "times", "divided_by", "modulo":
+	case "append", "prepend", "plus", "minus", "times", "divided_by", "modulo", "at_least":
 		ok = arity(1, 1)
+	case "join", "round":
+		ok = arity(0, 1)
+	case "where":
+		ok = arity(1, 2)
 	case "slice":
 		ok = arity(1, 2)
 	}
@@ -82,20 +88,47 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		return slice(v, a, at)
 	case "first", "last":
 		return endOf(v, name == "first", at)
+	case "strip_newlines":
+		return strVal(replaceNewlines(toStr(v, at), ""))
+	case "newline_to_br":
+		return strVal(replaceNewlines(toStr(v, at), "<br />\n"))
+	case "strip_html":
+		return strVal(stripHTML(toStr(v, at), at))
+	case "join":
+		return strVal(join(v, a, at))
+	case "size":
+		return size(v, at)
+	case "where":
+		return r.where(v, a, at)
 	}
-	x, y := toNumber(v, at), toNumber(a[0], at)
+	x := toNumber(v, at)
 	var f float64
 	switch name {
-	case "plus":
-		f = x + y
-	case "minus":
-		f = x - y
-	case "times":
-		f = x * y
-	case "divided_by":
-		f = x / y
-	case "modulo":
-		f = math.Mod(x, y)
+	case "abs":
+		f = math.Abs(x)
+	case "ceil":
+		f = math.Ceil(x)
+	case "floor":
+		f = math.Floor(x)
+	case "round":
+		f = round(x, a, at)
+	}
+	if n > 0 && name != "round" {
+		y := toNumber(a[0], at)
+		switch name {
+		case "plus":
+			f = x + y
+		case "minus":
+			f = x - y
+		case "times":
+			f = x * y
+		case "divided_by":
+			f = x / y
+		case "modulo":
+			f = math.Mod(x, y)
+		case "at_least":
+			f = math.Max(x, y)
+		}
 	}
 	if math.IsInf(f, 0) || math.IsNaN(f) {
 		bail(at, "math filter result %v", f)
@@ -584,4 +617,186 @@ func decimal(s string) bool {
 		}
 	}
 	return i == len(s)
+}
+
+// replaceNewlines is s.replace(/\r?\n/g, repl).
+func replaceNewlines(s, repl string) string {
+	if strings.IndexByte(s, '\n') < 0 {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] == '\r' && i+1 < len(s) && s[i+1] == '\n':
+		case s[i] == '\n':
+			b.WriteString(repl)
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
+}
+
+// stripHTML is liquidjs's strip_html, which drops script, style and comment blocks, then tags.
+func stripHTML(s string, at int) string {
+	if strings.IndexByte(s, '<') < 0 {
+		return s
+	}
+	blocks := []struct{ open, close string }{{"<script", "</script>"}, {"<style", "</style>"}, {"<!--", "-->"}, {"<", ">"}}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		lt := strings.IndexByte(s[i:], '<')
+		if lt < 0 {
+			b.WriteString(s[i:])
+			break
+		}
+		lt += i
+		b.WriteString(s[i:lt])
+		next := i
+		for k := 0; k < len(blocks); k++ {
+			bl := blocks[k]
+			if !strings.HasPrefix(s[lt:], bl.open) {
+				continue
+			}
+			if e := strings.Index(s[lt+len(bl.open):], bl.close); e >= 0 {
+				next = lt + len(bl.open) + e + len(bl.close)
+				break
+			}
+			blocks = slices.Delete(blocks, k, k+1)
+			k--
+		}
+		switch {
+		case next != i:
+			i = next
+		case i == lt:
+			b.WriteString(s[lt:])
+			return b.String()
+		default:
+			bail(at, "strip_html of an unclosed '<' after text, which loops forever in liquidjs")
+		}
+	}
+	return b.String()
+}
+
+// join is liquidjs's join: arrays join with sep (default " "), anything else is one element.
+func join(v val, a []val, at int) string {
+	sep := " "
+	if len(a) > 0 && !isNil(a[0]) {
+		sep = toStr(a[0], at)
+	}
+	if isNil(v) {
+		return ""
+	}
+	arr, ok := v.check(at).x.([]any)
+	if !ok || v.lit != 0 {
+		return toStr(v, at)
+	}
+	var dst []byte
+	for i, e := range arr {
+		if i > 0 {
+			dst = append(dst, sep...)
+		}
+		if _, nested := e.([]any); nested {
+			bail(at, "join of a nested array, which JavaScript joins with commas")
+		}
+		dst = stringify(dst, val{x: e}, at)
+	}
+	return string(dst)
+}
+
+// size is liquidjs's (v && v.length) || 0.
+func size(v val, at int) val {
+	if s, ok := v.str(); ok {
+		if !utf8.ValidString(s) {
+			bail(at, "size of invalid UTF-8")
+		}
+		return val{n: float64(len16(s)), lit: litNum}
+	}
+	switch x := v.check(at).x.(type) {
+	case []any:
+		return val{n: float64(len(x)), lit: litNum}
+	case map[string]any:
+		if _, ok := x["length"]; ok {
+			bail(at, "size of an object with a length key")
+		}
+	}
+	return val{n: 0, lit: litNum}
+}
+
+// round is liquidjs's round: half away from zero at 10^digits.
+func round(x float64, a []val, at int) float64 {
+	digits := 0.0
+	if len(a) > 0 {
+		digits = toNumber(a[0], at)
+	}
+	// ponytail: 10^d is exact in both engines only for small non-negative d; widen if real templates need it.
+	if digits != math.Trunc(digits) || digits < 0 || digits > 15 {
+		bail(at, "round to %v digits", digits)
+	}
+	amp := math.Pow(10, digits)
+	sign := x
+	if x > 0 {
+		sign = 1
+	} else if x < 0 {
+		sign = -1
+	}
+	return sign * math.Round(math.Abs(x*amp)) / amp
+}
+
+// where is liquidjs's where: items whose property path is truthy, or equals expected.
+func (r *renderer) where(v val, a []val, at int) val {
+	path, ok := a[0].str()
+	if !ok || !propPath(path) {
+		bail(at, "where property that isn't a plain path")
+	}
+	var items []any
+	switch x := v.check(at).x.(type) {
+	case nil, undefinedT, nilLitT:
+		if !isNil(v) {
+			bail(at, "where on a scalar")
+		}
+	case []any:
+		items = x
+	case map[string]any:
+		items = []any{x}
+	default:
+		bail(at, "where on %T", v.any())
+	}
+	matchTruthy := len(a) == 1
+	if !matchTruthy {
+		_, undef := a[1].x.(undefinedT)
+		matchTruthy = undef && a[1].lit == 0 // liquidjs's expected === undefined
+	}
+	out := []any{}
+	for _, it := range items {
+		x := it
+		for key := range strings.SplitSeq(path, ".") {
+			if r.strict && isNil(val{x: x}) {
+				bail(at, "where on an item missing %q under strict", path) // liquidjs throws
+			}
+			x = prop(x, key, at)
+		}
+		if _, undef := x.(undefinedT); undef && r.strict {
+			bail(at, "where on an item missing %q under strict", path)
+		}
+		if matchTruthy && truthy(val{x: x}, at) || !matchTruthy && eq(val{x: x}, a[1], at) {
+			out = append(out, it)
+		}
+	}
+	return val{x: out}
+}
+
+// propPath accepts dotted identifiers, the property paths whose parse is unambiguous.
+func propPath(s string) bool {
+	for key := range strings.SplitSeq(s, ".") {
+		if key == "" || literal(key) || reserved(key) || key[0] == '-' || key[0] >= '0' && key[0] <= '9' {
+			return false
+		}
+		for _, c := range key {
+			if c != '_' && c != '-' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
+				return false
+			}
+		}
+	}
+	return true
 }
