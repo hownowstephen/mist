@@ -789,11 +789,11 @@ func (r *renderer) where(v val, a []val, at int) val {
 // propPath accepts dotted identifiers, the property paths whose parse is unambiguous.
 func propPath(s string) bool {
 	for key := range strings.SplitSeq(s, ".") {
-		if key == "" || literal(key) || reserved(key) || !(key[0] == '_' || unicode.IsLetter(rune(key[0]))) {
+		if key == "" || literal(key) || reserved(key) || key[0] == '-' || key[0] >= '0' && key[0] <= '9' {
 			return false
 		}
 		for _, c := range key {
-			if !(c == '_' || c == '-' || c < utf8.RuneSelf && (unicode.IsLetter(c) || unicode.IsDigit(c))) {
+			if c != '_' && c != '-' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
 				return false
 			}
 		}
