@@ -415,5 +415,18 @@
   {"name": "reverse", "tpl": "{{ xs | reverse | join: ',' }}|{{ 'abc' | reverse | join }}|{{ n | reverse | size }}|{{ xs | join: ',' }}", "data": {"xs": [1, 2, 3], "n": null}, "out": "3,2,1|abc|0|1,2,3"},
   {"name": "size first last as properties", "tpl": "{{ xs.size }}{{ xs.first }}{{ xs.last }}|{{ e.size }}[{{ e.first }}]|{{ s.size }}[{{ s.first }}]|{{ o.size }}[{{ o.first }}]|{{ p.size }}", "data": {"xs": [1, 2, 3], "e": [], "s": "😀a", "o": {"a": 1, "b": 2}, "p": {"size": "own"}}, "out": "313|0[]|3[]|2[]|own"},
   {"name": "length of an array", "tpl": "{{ xs.length }}", "data": {"xs": [1]}, "err": "unsupported"},
-  {"name": "first of an empty array under strict", "tpl": "{{ xs.first }}", "data": {"xs": []}, "strict": true, "err": "undefined"}
+  {"name": "first of an empty array under strict", "tpl": "{{ xs.first }}", "data": {"xs": []}, "strict": true, "err": "undefined"},
+  {"name": "unterminated string with an escaped quote", "tpl": "{{ \"a\\\" }}", "err": "unsupported"},
+  {"name": "unicode escape stops at a non-hex digit", "tpl": "{{ \"\\u4Gx\" | json }}", "out": "\"\\u0004Gx\""},
+  {"name": "number literal too large for a float", "tpl": "{{ 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 }}", "err": "unsupported"},
+  {"name": "number followed by a non-breaking space", "tpl": "{{ 5 }}", "out": "5"},
+  {"name": "keyword as an index", "tpl": "{{ a[empty] }}", "data": {"a": {"b": 1}}, "err": "unsupported"},
+  {"name": "index of a string", "tpl": "{{ s[0] }}", "data": {"s": "abc"}, "err": "unsupported"},
+  {"name": "where with a keyword path", "tpl": "{{ xs | where: 'nil' | size }}", "data": {"xs": [{"a": 1}]}, "err": "unsupported"},
+  {"name": "range of more than 100000 items", "tpl": "{% for i in (1..200000) %}{% endfor %}", "err": "unsupported"},
+  {"name": "forloop with an empty property", "tpl": "{% for x in xs %}{{ forloop. }}{% endfor %}", "data": {"xs": [1]}, "err": "unsupported"},
+  {"name": "endcase without case", "tpl": "{% endcase %}", "err": "unsupported"},
+  {"name": "endcapture without capture", "tpl": "{% endcapture %}", "err": "unsupported"},
+  {"name": "sum overflowing to infinity", "tpl": "{{ xs | sum }}", "data": {"xs": [1e+308, 1e+308]}, "err": "unsupported"},
+  {"name": "sort of strings outside the BMP", "tpl": "{{ xs | sort | join }}", "data": {"xs": ["😀", "a"]}, "err": "unsupported"}
 ]

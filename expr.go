@@ -393,7 +393,7 @@ func (r *renderer) path(eval, lenient bool) any {
 	switch {
 	case name == "forloop":
 		v = r.forloop(eval, start)
-	case reserved(name) || literal(name):
+	case reserved(name):
 		bail(r.base+start, "%q is not supported as a variable", name)
 	case eval:
 		v = r.root(name, start)
@@ -594,8 +594,6 @@ func canonicalInt(s string) (int, bool) {
 
 func index(v any, n int, at int) any {
 	switch a := v.(type) {
-	case nil, undefinedT:
-		return v
 	case []any:
 		if n < 0 {
 			n += len(a)
