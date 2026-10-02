@@ -102,7 +102,7 @@ func TestRegisteredFilters(t *testing.T) {
 
 func TestStringFiltersBailOnInvalidUTF8(t *testing.T) {
 	vars := map[string]any{"s": "a\xffb"}
-	for _, tpl := range []string{"{{ s | truncate: 1 }}", "{{ s | split: '' }}", "{{ 'x' | strip: s }}", "{{ s | url_encode }}"} {
+	for _, tpl := range []string{"{{ s | truncate: 1 }}", "{{ s | split: '' }}", "{{ 'x' | strip: s }}", "{{ s | url_encode }}", "{{ s | size }}", "{{ s.size }}"} {
 		if _, err := Render(tpl, vars, false); !errors.Is(err, ErrUnsupported) {
 			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
 		}
