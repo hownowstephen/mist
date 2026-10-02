@@ -312,3 +312,34 @@ func TestSortOfGoNumbers(t *testing.T) {
 		t.Fatalf("got %q, %v; want 1,2,3", out, err)
 	}
 }
+
+// modernTpl exercises v0.9–v0.12: case, loops with forloop and limit, ranges, variable
+// indexes, filtered and mixed conditions, floats, escapes and the array filters.
+const modernTpl = `{% assign total = order.items | sum: 'price' %}{% for item in order.items limit: 4 %}{% unless forloop.first %}, {% endunless %}{{ forloop.index }}. {{ item.name | strip_html | truncate: 20 }}{% case item.kind %}{% when 'gift', 'promo' %} (special){% when 'sale' %} (sale){% endcase %}{% if item.qty > 1 and item.price >= 10.5 or item.flag %} x{{ item.qty }}{% endif %}{% endfor %}
+Total: {{ total | times: 1.08 | round: 2 }}
+{{ order.items | map: 'name' | sort | join: ", " }}
+{% for i in (0..2) %}{{ labels[i] }}{% if forloop.last %}.{% else %}/{% endif %}{% endfor %}
+{% assign vip = order.items | where: 'flag' | size %}{% if vip > 0 %}VIP {{ vip }}{% endif %}{% if customer.name | default: false %} {{ "Say \"hi\", " | append: customer.name }}{% endif %}`
+
+var modernVars = map[string]any{
+	"customer": map[string]any{"name": "Ada"},
+	"labels":   []any{"one", "two", "three"},
+	"order": map[string]any{"items": []any{
+		map[string]any{"name": "<b>Widget</b>", "kind": "gift", "qty": 2.0, "price": 12.5, "flag": true},
+		map[string]any{"name": "Gadget", "kind": "sale", "qty": 1.0, "price": 9.99, "flag": false},
+		map[string]any{"name": "Doohickey with a long name", "kind": "plain", "qty": 3.0, "price": 4.25, "flag": false},
+		map[string]any{"name": "Thing", "kind": "promo", "qty": 1.0, "price": 20.0, "flag": true},
+		map[string]any{"name": "Extra", "kind": "plain", "qty": 5.0, "price": 1.0, "flag": false},
+	}},
+}
+
+func BenchmarkModern(b *testing.B) {
+	buf := make([]byte, 0, 2048)
+	b.ReportAllocs()
+	for b.Loop() {
+		var err error
+		if buf, err = Append(buf[:0], modernTpl, modernVars, true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

@@ -60,6 +60,9 @@ func (v val) any() any {
 	case litStr:
 		return v.s
 	case litNum:
+		if v.n == math.Trunc(v.n) && v.n >= 0 && !math.Signbit(v.n) && v.n < float64(len(boxed)) {
+			return boxed[int(v.n)]
+		}
 		return v.n
 	}
 	return v.x
@@ -509,13 +512,13 @@ func prop(v any, key string, at int) any {
 			return x
 		}
 		if key == "size" {
-			return float64(len(m))
+			return boxInt(len(m))
 		}
 		return undefinedT{}
 	case []any:
 		switch key {
 		case "size":
-			return float64(len(m))
+			return boxInt(len(m))
 		case "first", "last":
 			if len(m) == 0 {
 				return undefinedT{}
@@ -534,7 +537,7 @@ func prop(v any, key string, at int) any {
 			if !utf8.ValidString(m) {
 				bail(at, "size of invalid UTF-8")
 			}
-			return float64(len16(m))
+			return boxInt(len16(m))
 		case key == "length" || strings.Trim(key, "0123456789") == "":
 			bail(at, "property %q of a string, an own JavaScript property", key)
 		}
@@ -957,7 +960,7 @@ func (r *renderer) rangeLit(eval bool) any {
 	}
 	out := make([]any, 0, max(0, b-a+1))
 	for i := a; i <= b; i++ {
-		out = append(out, float64(i))
+		out = append(out, boxInt(i))
 	}
 	return out
 }
@@ -975,9 +978,9 @@ func rangeBound(v val, at int) int {
 
 func (f *frame) item() any {
 	if f.rev {
-		return f.coll[len(f.coll)-1-f.idx]
+		return f.coll[len(f.coll)-1-int(f.idx)]
 	}
-	return f.coll[f.idx]
+	return f.coll[int(f.idx)]
 }
 
 // forloop resolves forloop.<prop> against the innermost for, as liquidjs's ForloopDrop.
@@ -992,25 +995,25 @@ func (r *renderer) forloop(eval bool, start int) any {
 	if !eval {
 		return nil
 	}
-	n, i := len(f.coll), f.idx
+	n, i := len(f.coll), int(f.idx)
 	var v any
 	switch p {
 	case "index":
-		v = float64(i + 1)
+		v = boxInt(i + 1)
 	case "index0":
-		v = float64(i)
+		v = boxInt(i)
 	case "rindex":
-		v = float64(n - i)
+		v = boxInt(n - i)
 	case "rindex0":
-		v = float64(n - i - 1)
+		v = boxInt(n - i - 1)
 	case "first":
 		v = i == 0
 	case "last":
 		v = i == n-1
 	case "length":
-		v = float64(n)
+		v = boxInt(n)
 	case "name":
-		v = f.name + "-" + f.collText
+		v = f.name + "-" + r.tpl[f.collStart:f.collEnd]
 	case "":
 		bail(at, "expected property name")
 	default:
@@ -1027,4 +1030,20 @@ func (r *renderer) loop() *frame {
 		}
 	}
 	return nil
+}
+
+// boxed holds float64s for small integers already in interfaces, so loop indexes, sizes and
+// range items don't allocate. Converting a float64 to any otherwise allocates.
+var boxed = func() (t [1024]any) {
+	for i := range t {
+		t[i] = float64(i)
+	}
+	return t
+}()
+
+func boxInt(i int) any {
+	if i >= 0 && i < len(boxed) {
+		return boxed[i]
+	}
+	return float64(i)
 }

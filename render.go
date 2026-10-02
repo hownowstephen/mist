@@ -24,21 +24,28 @@ const (
 	kCase
 )
 
+// frame is kept small because the renderer zeroes all maxDepth of them on every render;
+// fields are shared between kinds where they can be.
 type frame struct {
 	kind       frameKind
+	lit        uint8 // case: the subject's lit
 	parentLive bool
 	active     bool // current branch (or loop body) executes
 	taken      bool // a branch of this if/unless already executed, or a when of this case matched
 	sawElse    bool
-	rtrim      bool // for: the for tag's -%}, reapplied on each iteration
-	body       int  // for: offset just past the for tag; capture: where its output starts
-	idx        int
-	rev        bool // for: iterate coll from the end (reversed)
-	name       string
-	collText   string // for: the collection as written, for forloop.name
+	rtrim      bool  // for: the for tag's -%}, reapplied on each iteration
+	rev        bool  // for: iterate coll from the end (reversed)
+	idx        int32 // for: the current item
+	collStart  int32 // for: the collection as written in the template, for forloop.name
+	collEnd    int32
+	body       int    // for: offset just past the for tag; capture: where its output starts
+	name       string // for: the loop variable; capture: the target; case: the subject's s
 	coll       []any
-	subject    val // case: the value each when compares against
+	x          any     // case: the subject's x
+	n          float64 // case: the subject's n
 }
+
+func (f *frame) subject() val { return val{x: f.x, s: f.name, n: f.n, lit: f.lit} }
 
 type renderer struct {
 	tpl       string
@@ -108,6 +115,9 @@ func (r *renderer) push(f frame) {
 
 func (r *renderer) run() {
 	s := r.tpl
+	if len(s) > math.MaxInt32 {
+		bail(0, "template over 2 GiB") // frames keep int32 offsets
+	}
 	pos, trimNext := 0, false
 	for pos < len(s) {
 		start, isTag := nextDelim(s, pos)
@@ -274,7 +284,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			v = val{} // liquidjs unwraps the nil Drop to null, which no longer matches undefined
 		}
 		// Until the first when, the body is parsed but never rendered.
-		r.push(frame{kind: kCase, parentLive: live, subject: v})
+		r.push(frame{kind: kCase, parentLive: live, x: v.x, name: v.s, n: v.n, lit: v.lit})
 	case "when":
 		f := r.top()
 		if f == nil || f.kind != kCase || f.sawElse {
@@ -285,7 +295,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		for {
 			at := r.pos()
 			v := r.expr(eval && !match, true)
-			match = match || eval && eq(f.subject, v, at)
+			match = match || eval && eq(f.subject(), v, at)
 			r.ws()
 			if r.p == len(r.src) {
 				break
@@ -328,7 +338,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		cs := r.p
 		coll := r.expr(live, false).x
-		f := frame{kind: kFor, parentLive: live, body: next, rtrim: rt, name: v, collText: r.src[cs:r.p]}
+		f := frame{kind: kFor, parentLive: live, body: next, rtrim: rt, name: v, collStart: int32(r.base + cs), collEnd: int32(r.pos())}
 		mods := r.forParams(live)
 		r.end()
 		if live {
@@ -369,7 +379,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 				return next, rt
 			}
 		}
-		if f.active && !r.check && f.idx+1 < len(f.coll) {
+		if f.active && !r.check && int(f.idx)+1 < len(f.coll) {
 			if r.iters++; r.iters > maxIterations {
 				bail(b, "more than %d loop iterations", maxIterations) // ranges make loop counts template-controlled
 			}
