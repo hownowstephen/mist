@@ -162,12 +162,10 @@ func supportedFilter(eng mist.Engine, name string) bool {
 
 func msgKind(msg string) string {
 	switch {
-	case msg == "mixed and/or":
-		return "mixed and/or"
 	case strings.Contains(msg, "escape"):
 		return "string escapes"
-	case strings.HasPrefix(msg, "only integer literals"):
-		return "float literal"
+	case strings.HasPrefix(msg, "malformed number"):
+		return "malformed number"
 	case strings.HasPrefix(msg, "blank"), strings.HasPrefix(msg, "empty"):
 		return msg[:strings.IndexByte(msg, ' ')] + " outside ==/!="
 	case strings.Contains(msg, "is not supported as a variable"):

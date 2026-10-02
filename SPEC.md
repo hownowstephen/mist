@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.10.0
+# mist Liquid subset — v0.11.0
 
-_Last updated 2026-10-02. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-03. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -14,12 +14,12 @@ LL(1) EBNF. Each production is one function in `render.go`/`expr.go`. Anything t
 template = { text | output | tag } ;
 text     = ? bytes up to the next "{{" or "{%" ? ;
 output   = "{{" [ "-" ] ws expr { filter } ws [ "-" ] "}}" ;
-filter   = "|" ident [ ":" farg { "," farg } ] ;              (* at most 4 positional args; built-ins take the counts below *)
+filter   = "|" ident [ ":" [ farg { "," farg } ] ] ;          (* at most 4 positional args; built-ins take the counts below; "f:" alone has none *)
 farg     = expr | "allow_false" ":" ( "true" | "false" ) ;    (* named: only default's allow_false *)
 tag      = "{%" [ "-" ] ws tagbody ws [ "-" ] "%}" ;
 
-tagbody  = "if" cond | "elsif" cond | "else" | "endif"
-         | "unless" cond | "endunless"
+tagbody  = "if" fcond | "elsif" fcond | "else" | "endif"
+         | "unless" fcond | "endunless"
          | "for" ident "in" path | "endfor"
          | "case" expr { filter } | "when" expr { ( "," | "or" ) expr } | "endcase"
          | "assign" ident "=" expr { filter }
@@ -29,15 +29,18 @@ tagbody  = "if" cond | "elsif" cond | "else" | "endif"
          | custom ;
 custom   = ident { ? any ? } ;                     (* only names registered in Engine.Tags *)
 
-cond     = cmp { "and" cmp } | cmp { "or" cmp } ;      (* one connective per condition *)
+fcond    = cond { filter } ;                            (* filters apply to the condition's value *)
+cond     = cmp [ ( "and" | "or" ) cond ] ;               (* right to left: a and b or c is a and (b or c) *)
 cmp      = expr [ op expr ] ;
 op       = "==" | "!=" | "<=" | ">=" | "<" | ">" | "contains" ;   (* contains: not followed by an ident character *)
-expr     = path | string | int | "true" | "false" | "nil" | "null" | "blank" | "empty" ;   (* blank, empty: only as operands of == or != *)
-path     = ident { "." ident | "[" int "]" | "[" string "]" } ;   (* no spaces inside *)
-ident    = ( letter | "_" ) { letter | digit | "_" | "-" } ;      (* ASCII only *)
-string   = "'" { ? any but ' or \ ? } "'" | '"' { ? any but " or \ ? } '"' ;
-int      = [ "-" ] digit { digit } ;                              (* |n| < 2^53 *)
-ws       = { " " | "\t" | "\n" | "\v" | "\f" | "\r" } ;
+expr     = path | string | number | "true" | "false" | "nil" | "null" | "blank" | "empty" ;   (* blank, empty: only as operands of == or != *)
+path     = ident { "." ws word | "[" ws expr ws "]" } ;
+ident    = ( letter | "_" ) { letter | digit | "_" | "-" | "?" } ;  (* ASCII only *)
+word     = ( letter | digit | "_" | "-" | "?" ) { letter | digit | "_" | "-" | "?" } ;
+string   = "'" { char | escape } "'" | '"' { char | escape } '"' ;  (* char: any but the quote or \ *)
+escape   = "\" ( "b" | "f" | "n" | "r" | "t" | "v" | "u" hex{0..4} | oct{1..3} | ? any other ? ) ;
+number   = [ "-" | "+" ] digit { digit } [ "." { digit } ] ;
+ws       = { " " | "\t" | "\n" | "\v" | "\f" | "\r" | U+00A0 } ;
 ```
 
 Structural rules the EBNF doesn't express:
@@ -45,7 +48,9 @@ Structural rules the EBNF doesn't express:
 - `comment … endcomment`: the body is tokenized but ignored. A nested `comment` or `raw`, or a tag with no name, bails.
 - `contains`, `and`, `or` and `not` can't be variable names at the root of a path; liquidjs parses them as operators. They are fine as properties (`a.and`). Literal keywords can't start a path either (`for x in nil` bails).
 - `raw … endraw`: the body is emitted verbatim. Trim markers on either tag bail.
-- Tags end at the first `%}`, even inside quotes, as in liquidjs. Outputs end at the first `}}` outside quotes.
+- Tags end at the first `%}`, even inside quotes, as in liquidjs. Outputs end at the first `}}` outside quotes; a backslash-escaped quote doesn't close a quote.
+- A number can't be followed by `.`, an identifier character or a non-blank non-ASCII character (`1.2.3` and `1x` bail). Inside tags, Unicode blanks other than U+00A0 bail, though liquidjs skips them.
+- Filters on a condition must come after the whole `and`/`or` chain; a filter before an operator (`a | upcase == "X"`) is a liquidjs syntax error and bails.
 - Dead branches are parsed, not skipped. A syntax error or unknown tag anywhere bails, because liquidjs rejects the whole template.
 
 ## Semantics
@@ -61,7 +66,7 @@ Structural rules the EBNF doesn't express:
 | Null in a path | `a.b.c` with `a` null is null. Never an error, even under strict. |
 | Missing key / out-of-range index | Undefined. Negative indexes count from the end. |
 | Output: string, bool, nil | As-is; `true`/`false`; `""` for a nil or undefined variable. Printing the `nil`/`null` literal itself (including through `default: nil`) bails: liquidjs represents it as a Drop, which prints differently depending on the `outputEscape` configuration. |
-| Output: number | As JavaScript's `String(n)`: shortest round-trip digits, fixed notation for 1e-7 ≤ \|n\| < 1e21, otherwise exponent notation (`1e+21`, `2.5e-8`). |
+| Output: number | Number literals and data print as JavaScript's `String(n)`: shortest round-trip digits, fixed notation for 1e-7 ≤ \|n\| < 1e21, otherwise exponent notation (`1e+21`, `2.5e-8`). |
 | `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
 | `capture` | Renders its body instead of printing it, and assigns the result as a string, exactly as `assign` would (so it replaces data and earlier assigns of the same name). A quoted name is stored as written. In a dead branch nothing is rendered or assigned. |
 | `case` / `when` | The `case` value (with any filters) and each `when` value are evaluated as conditions are: undefined variables are lenient under strict. Every `when` with a value `==` to the `case` value renders, in order, not just the first; a `when` stops evaluating its values at the first match. `else` renders only when no `when` matched. The body between `case` and the first `when` is parsed but never rendered. A `nil` case value is null, so it doesn't match an undefined `when` value. |
@@ -84,7 +89,10 @@ Structural rules the EBNF doesn't express:
 | `date` ISO 8601 input | `YYYY-MM-DD`, optionally followed by `T` or a space, `HH:MM`, optional `:SS` and `.fraction` (1–9 digits, truncated to milliseconds), and optional `Z` or `±HH:MM`. Without an offset the time is UTC, as it is for `new Date` under `TZ=UTC`. |
 | `date` timezone | Without one, times print in UTC and `%z` is `+0000`. A string is an IANA name or alias resolved with Go's `time.LoadLocation`; `%Z` prints it as written. A number is minutes west of UTC, as JavaScript's `getTimezoneOffset` counts them; `%Z` prints the offset. Either way `%s` shifts by the offset, as it does in liquidjs. Programs deployed without a system tz database can import `time/tzdata`. |
 | `<` `>` `<=` `>=` | Two numbers, or two ASCII strings (byte order). |
-| `and` / `or` | Evaluated as written. Mixing them bails, which sidesteps Liquid's right-to-left associativity. |
+| `and` / `or` | Grouped right to left, as in liquidjs: `a and b or c` is `a and (b or c)`. Every operand is evaluated. |
+| Filtered conditions | `{% if a.b \| default: false %}`: the filters apply to the condition's value (a lone operand's value, else the `and`/`or` result as `true`/`false`), then truthiness decides. The operand stays lenient under strict, as in any condition. |
+| `.` and `[ ]` | `a.k` and `a["k"]` read object keys; a dot may be followed by blanks. On arrays, integers and integer strings as JavaScript prints them (`1`, `-1`, `"2"`) index, negative from the end, and other digit strings (`01`) are undefined. `a[k]` evaluates `k` first: a string reads that key, a number indexes an array or reads the key `String(n)` of an object, and a non-integer index of an array is undefined. Under strict, an undefined variable inside `[ ]` is `ErrUndefined` even where the rest is lenient (a leading `default`, a condition), as in liquidjs. |
+| String literals | Escapes as liquidjs's `parseStringLiteral`: `\b \f \n \r \t \v`; `\u` with up to 4 hex digits (none gives U+0000); up to 3 octal digits; any other escaped character as itself (`\'`, `\"`, `\\`, `\x` → `x`). |
 | Whitespace control | `{{-`/`{%-` trim the template text before; `-}}`/`-%}` trim the template text after. Rendered values are never trimmed. The trimmed set is ASCII whitespace plus U+00A0, U+1680, U+180E, U+2000–200A, U+2028, U+2029, U+202F, U+205F, U+3000. |
 
 ### Runtime bails
@@ -92,7 +100,7 @@ Structural rules the EBNF doesn't express:
 Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - Output of an array or an object, or of the nil literal coming out of a filter (`{{ x | default: nil }}` with `x` empty).
 - `capitalize` of an object, or of a string whose case mapping Go can't reproduce exactly: full-Unicode expansions such as `ß` → `SS` or polytonic Greek as the first character, and `İ`, `Σ` (final-sigma depends on position) or characters newer than Go's Unicode tables in the rest.
-- `.name` or `["key"]` on anything but an object, and `[n]` on anything but an array.
+- `.name` or `["key"]` on anything but an object or array, `[n]` on anything but an array or object, `.size`/`.first`/`.last` style keys on arrays, and `[k]` whose key evaluates to nil, a bool, an object or an array (or, in lax mode, is undefined).
 - `size`, `first` or `last` when the key is absent, because liquidjs computes them. This includes at the root.
 - `contains` with an array or object on the right.
 - `==` with an array or object operand; ordering across types or with non-ASCII strings.
@@ -111,7 +119,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); filters in `if`/`unless` conditions; named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `cycle`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, float literals, string escapes, variable indexes (`a[b]`), and any tag not in the grammar.
+Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `cycle`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, a string escape of half a surrogate pair, and any tag not in the grammar.
 
 ## Custom tags
 

@@ -40,11 +40,15 @@ func (g *gen) path() string {
 		p = g.pick(names)
 	}
 	for range g.r.IntN(3) {
-		switch g.r.IntN(4) {
+		switch g.r.IntN(7) {
 		case 0:
 			p += fmt.Sprintf("[%d]", g.r.IntN(5)-2)
 		case 1:
 			p += fmt.Sprintf("[%q]", g.pick(props))
+		case 4:
+			p += "[" + g.pick([]string{"", " "}) + g.pick(names[:6]) + g.pick([]string{"", " "}) + "]"
+		case 5:
+			p += "." + g.pick([]string{"0", "1", "-1", "01", "b?", " a"})
 		default:
 			p += "." + g.pick(props)
 		}
@@ -55,9 +59,9 @@ func (g *gen) path() string {
 func (g *gen) expr() string {
 	switch g.r.IntN(8) {
 	case 0:
-		return fmt.Sprintf("'%s'", g.pick([]string{"", "a", "b", "A", "10", "2", "now"}))
+		return fmt.Sprintf("'%s'", g.pick([]string{"", "a", "b", "A", "10", "2", "now", `it\'s`, `a\\b`, `\u00e9\n`, `\101\q`, `"`}))
 	case 1:
-		return fmt.Sprint(g.r.IntN(21) - 10)
+		return g.pick([]string{fmt.Sprint(g.r.IntN(21) - 10), "1.5", "-0.25", "2.", "+3", "0.1", "10.0"})
 	case 2:
 		return g.pick([]string{"true", "false", "nil", "null"})
 	}
@@ -107,9 +111,11 @@ func (g *gen) filters() string {
 
 func (g *gen) cond() string {
 	c := g.cmp()
-	join := g.pick([]string{"and", "or"})
-	for range g.r.IntN(3) {
-		c += " " + join + " " + g.cmp()
+	for range g.r.IntN(4) {
+		c += " " + g.pick([]string{"and", "or"}) + " " + g.cmp()
+	}
+	if g.r.IntN(6) == 0 {
+		c += g.filters()
 	}
 	return c
 }
@@ -130,7 +136,7 @@ func (g *gen) cmp() string {
 
 func (g *gen) open(tag string) string {
 	l, r := g.pick([]string{"{%", "{%-"}), g.pick([]string{"%}", "-%}"})
-	return l + " " + g.ws() + tag + g.ws() + " " + r
+	return l + g.pick([]string{" ", " ", "\u00a0"}) + g.ws() + tag + g.ws() + " " + r
 }
 
 func (g *gen) block(depth int) {

@@ -45,6 +45,9 @@ func (r *renderer) filters(v val, eval bool) val {
 		for sep := byte(':'); r.peek() == sep; sep = ',' {
 			r.p++
 			r.ws()
+			if sep == ':' && (r.p == len(r.src) || r.peek() == '|') {
+				break // liquidjs takes "| f:" as no arguments
+			}
 			if key, ok := r.namedArg(); ok {
 				r.ws()
 				w := r.ident()

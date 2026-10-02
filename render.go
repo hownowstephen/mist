@@ -187,11 +187,9 @@ func closeOutput(s string, i, start int) int {
 	for i < len(s) {
 		switch c := s[i]; c {
 		case '"', '\'':
-			k := strings.IndexByte(s[i+1:], c)
-			if k < 0 || strings.ContainsRune(s[i+1:i+1+k], '\\') {
-				bail(i, "unterminated or escaped string")
+			if i = quotedEnd(s, i); i < 0 {
+				bail(start, "unterminated string")
 			}
-			i += k + 2
 		case '}':
 			if i+1 < len(s) && s[i+1] == '}' {
 				return i
