@@ -6,6 +6,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // undefinedT is a missing variable. liquidjs distinguishes it from null: only
@@ -76,10 +78,20 @@ func (r *renderer) peek() byte {
 	return 0
 }
 
+// ws skips ASCII whitespace and U+00A0, both in liquidjs's BLANK class.
+// ponytail: its other Unicode blanks bail; decoding them here would stop ws inlining.
 func (r *renderer) ws() {
-	for r.p < len(r.src) && isBlank(r.src[r.p]) {
-		r.p++
+	s, i := r.src, r.p
+	for i < len(s) {
+		if c := s[i]; isBlank(c) {
+			i++
+		} else if c == 0xC2 && i+1 < len(s) && s[i+1] == 0xA0 {
+			i += 2
+		} else {
+			break
+		}
 	}
+	r.p = i
 }
 
 func (r *renderer) end() {
@@ -92,9 +104,23 @@ func (r *renderer) end() {
 	}
 }
 
-func isIdentStart(c byte) bool { return c == '_' || (c|0x20 >= 'a' && c|0x20 <= 'z') }
+func isIdentStart(c byte) bool { return identByte[c] == 2 }
 func isDigit(c byte) bool      { return c >= '0' && c <= '9' }
-func isIdentChar(c byte) bool  { return isIdentStart(c) || isDigit(c) || c == '-' }
+func isIdentChar(c byte) bool  { return identByte[c] != 0 }
+
+// identByte is 2 for bytes that start an identifier and 1 for the rest of liquidjs's
+// ASCII word characters (digits, '-' and '?').
+var identByte = func() (t [256]uint8) {
+	for c := range 256 {
+		switch {
+		case c == '_', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+			t[c] = 2
+		case c >= '0' && c <= '9', c == '-', c == '?':
+			t[c] = 1
+		}
+	}
+	return t
+}()
 
 // ident = ( letter | "_" ) { letter | digit | "_" | "-" }
 func (r *renderer) ident() string {
@@ -113,33 +139,42 @@ func (r *renderer) ident() string {
 // cond = cmp { "and" cmp } | cmp { "or" cmp }
 // Returns false when not evaluating. Undefined variables are lenient (lenientIf).
 func (r *renderer) cond(eval bool) bool {
-	res := r.cmp(eval)
-	join := ""
-	for {
-		r.ws()
-		if r.p == len(r.src) {
-			return res
-		}
-		at := r.pos()
-		w := r.ident()
-		if w != "and" && w != "or" {
-			bail(at, "expected and/or, got %q", r.src[at-r.base:])
-		}
-		if join != "" && w != join {
-			bail(at, "mixed and/or")
-		}
-		join = w
-		v := r.cmp(eval)
-		if w == "and" {
-			res = res && v
-		} else {
-			res = res || v
-		}
+	res, v, lone := r.chain(eval)
+	if r.peek() != '|' {
+		return res
 	}
+	// liquidjs filters the whole condition's value: a lone operand's, else the boolean.
+	if !lone {
+		v = val{x: res}
+	}
+	at := r.pos()
+	v = r.filters(v, eval)
+	r.end()
+	return eval && truthy(v, at)
+}
+
+// chain = cmp [ ( "and" | "or" ) chain ]. The recursion groups right to left, as
+// liquidjs does: a and b or c is a and (b or c).
+func (r *renderer) chain(eval bool) (res bool, first val, lone bool) {
+	res, first, lone = r.cmp(eval)
+	r.ws()
+	if r.p == len(r.src) || r.peek() == '|' {
+		return res, first, lone
+	}
+	at := r.pos()
+	w := r.ident()
+	if w != "and" && w != "or" {
+		bail(at, "expected and/or, got %q", r.src[at-r.base:])
+	}
+	rest, _, _ := r.chain(eval)
+	if w == "and" {
+		return res && rest, first, false
+	}
+	return res || rest, first, false
 }
 
 // cmp = expr [ op expr ]
-func (r *renderer) cmp(eval bool) bool {
+func (r *renderer) cmp(eval bool) (bool, val, bool) {
 	start := r.pos()
 	a := r.expr(eval, true)
 	before := r.p
@@ -153,7 +188,7 @@ func (r *renderer) cmp(eval bool) bool {
 		if k := a.keyword(); k != "" {
 			bail(start, "%s is only supported with == and !=", k)
 		}
-		return eval && truthy(a, r.pos())
+		return eval && truthy(a, r.pos()), a, true
 	}
 	at := r.pos()
 	b := r.expr(eval, true)
@@ -175,12 +210,12 @@ func (r *renderer) cmp(eval bool) bool {
 		if r.dialect != nil && r.dialect.Compare != nil {
 			bail(at, "contains with a dialect Compare hook")
 		}
-		return eval && contains(a, b, at)
+		return eval && contains(a, b, at), a, false
 	}
 	if eval && r.dialect != nil && r.dialect.Compare != nil {
-		return r.dialectCompare(op, a, b, at)
+		return r.dialectCompare(op, a, b, at), a, false
 	}
-	return eval && compare(op, a, b, at)
+	return eval && compare(op, a, b, at), a, false
 }
 
 func (r *renderer) op() string {
@@ -204,7 +239,7 @@ func (r *renderer) expr(eval, lenient bool) val {
 	switch c := r.peek(); {
 	case c == '"' || c == '\'':
 		return val{s: r.str(), lit: litStr}
-	case c == '-' || isDigit(c):
+	case c == '-' || c == '+' || isDigit(c):
 		return val{n: r.number(), lit: litNum}
 	case isIdentStart(c):
 		save := r.p
@@ -240,24 +275,86 @@ func (r *renderer) expr(eval, lenient bool) val {
 }
 
 func (r *renderer) str() string {
-	q := r.src[r.p]
-	k := strings.IndexByte(r.src[r.p+1:], q)
-	if k < 0 {
-		bail(r.pos(), "unterminated string")
+	at := r.pos()
+	end := quotedEnd(r.src, r.p)
+	if end < 0 {
+		bail(at, "unterminated string")
 	}
-	s := r.src[r.p+1 : r.p+1+k]
-	if strings.ContainsRune(s, '\\') {
-		bail(r.pos(), "escapes in strings are not supported")
+	s := r.src[r.p+1 : end-1]
+	r.p = end
+	if strings.IndexByte(s, '\\') < 0 {
+		return s
 	}
-	r.p += k + 2
-	return s
+	return unescape(s, at)
 }
 
-// int = [ "-" ] digit { digit }
+// quotedEnd returns the index just past the quote closing the string at s[i], skipping
+// backslash escapes as liquidjs's readQuoted does, or -1.
+func quotedEnd(s string, i int) int {
+	k := strings.IndexByte(s[i+1:], s[i])
+	if k < 0 {
+		return -1
+	}
+	if strings.IndexByte(s[i+1:i+1+k], '\\') < 0 {
+		return i + k + 2
+	}
+	for j := i + 1; j < len(s); j++ {
+		switch s[j] {
+		case '\\':
+			j++
+		case s[i]:
+			return j + 1
+		}
+	}
+	return -1
+}
+
+// unescape is liquidjs's parseStringLiteral: \b \f \n \r \t \v, \u with up to 4 hex
+// digits, up to 3 octal digits, and any other escaped character as itself.
+func unescape(s string, at int) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' {
+			b.WriteByte(s[i])
+			continue
+		}
+		i++
+		if k := strings.IndexByte("bfnrtv", s[i]); k >= 0 {
+			b.WriteByte("\b\f\n\r\t\v"[k])
+			continue
+		}
+		base, maxDigits, j := 8, 3, i
+		switch {
+		case s[i] == 'u':
+			base, maxDigits, j = 16, 4, i+1
+		case s[i] < '0' || s[i] > '7':
+			_, n := utf8.DecodeRuneInString(s[i:])
+			b.WriteString(s[i : i+n])
+			i += n - 1
+			continue
+		}
+		c, k := rune(0), j
+		for ; k < len(s) && k < j+maxDigits; k++ {
+			d := strings.IndexByte("0123456789abcdef", s[k]|0x20)
+			if d < 0 || d >= base {
+				break
+			}
+			c = c*rune(base) + rune(d)
+		}
+		if utf16.IsSurrogate(c) {
+			bail(at, "string escape of half a surrogate pair")
+		}
+		b.WriteRune(c)
+		i = k - 1
+	}
+	return b.String()
+}
+
+// number = [ "-" | "+" ] digit { digit } [ "." { digit } ]
 func (r *renderer) number() float64 {
 	at, i := r.p, r.p
-	if r.src[i] == '-' {
-		if r.rejects(NegativeLiterals) {
+	if c := r.src[i]; c == '-' || c == '+' {
+		if c == '-' && r.rejects(NegativeLiterals) {
 			bail(r.base+at, "negative literals are rejected by the dialect")
 		}
 		i++
@@ -266,15 +363,23 @@ func (r *renderer) number() float64 {
 	for j < len(r.src) && isDigit(r.src[j]) {
 		j++
 	}
-	if j == i || (j < len(r.src) && (r.src[j] == '.' || isIdentChar(r.src[j]))) {
-		bail(r.base+at, "only integer literals are supported")
+	if j > i && j+1 < len(r.src) && r.src[j] == '.' && r.src[j+1] != '.' || j > i && j+1 == len(r.src) && r.src[j] == '.' {
+		for j++; j < len(r.src) && isDigit(r.src[j]); j++ {
+		}
 	}
-	n, err := strconv.ParseInt(r.src[at:j], 10, 64)
-	if err != nil || n >= maxSafeInt || n <= -maxSafeInt {
-		bail(r.base+at, "integer literal out of range")
+	if j == i || j < len(r.src) && (r.src[j] == '.' || isIdentChar(r.src[j]) || r.src[j] >= utf8.RuneSelf && !r.blankAt(j)) {
+		bail(r.base+at, "malformed number literal")
+	}
+	f, err := strconv.ParseFloat(r.src[at:j], 64)
+	if err != nil {
+		bail(r.base+at, "malformed number literal")
 	}
 	r.p = j
-	return float64(n)
+	return f
+}
+
+func (r *renderer) blankAt(i int) bool {
+	return strings.HasPrefix(r.src[i:], "\u00a0")
 }
 
 // path = ident { "." ident | "[" int "]" | "[" string "]" }
@@ -300,33 +405,38 @@ func (r *renderer) path(eval, lenient bool) any {
 		switch r.peek() {
 		case '.':
 			r.p++
+			r.ws() // liquidjs skips blanks before a property name
 			at := r.pos()
-			seg := r.ident()
-			if seg == "" {
+			src, i, j := r.src, r.p, r.p
+			for j < len(src) && isIdentChar(src[j]) {
+				j++
+			}
+			r.p = j
+			seg := src[i:j]
+			if seg == "" || j < len(src) && src[j] >= utf8.RuneSelf && !r.blankAt(j) {
 				bail(at, "expected property name")
 			}
 			if eval {
-				v = prop(v, seg, at)
+				v = key(v, val{s: seg, lit: litStr}, at)
 			}
 		case '[':
 			r.p++
+			r.ws()
 			at := r.pos()
-			switch c := r.peek(); {
-			case c == '"' || c == '\'':
-				key := r.str()
-				if eval {
-					v = prop(v, key, at)
-				}
-			case c == '-' || isDigit(c):
-				n := int(r.number())
-				if eval {
-					v = index(v, n, at)
-				}
-			default:
-				bail(at, "index must be an integer or string literal")
+			k := r.expr(eval, false)
+			if k.keyword() != "" {
+				bail(at, "%s as an index", k.keyword())
 			}
+			if _, undef := k.x.(undefinedT); eval && r.strict && undef && k.lit == 0 {
+				// liquidjs evaluates index keys strictly, even where the path itself is lenient.
+				panic(bailout{&Error{Kind: ErrUndefined, Pos: at, Msg: r.src[at-r.base : r.p]}})
+			}
+			r.ws()
 			if r.peek() != ']' {
 				bail(r.pos(), "expected ]")
+			}
+			if eval {
+				v = key(v, k, at)
 			}
 			r.p++
 		default:
@@ -395,6 +505,54 @@ func prop(v any, key string, at int) any {
 	}
 	bail(at, "property %q on %T", key, v)
 	return nil
+}
+
+// key is v[k] as liquidjs reads it: strings name object keys, and integers and
+// canonical integer strings index arrays (negative from the end).
+func key(v any, k val, at int) any {
+	switch v.(type) {
+	case nil, undefinedT:
+		return v
+	}
+	_, isArr := v.([]any)
+	if s, ok := k.str(); ok {
+		if !isArr {
+			return prop(v, s, at)
+		}
+		if n, ok := canonicalInt(s); ok {
+			return index(v, n, at)
+		}
+		if strings.TrimLeft(strings.TrimPrefix(s, "-"), "0123456789") == "" && s != "-" && s != "" {
+			return undefinedT{} // a digit string JavaScript doesn't print, such as "01"
+		}
+		return prop(v, s, at)
+	}
+	if f, ok := k.check(at).num(at); ok {
+		switch {
+		case !isArr:
+			return prop(v, string(appendJSNumber(nil, f)), at) // JavaScript keys objects by String(f)
+		case f == math.Trunc(f) && math.Abs(f) < maxSafeInt:
+			return index(v, int(f), at)
+		}
+		return undefinedT{}
+	}
+	bail(at, "index of %T", k.any())
+	return nil
+}
+
+// canonicalInt reports whether s is an integer as JavaScript prints one.
+func canonicalInt(s string) (int, bool) {
+	t := strings.TrimPrefix(s, "-")
+	if t == "" || len(t) > 15 || t[0] == '0' && (len(t) > 1 || t != s) {
+		return 0, false
+	}
+	for i := range len(t) {
+		if !isDigit(t[i]) {
+			return 0, false
+		}
+	}
+	n, _ := strconv.Atoi(s)
+	return n, true
 }
 
 func index(v any, n int, at int) any {
