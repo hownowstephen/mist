@@ -167,7 +167,7 @@ func FuzzRender(f *testing.F) {
 
 // runtimeBail reports data-dependent bails, which Check can't see.
 func runtimeBail(err error) bool {
-	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of", "date ", "math filter", "filter argument", "slice without", "first or last", "last of", "first of", "number from", "json of", "case mapping", "string filter", "url_encode of", "nil literal as a filter", "contains with an object", "round to", "strip_html of", "join of", "size of", "where ", "index of"} {
+	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of", "date ", "math filter", "filter argument", "slice without", "first or last", "last of", "first of", "number from", "json of", "case mapping", "string filter", "url_encode of", "nil literal as a filter", "contains with an object", "round to", "strip_html of", "join of", "size of", "where ", "index of", "for offset", "for limit", "range ", "map of", "sum of", "sort of", "sort by", "find on", "push of", "reverse of", "array filter on", "loop iterations"} {
 		if strings.Contains(err.Error(), s) {
 			return true
 		}
@@ -287,5 +287,13 @@ func BenchmarkHeavy(b *testing.B) {
 		if buf, err = Append(buf[:0], heavyTpl, vars, true); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestNestedRangesHitTheIterationBudget(t *testing.T) {
+	start := time.Now()
+	_, err := Render(`{% for i in (1..99999) %}{% for j in (1..99999) %}x{% endfor %}{% endfor %}`, nil, false)
+	if !errors.Is(err, ErrUnsupported) || time.Since(start) > 5*time.Second {
+		t.Fatalf("got %v after %v; want a quick ErrUnsupported", err, time.Since(start))
 	}
 }

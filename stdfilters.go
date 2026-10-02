@@ -19,8 +19,14 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 	var ok bool
 	switch name {
 	case "capitalize", "downcase", "upcase", "escape", "escape_once", "url_encode", "json", "first", "last",
-		"strip_newlines", "newline_to_br", "strip_html", "size", "abs", "ceil", "floor":
+		"strip_newlines", "newline_to_br", "strip_html", "size", "abs", "ceil", "floor", "reverse":
 		ok = arity(0, 0)
+	case "map", "push":
+		ok = arity(1, 1)
+	case "sum", "sort":
+		ok = arity(0, 1)
+	case "find":
+		ok = arity(1, 2)
 	case "date", "replace", "replace_first", "truncate", "truncatewords":
 		ok = arity(0, 2)
 	case "remove", "remove_first", "strip", "lstrip", "rstrip", "split":
@@ -99,7 +105,27 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 	case "size":
 		return size(v, at)
 	case "where":
-		return r.where(v, a, at)
+		return val{x: r.matching(v, a, at, false)}
+	case "find":
+		if m := r.matching(v, a, at, true); len(m) > 0 {
+			return val{x: m[0]}
+		}
+		return val{x: undefinedT{}}
+	case "map":
+		return val{x: mapProp(v, argPath(a, 0, at), at)}
+	case "sum":
+		return sum(v, a, at)
+	case "sort":
+		return val{x: sortBy(v, a, at)}
+	case "push":
+		if isNil(a[0]) {
+			bail(at, "push of nil or undefined") // liquidjs keeps distinct null-ish values
+		}
+		return val{x: append(slices.Clone(toArray(v, at)), a[0].any())}
+	case "reverse":
+		out := slices.Clone(toArray(v, at))
+		slices.Reverse(out)
+		return val{x: out}
 	}
 	x := toNumber(v, at)
 	var f float64
@@ -743,8 +769,9 @@ func round(x float64, a []val, at int) float64 {
 	return sign * math.Round(math.Abs(x*amp)) / amp
 }
 
-// where is liquidjs's where: items whose property path is truthy, or equals expected.
-func (r *renderer) where(v val, a []val, at int) val {
+// matching is liquidjs's where (and, with first, find): items whose property path is truthy,
+// or equals expected.
+func (r *renderer) matching(v val, a []val, at int, first bool) []any {
 	path, ok := a[0].str()
 	if !ok || !propPath(path) {
 		bail(at, "where property that isn't a plain path")
@@ -781,9 +808,12 @@ func (r *renderer) where(v val, a []val, at int) val {
 		}
 		if matchTruthy && truthy(val{x: x}, at) || !matchTruthy && eq(val{x: x}, a[1], at) {
 			out = append(out, it)
+			if first {
+				break
+			}
 		}
 	}
-	return val{x: out}
+	return out
 }
 
 // propPath accepts dotted identifiers, the property paths whose parse is unambiguous.
@@ -799,4 +829,139 @@ func propPath(s string) bool {
 		}
 	}
 	return true
+}
+
+// toArray is liquidjs's toArray: nil is [], an array itself, anything else one item.
+func toArray(v val, at int) []any {
+	if isNil(v) {
+		return nil
+	}
+	if a, ok := v.check(at).x.([]any); ok {
+		return a
+	}
+	if _, isObj := v.x.(map[string]any); isObj {
+		bail(at, "array filter on an object")
+	}
+	return []any{v.any()}
+}
+
+// argPath is argument i as a dotted property path.
+func argPath(a []val, i, at int) []string {
+	s, ok := a[i].str()
+	if !ok || !propPath(s) {
+		bail(at, "property argument that isn't a plain path")
+	}
+	return strings.Split(s, ".")
+}
+
+// lookupPath reads a dotted path off an item as liquidjs's _getFromScope does, without strict errors.
+func lookupPath(item any, path []string, at int, what string) any {
+	for _, k := range path {
+		if _, isObj := item.(map[string]any); !isObj {
+			bail(at, "%s of an item that isn't an object", what)
+		}
+		item = prop(item, k, at)
+	}
+	return item
+}
+
+// mapProp is liquidjs's map: each item's property, undefined where it's missing.
+func mapProp(v val, path []string, at int) []any {
+	items := toArray(v, at)
+	out := make([]any, len(items))
+	for i, it := range items {
+		out[i] = lookupPath(it, path, at, "map")
+	}
+	return out
+}
+
+// sum is liquidjs's sum: Number of each item (or its property), NaN counting as 0.
+func sum(v val, a []val, at int) val {
+	var path []string
+	if len(a) > 0 && truthy(a[0], at) {
+		path = argPath(a, 0, at)
+	}
+	total := 0.0
+	for _, it := range toArray(v, at) {
+		if path != nil {
+			it = lookupPath(it, path, at, "sum")
+		}
+		switch it.(type) {
+		case map[string]any, []any:
+			bail(at, "sum of an object or array")
+		}
+		total += toNumber(val{x: it}, at)
+	}
+	if math.IsInf(total, 0) {
+		bail(at, "sum of %v", total)
+	}
+	return val{n: total, lit: litNum}
+}
+
+// sortBy is liquidjs's sort: stable, nil last, otherwise JavaScript's < on all-number or
+// all-string keys (strings without characters outside the BMP, so UTF-8 order is UTF-16 order).
+func sortBy(v val, a []val, at int) []any {
+	var path []string
+	if len(a) > 0 && truthy(a[0], at) {
+		path = argPath(a, 0, at)
+	}
+	items := toArray(v, at)
+	keys := make([]any, len(items))
+	kind := 0 // 1 numbers, 2 strings
+	for i, it := range items {
+		k := it
+		if path != nil {
+			k = lookupPath(it, path, at, "sort by")
+		}
+		keys[i] = k
+		switch x := k.(type) {
+		case nil, undefinedT:
+			continue
+		case float64:
+			kind |= 1
+		case string:
+			kind |= 2
+			for _, c := range x {
+				if c > 0xFFFF {
+					bail(at, "sort of a string outside the BMP")
+				}
+			}
+		default:
+			if _, ok := num(x, at); ok {
+				kind |= 1
+				keys[i], _ = num(x, at)
+				continue
+			}
+			bail(at, "sort of %T", k)
+		}
+	}
+	if kind == 3 {
+		bail(at, "sort of mixed numbers and strings")
+	}
+	idx := make([]int, len(items))
+	for i := range idx {
+		idx[i] = i
+	}
+	slices.SortStableFunc(idx, func(i, j int) int { return orderedCompare(keys[i], keys[j]) })
+	out := make([]any, len(items))
+	for i, k := range idx {
+		out[i] = items[k]
+	}
+	return out
+}
+
+func orderedCompare(a, b any) int {
+	an, bn := a == nil || a == (undefinedT{}), b == nil || b == (undefinedT{})
+	switch {
+	case an && bn:
+		return 0
+	case an:
+		return 1
+	case bn:
+		return -1
+	}
+	if x, ok := a.(float64); ok {
+		return cmpFloat(x, b.(float64))
+	}
+	return strings.Compare(a.(string), b.(string))
 }

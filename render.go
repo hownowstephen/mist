@@ -2,6 +2,7 @@ package mist
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -9,6 +10,9 @@ import (
 )
 
 const maxDepth = 16
+
+// ponytail: a flat budget per render; make it an Engine option if callers need more.
+const maxIterations = 1_000_000
 
 type frameKind uint8
 
@@ -29,7 +33,9 @@ type frame struct {
 	rtrim      bool // for: the for tag's -%}, reapplied on each iteration
 	body       int  // for: offset just past the for tag; capture: where its output starts
 	idx        int
+	rev        bool // for: iterate coll from the end (reversed)
 	name       string
+	collText   string // for: the collection as written, for forloop.name
 	coll       []any
 	subject    val // case: the value each when compares against
 }
@@ -48,6 +54,9 @@ type renderer struct {
 	now       func() time.Time
 	stack     [maxDepth]frame
 	depth     int
+	iters     int  // loop iterations so far, against maxIterations
+	halt      int  // 1 + the stack index of the for a break or continue is unwinding to, or 0
+	haltBreak bool // the halt is a break, not a continue
 
 	// expression cursor: src is tpl[base:base+len(src)]
 	src  string
@@ -72,7 +81,7 @@ func bail(pos int, format string, args ...any) {
 }
 
 func (r *renderer) live() bool {
-	if r.check {
+	if r.check || r.halt != 0 {
 		return false
 	}
 	if r.depth == 0 {
@@ -241,7 +250,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		if f == nil || f.kind >= kFor || f.sawElse {
 			bail(b, "unexpected elsif")
 		}
-		eval := f.parentLive && !f.taken && !r.check
+		eval := f.parentLive && !f.taken && !r.check && r.halt == 0
 		f.active = r.cond(eval)
 		f.taken = f.taken || f.active
 	case "else":
@@ -272,7 +281,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			bail(b, "unexpected when") // liquidjs ignores a when after else
 		}
 		// Every matching when renders, but each stops evaluating at its first matching value.
-		eval, match := f.parentLive && !r.check, false
+		eval, match := f.parentLive && !r.check && r.halt == 0, false
 		for {
 			at := r.pos()
 			v := r.expr(eval && !match, true)
@@ -314,30 +323,56 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			bail(b, "expected: for <ident> in <path>")
 		}
 		r.ws()
-		if !isIdentStart(r.peek()) {
-			bail(r.base+r.p, "for collection must be a variable path")
+		if c := r.peek(); !isIdentStart(c) && c != '(' {
+			bail(r.base+r.p, "for collection must be a variable path or a range")
 		}
-		coll := r.path(live, false)
+		cs := r.p
+		coll := r.expr(live, false).x
+		f := frame{kind: kFor, parentLive: live, body: next, rtrim: rt, name: v, collText: r.src[cs:r.p]}
+		mods := r.forParams(live)
 		r.end()
-		f := frame{kind: kFor, parentLive: live, body: next, rtrim: rt, name: v}
 		if live {
 			switch c := coll.(type) {
 			case []any:
-				f.coll = c
+				f.coll = mods.apply(c)
 			case nil, undefinedT:
 			default:
 				bail(b, "for over non-array %T", coll)
 			}
 		}
+		f.rev = mods.rev
 		f.active = len(f.coll) > 0
 		r.push(f)
+	case "break", "continue":
+		r.end()
+		i := r.depth - 1
+		for i >= 0 && r.stack[i].kind != kFor {
+			i--
+		}
+		if i < 0 {
+			bail(b, "%s outside a for loop", name) // liquidjs stops rendering the template
+		}
+		if r.live() {
+			// Everything up to the loop's endfor is dead; a capture still assigns what it has, as in liquidjs.
+			r.halt, r.haltBreak = i+1, name == "break"
+		}
 	case "endfor":
 		r.end()
 		f := r.top()
 		if f == nil || f.kind != kFor {
 			bail(b, "unexpected endfor")
 		}
+		if r.halt == r.depth {
+			r.halt = 0
+			if r.haltBreak {
+				r.depth--
+				return next, rt
+			}
+		}
 		if f.active && !r.check && f.idx+1 < len(f.coll) {
+			if r.iters++; r.iters > maxIterations {
+				bail(b, "more than %d loop iterations", maxIterations) // ranges make loop counts template-controlled
+			}
 			f.idx++
 			return f.body, f.rtrim
 		}
@@ -406,6 +441,74 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 	}
 	return next, rt
+}
+
+// forParams parses liquidjs's for modifiers. They apply as offset, then limit, then
+// reversed, whatever order they're written in.
+func (r *renderer) forParams(eval bool) (p forMods) {
+	for {
+		r.ws()
+		if r.p == len(r.src) {
+			return p
+		}
+		if r.peek() == ',' {
+			r.p++
+			r.ws()
+		}
+		at := r.pos()
+		name := r.ident()
+		r.ws()
+		if name == "reversed" && !p.rev {
+			if r.peek() == ':' {
+				bail(at, "reversed with a value") // liquidjs reverses whatever the value
+			}
+			p.rev = true
+			continue
+		}
+		if name != "offset" && name != "limit" || r.peek() != ':' || name == "offset" && p.hasOffset || name == "limit" && p.hasLimit {
+			bail(at, "for parameters other than one each of limit, offset and reversed")
+		}
+		r.p++
+		v := r.expr(eval, false)
+		n := 0
+		if eval {
+			f, ok := v.check(at).num(at)
+			if !ok || f != math.Trunc(f) || math.Abs(f) >= maxSafeInt {
+				bail(at, "for %s that isn't an integer", name)
+			}
+			n = int(f)
+		}
+		if name == "offset" {
+			p.offset, p.hasOffset = n, true
+		} else {
+			p.limit, p.hasLimit = n, true
+		}
+	}
+}
+
+type forMods struct {
+	offset, limit       int
+	hasOffset, hasLimit bool
+	rev                 bool
+}
+
+// apply is liquidjs's arr.slice(offset), then .slice(0, limit); reversal happens as the loop iterates.
+func (m forMods) apply(a []any) []any {
+	if m.hasOffset {
+		a = a[sliceIndex(m.offset, len(a)):]
+	}
+	if m.hasLimit {
+		a = a[:sliceIndex(m.limit, len(a))]
+	}
+	return a
+}
+
+// sliceIndex resolves an Array.prototype.slice bound: negative counts from the end.
+func sliceIndex(i, n int) int {
+	if i < 0 {
+		i += n
+	}
+	return max(0, min(i, n))
 }
 
 func (r *renderer) setAssign(name string, x any) {

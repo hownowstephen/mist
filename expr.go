@@ -241,6 +241,8 @@ func (r *renderer) expr(eval, lenient bool) val {
 		return val{s: r.str(), lit: litStr}
 	case c == '-' || c == '+' || isDigit(c):
 		return val{n: r.number(), lit: litNum}
+	case c == '(':
+		return val{x: r.rangeLit(eval)}
 	case isIdentStart(c):
 		save := r.p
 		var v any
@@ -367,7 +369,8 @@ func (r *renderer) number() float64 {
 		for j++; j < len(r.src) && isDigit(r.src[j]); j++ {
 		}
 	}
-	if j == i || j < len(r.src) && (r.src[j] == '.' || isIdentChar(r.src[j]) || r.src[j] >= utf8.RuneSelf && !r.blankAt(j)) {
+	rangeDots := strings.HasPrefix(r.src[j:], "..")
+	if j == i || j < len(r.src) && !rangeDots && (r.src[j] == '.' || isIdentChar(r.src[j]) || r.src[j] >= utf8.RuneSelf && !r.blankAt(j)) {
 		bail(r.base+at, "malformed number literal")
 	}
 	f, err := strconv.ParseFloat(r.src[at:j], 64)
@@ -386,11 +389,13 @@ func (r *renderer) blankAt(i int) bool {
 func (r *renderer) path(eval, lenient bool) any {
 	start := r.p
 	name := r.ident()
-	if name == "forloop" || reserved(name) || literal(name) {
-		bail(r.base+start, "%q is not supported as a variable", name)
-	}
 	var v any
-	if eval {
+	switch {
+	case name == "forloop":
+		v = r.forloop(eval, start)
+	case reserved(name) || literal(name):
+		bail(r.base+start, "%q is not supported as a variable", name)
+	case eval:
 		v = r.root(name, start)
 	}
 	for {
@@ -404,6 +409,9 @@ func (r *renderer) path(eval, lenient bool) any {
 		}
 		switch r.peek() {
 		case '.':
+			if strings.HasPrefix(r.src[r.p:], "..") {
+				return v // a range's dots end the path, as in liquidjs
+			}
 			r.p++
 			r.ws() // liquidjs skips blanks before a property name
 			at := r.pos()
@@ -451,7 +459,7 @@ func (r *renderer) path(eval, lenient bool) any {
 func (r *renderer) root(name string, at int) any {
 	for i := r.depth - 1; i >= 0; i-- {
 		if f := &r.stack[i]; f.kind == kFor && f.active && f.name == name {
-			return f.coll[f.idx]
+			return f.item()
 		}
 	}
 	if v, ok := r.assigns[name]; ok {
@@ -490,6 +498,8 @@ func reserved(name string) bool {
 // magic keys that liquidjs computes when the property is absent.
 func magic(key string) bool { return key == "size" || key == "first" || key == "last" }
 
+// prop is liquidjs's readProperty for a key: own keys first, then the computed size,
+// first and last.
 func prop(v any, key string, at int) any {
 	switch m := v.(type) {
 	case nil, undefinedT:
@@ -498,8 +508,35 @@ func prop(v any, key string, at int) any {
 		if x, ok := m[key]; ok {
 			return x
 		}
-		if magic(key) {
-			bail(at, "%q resolves to a liquidjs built-in", key)
+		if key == "size" {
+			return float64(len(m))
+		}
+		return undefinedT{}
+	case []any:
+		switch key {
+		case "size":
+			return float64(len(m))
+		case "first", "last":
+			if len(m) == 0 {
+				return undefinedT{}
+			}
+			if key == "first" {
+				return m[0]
+			}
+			return m[len(m)-1]
+		case "length":
+			bail(at, "length of an array, an own JavaScript property")
+		}
+		return undefinedT{}
+	case string:
+		switch {
+		case key == "size":
+			if !utf8.ValidString(m) {
+				bail(at, "size of invalid UTF-8")
+			}
+			return float64(len16(m))
+		case key == "length" || strings.Trim(key, "0123456789") == "":
+			bail(at, "property %q of a string, an own JavaScript property", key)
 		}
 		return undefinedT{}
 	}
@@ -895,4 +932,101 @@ func contains(a, b val, at int) bool {
 		needle = "undefined"
 	}
 	return strings.Contains(s, needle)
+}
+
+// rangeLit = "(" ws expr ws ".." ws expr ws ")" with integer bounds, liquidjs's range(+lo, +hi + 1).
+func (r *renderer) rangeLit(eval bool) any {
+	at := r.pos()
+	r.p++
+	lo := r.expr(eval, false)
+	r.ws()
+	if !strings.HasPrefix(r.src[r.p:], "..") {
+		bail(r.pos(), "expected .. in range")
+	}
+	r.p += 2
+	hi := r.expr(eval, false)
+	r.ws()
+	if r.peek() != ')' {
+		bail(r.pos(), "expected ) after range")
+	}
+	r.p++
+	if !eval {
+		return nil
+	}
+	a, b := rangeBound(lo, at), rangeBound(hi, at)
+	if b-a >= maxRange {
+		bail(at, "range of more than %d items", maxRange)
+	}
+	out := make([]any, 0, max(0, b-a+1))
+	for i := a; i <= b; i++ {
+		out = append(out, float64(i))
+	}
+	return out
+}
+
+const maxRange = 100000
+
+// rangeBound is an integer range bound; liquidjs's unary + reads other values differently from toNumber.
+func rangeBound(v val, at int) int {
+	f, ok := v.check(at).num(at)
+	if !ok || f != math.Trunc(f) || math.Abs(f) >= maxSafeInt {
+		bail(at, "range bound that isn't an integer")
+	}
+	return int(f)
+}
+
+func (f *frame) item() any {
+	if f.rev {
+		return f.coll[len(f.coll)-1-f.idx]
+	}
+	return f.coll[f.idx]
+}
+
+// forloop resolves forloop.<prop> against the innermost for, as liquidjs's ForloopDrop.
+func (r *renderer) forloop(eval bool, start int) any {
+	f := r.loop()
+	if f == nil || r.peek() != '.' {
+		bail(r.base+start, "forloop outside a for loop or without a property")
+	}
+	r.p++
+	at := r.pos()
+	p := r.ident()
+	if !eval {
+		return nil
+	}
+	n, i := len(f.coll), f.idx
+	var v any
+	switch p {
+	case "index":
+		v = float64(i + 1)
+	case "index0":
+		v = float64(i)
+	case "rindex":
+		v = float64(n - i)
+	case "rindex0":
+		v = float64(n - i - 1)
+	case "first":
+		v = i == 0
+	case "last":
+		v = i == n-1
+	case "length":
+		v = float64(n)
+	case "name":
+		v = f.name + "-" + f.collText
+	case "":
+		bail(at, "expected property name")
+	default:
+		v = undefinedT{} // liquidjs 10.26 has no parentloop or other properties
+	}
+	return v
+}
+
+// loop is the innermost for frame, or nil.
+func (r *renderer) loop() *frame {
+	for i := r.depth - 1; i >= 0; i-- {
+		if r.stack[i].kind == kFor {
+			return &r.stack[i]
+		}
+	}
+	return nil
 }
