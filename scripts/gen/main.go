@@ -33,6 +33,9 @@ func (g *gen) ws() string                 { return g.pick(blanks) }
 func (g *gen) pickF(xs []float64) float64 { return xs[g.r.IntN(len(xs))] }
 
 func (g *gen) path() string {
+	if len(g.loops) > 0 && g.r.IntN(8) == 0 {
+		return "forloop." + g.pick([]string{"index", "index0", "rindex", "rindex0", "first", "last", "length", "name", "parentloop"})
+	}
 	var p string
 	if len(g.loops) > 0 && g.r.IntN(2) == 0 {
 		p = g.pick(g.loops)
@@ -79,7 +82,9 @@ func (g *gen) filters() string {
 				f = " | strip_html"
 				continue
 			}
-			f += " | " + g.pick([]string{"where: '" + g.pick(props) + "'", "where: '" + g.pick(props) + "', " + g.expr(), "join", "join: " + g.expr()})
+			f += " | " + g.pick([]string{"where: '" + g.pick(props) + "'", "where: '" + g.pick(props) + "', " + g.expr(), "join", "join: " + g.expr(),
+				"map: '" + g.pick(props) + "'", "sum", "sum: '" + g.pick(props) + "'", "sort", "sort: '" + g.pick(props) + "'",
+				"find: '" + g.pick(props) + "'", "find: '" + g.pick(props) + "', " + g.expr(), "push: " + g.expr(), "reverse"})
 		case 6, 7:
 			f += " | " + g.pick([]string{"downcase", "upcase", "strip", "lstrip", "rstrip", "escape", "escape_once", "url_encode", "json", "first", "last",
 				"strip_newlines", "newline_to_br", "size", "abs", "ceil", "floor", "round"})
@@ -162,9 +167,26 @@ func (g *gen) block(depth int) {
 			g.b.WriteString(g.open("end" + tag))
 		case k == 6 && depth < 4:
 			v := g.pick([]string{"i", "item", "x"})
-			g.b.WriteString(g.open("for " + v + " in " + g.path()))
+			coll := g.path()
+			if g.r.IntN(4) == 0 {
+				// Literal bounds only: data such as 1e21 would make liquidjs build a vast array.
+				coll = "(" + g.pick([]string{"1", "0", "-2", "3"}) + ".." + g.pick([]string{"3", "1", "5", "0"}) + ")"
+			}
+			for _, m := range []string{"limit", "offset"} {
+				if g.r.IntN(4) == 0 {
+					coll += " " + m + ":" + g.pick([]string{"2", " 1", "-1", "0", "9", "n"})
+				}
+			}
+			if g.r.IntN(4) == 0 {
+				coll += " reversed"
+			}
+			g.b.WriteString(g.open("for " + v + " in " + coll))
 			g.loops = append(g.loops, v)
 			g.block(depth + 1)
+			if g.r.IntN(3) == 0 {
+				g.b.WriteString(g.open("if "+g.cond()) + g.open(g.pick([]string{"break", "continue"})) + g.open("endif"))
+				g.block(depth + 1)
+			}
 			g.loops = g.loops[:len(g.loops)-1]
 			g.b.WriteString(g.open("endfor"))
 		case k == 7 && g.r.IntN(3) == 0 && depth < 4:

@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.11.0
+# mist Liquid subset — v0.12.0
 
-_Last updated 2026-10-03. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-04. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -20,7 +20,7 @@ tag      = "{%" [ "-" ] ws tagbody ws [ "-" ] "%}" ;
 
 tagbody  = "if" fcond | "elsif" fcond | "else" | "endif"
          | "unless" fcond | "endunless"
-         | "for" ident "in" path | "endfor"
+         | "for" ident "in" ( path | range ) { [ "," ] forparam } | "endfor" | "break" | "continue"
          | "case" expr { filter } | "when" expr { ( "," | "or" ) expr } | "endcase"
          | "assign" ident "=" expr { filter }
          | "capture" ( ident | string ) | "endcapture"
@@ -33,8 +33,10 @@ fcond    = cond { filter } ;                            (* filters apply to the 
 cond     = cmp [ ( "and" | "or" ) cond ] ;               (* right to left: a and b or c is a and (b or c) *)
 cmp      = expr [ op expr ] ;
 op       = "==" | "!=" | "<=" | ">=" | "<" | ">" | "contains" ;   (* contains: not followed by an ident character *)
-expr     = path | string | number | "true" | "false" | "nil" | "null" | "blank" | "empty" ;   (* blank, empty: only as operands of == or != *)
-path     = ident { "." ws word | "[" ws expr ws "]" } ;
+expr     = path | string | number | range | "true" | "false" | "nil" | "null" | "blank" | "empty" ;   (* blank, empty: only as operands of == or != *)
+range    = "(" ws expr ws ".." ws expr ws ")" ;
+forparam = ( "limit" | "offset" ) ws ":" ws expr | "reversed" ;   (* each at most once *)
+path     = ident { "." ws word | "[" ws expr ws "]" } ;   (* ".." ends a path, for ranges; forloop must be followed by "." word *)
 ident    = ( letter | "_" ) { letter | digit | "_" | "-" | "?" } ;  (* ASCII only *)
 word     = ( letter | digit | "_" | "-" | "?" ) { letter | digit | "_" | "-" | "?" } ;
 string   = "'" { char | escape } "'" | '"' { char | escape } '"' ;  (* char: any but the quote or \ *)
@@ -44,7 +46,7 @@ ws       = { " " | "\t" | "\n" | "\v" | "\f" | "\r" | U+00A0 } ;
 ```
 
 Structural rules the EBNF doesn't express:
-- Blocks must nest and close: `if…endif` and `unless…endunless`, each with optional `elsif`s and at most one final `else`, `case…endcase` with any number of `when`s and at most one final `else`, `for…endfor` with no `else`, and `capture…endcapture`. The maximum nesting depth is 16.
+- Blocks must nest and close: `if…endif` and `unless…endunless`, each with optional `elsif`s and at most one final `else`, `case…endcase` with any number of `when`s and at most one final `else`, `for…endfor` with no `else`, and `capture…endcapture`. `break`, `continue` and `forloop` must be inside a `for`. The maximum nesting depth is 16.
 - `comment … endcomment`: the body is tokenized but ignored. A nested `comment` or `raw`, or a tag with no name, bails.
 - `contains`, `and`, `or` and `not` can't be variable names at the root of a path; liquidjs parses them as operators. They are fine as properties (`a.and`). Literal keywords can't start a path either (`for x in nil` bails).
 - `raw … endraw`: the body is emitted verbatim. Trim markers on either tag bail.
@@ -70,7 +72,11 @@ Structural rules the EBNF doesn't express:
 | `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
 | `capture` | Renders its body instead of printing it, and assigns the result as a string, exactly as `assign` would (so it replaces data and earlier assigns of the same name). A quoted name is stored as written. In a dead branch nothing is rendered or assigned. |
 | `case` / `when` | The `case` value (with any filters) and each `when` value are evaluated as conditions are: undefined variables are lenient under strict. Every `when` with a value `==` to the `case` value renders, in order, not just the first; a `when` stops evaluating its values at the first match. `else` renders only when no `when` matched. The body between `case` and the first `when` is parsed but never rendered. A `nil` case value is null, so it doesn't match an undefined `when` value. |
-| `for` | Arrays only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. |
+| `for` | Arrays and ranges only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. `offset: n`, `limit: n` and `reversed` apply in that order whatever order they're written in, as `slice(n)`, `slice(0, n)` and a reversal; `n` must be an integer, and a negative one counts from the end. A render runs at most 1,000,000 loop iterations; past that it bails. |
+| `break` / `continue` | End the innermost `for`, or move it to its next item. The rest of its body is skipped, including inside nested `if`, `case` and `capture` blocks; a `capture` still assigns what it rendered before the `break`. |
+| `forloop` | Inside a `for`, `forloop.index`, `index0`, `rindex`, `rindex0`, `first`, `last`, `length` (after the modifiers) and `name` (`variable-collection` as written) describe the innermost loop. Any other property, including `parentloop`, is undefined, as in liquidjs 10.26. |
+| Ranges | `(a..b)` with integer bounds is the array `a`, `a+1`, … `b` (empty when `b < a`), at most 100,000 items. |
+| `.size` / `.first` / `.last` | An object's own key wins. Otherwise `size` is an array's length, a string's UTF-16 length or an object's key count, and `first`/`last` are an array's first and last items; on strings and objects they're undefined. Other keys of arrays and strings are undefined. |
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
 | `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank`, `empty` or `nil` bails, because liquidjs is asymmetric there. |
 | `== empty` / `!= empty` | Only `""`, `[]` and `{}` are empty; whitespace, nil, undefined, `0` and `false` aren't. Works on either side. `empty` against `blank`, `empty` or `nil` bails. |
@@ -83,6 +89,7 @@ Structural rules the EBNF doesn't express:
 | `truncate: n, e` / `truncatewords: n, e` | Lengths are UTF-16 units, `n` defaults to 50 (or 15 words) and `e` to `...`; an undefined argument takes the default and a nil one stringifies to `""`. `truncate` returns its input unchanged (even a number) when it fits in `n`, else the first `n − len(e)` units plus `e`. `truncatewords` splits on runs of JavaScript whitespace (leading or trailing whitespace makes an empty first or last word), keeps `max(n, 1)` words joined by single spaces, and appends `e` whenever there are at least `n` words, even exactly `n`. |
 | `split: s` / `slice: i, n` / `first` / `last` | `split` returns an array, splitting UTF-16 units for an empty separator, and drops trailing empty strings. `slice` takes a string (in UTF-16 units) or an array: a negative `i` counts from the end, `n` defaults to 1, and nil gives `[]`. `first` is the first element or unit, or `""` for anything else; `last` is the last element or unit. Arrays can't be printed, so these results must feed a `for`, an assign or another filter. |
 | `join: s` / `size` / `where: p, v` | `join` joins an array's elements with `s` (default `" "`, also for nil) as JavaScript's `join` does: nil elements are `""`. A non-array is one element, and nil is `""`. `size` is the UTF-16 length of a string or the length of an array; anything else, including an object, is 0. `where` keeps the array's items whose dotted property path `p` is truthy, or `==` to `v` when given. A single object is a one-item array and nil is `[]`. |
+| `map: p` / `sum` / `sort` / `find: p, v` / `push: x` / `reverse` | Arrays as `toArray` sees them: nil is `[]` and any other non-array is one item. `map` takes each item's dotted property path `p` (undefined where missing). `sum` adds `Number` of each item, or of its `p`, counting `NaN` as 0. `sort` is stable, puts nil and undefined last and orders all-number or all-string keys (each item, or its `p`) by JavaScript's `<`. `find` is the first item `where` would keep, or undefined. `push` appends a copy; `reverse` reverses a copy. |
 | `json` | `JSON.stringify` of strings, numbers, booleans, nil and arrays of them, with no spacing. Undefined, including what `default` returns without an argument, prints nothing. |
 | `plus` `minus` `times` `divided_by` `modulo` `at_least` | Exactly one argument. Both operands go through liquidjs's `toNumber` (`+x \|\| 0`): numbers as is, booleans as 1 and 0, nil and undefined as 0, and strings as JavaScript's `Number` reads them after trimming whitespace: decimals, unsigned `0x`/`0o`/`0b` integers, and 0 for anything else. `divided_by` is float division, as in liquidjs (not Liquid's integer division); `modulo` is JavaScript's `%`; `at_least` is `Math.max`. `abs`, `ceil` and `floor` take no argument and are JavaScript's `Math` functions on the same `toNumber`. `round: d` rounds half away from zero at `d` decimal places (default 0). |
 | `date: format, tz` | Input: nil passes through (`""`); `'now'` and `'today'` are both the current instant (`Engine.Now`, default `time.Now`); numbers and all-digit strings are epoch seconds; `""` and numbers outside JavaScript's Date range pass through unchanged; other strings must be ISO 8601 (below). A nil or missing format is `%A, %B %-e, %Y at %-l:%M %P %z`; other formats are stringified. Output is liquidjs's strftime: directives match `%[-_0^#:]*[0-9]*[EO]?.`, unknown ones print as written, and the flags pad without (`-`), with spaces (`_`) or zeros (`0`), upcase (`^`), swap case (`#`) or add a colon to `%z` (`:`). `%N` is the milliseconds right-padded with zeros, because JavaScript dates have no finer precision. |
@@ -100,8 +107,10 @@ Structural rules the EBNF doesn't express:
 Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - Output of an array or an object, or of the nil literal coming out of a filter (`{{ x | default: nil }}` with `x` empty).
 - `capitalize` of an object, or of a string whose case mapping Go can't reproduce exactly: full-Unicode expansions such as `ß` → `SS` or polytonic Greek as the first character, and `İ`, `Σ` (final-sigma depends on position) or characters newer than Go's Unicode tables in the rest.
-- `.name` or `["key"]` on anything but an object or array, `[n]` on anything but an array or object, `.size`/`.first`/`.last` style keys on arrays, and `[k]` whose key evaluates to nil, a bool, an object or an array (or, in lax mode, is undefined).
-- `size`, `first` or `last` when the key is absent, because liquidjs computes them. This includes at the root.
+- `.name` or `["key"]` on anything but an object, array or string, `[n]` on anything but an array or object, `length` of an array or string and digit keys of a string (JavaScript own properties), and `[k]` whose key evaluates to nil, a bool, an object or an array (or, in lax mode, is undefined).
+- `size`, `first` or `last` as a root variable that isn't defined, because liquidjs computes them from the scope.
+- `for` over anything but an array, a range or nil; `limit`/`offset` that aren't integers; range bounds that aren't integers or span more than 100,000 items; more than 1,000,000 loop iterations in one render.
+- `map`, `sum`, `sort` and `find` on an object, or with a path reaching an item that isn't an object; `sum` of an object or array item; `sort` of booleans, arrays or objects, of mixed numbers and strings, or of strings outside the BMP; `push` of nil or undefined.
 - `contains` with an array or object on the right.
 - `==` with an array or object operand; ordering across types or with non-ASCII strings.
 - `for` over anything but an array or nil.
@@ -119,7 +128,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); named filter arguments other than `allow_false`; `forloop`, `for` parameters (`limit`, `offset`, `reversed`), `for…else`, ranges, `cycle`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, a string escape of half a surrogate pair, and any tag not in the grammar.
+Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); named filter arguments other than `allow_false`; `for…else`, `for` parameters other than `limit`, `offset` and `reversed` (and `reversed` with a value), `break`/`continue`/`forloop` outside a `for`, `cycle`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, a string escape of half a surrogate pair, and any tag not in the grammar.
 
 ## Custom tags
 

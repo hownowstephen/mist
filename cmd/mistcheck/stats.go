@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"unicode"
 
 	"github.com/hownowstephen/mist"
 )
@@ -103,22 +102,6 @@ func classify(eng mist.Engine, tok string, isTag bool, msg string, unknown map[s
 		for _, s := range segs[1:] {
 			if m := filterName.FindStringSubmatch(s); m != nil && !supportedFilter(eng, m[1]) {
 				kinds = append(kinds, "filter:"+m[1])
-			}
-		}
-	}
-	words := strings.FieldsFunc(code, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_.-", r)
-	})
-	if slices.ContainsFunc(words, func(w string) bool { return strings.HasPrefix(w, "forloop") }) {
-		kinds = append(kinds, "forloop")
-	}
-	if name == "for" {
-		if strings.Contains(code, "(") {
-			kinds = append(kinds, "for:range")
-		}
-		for _, p := range []string{"limit", "offset", "reversed"} {
-			if slices.Contains(words, p) || strings.Contains(code, p+":") {
-				kinds = append(kinds, "for:"+p)
 			}
 		}
 	}
