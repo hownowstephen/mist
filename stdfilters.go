@@ -717,7 +717,8 @@ func join(v val, a []val, at int) string {
 	if !ok || v.lit != 0 {
 		return toStr(v, at)
 	}
-	var dst []byte
+	var buf [128]byte
+	dst := buf[:0]
 	for i, e := range arr {
 		if i > 0 {
 			dst = append(dst, sep...)
@@ -846,17 +847,17 @@ func toArray(v val, at int) []any {
 }
 
 // argPath is argument i as a dotted property path.
-func argPath(a []val, i, at int) []string {
+func argPath(a []val, i, at int) string {
 	s, ok := a[i].str()
 	if !ok || !propPath(s) {
 		bail(at, "property argument that isn't a plain path")
 	}
-	return strings.Split(s, ".")
+	return s
 }
 
 // lookupPath reads a dotted path off an item as liquidjs's _getFromScope does, without strict errors.
-func lookupPath(item any, path []string, at int, what string) any {
-	for _, k := range path {
+func lookupPath(item any, path string, at int, what string) any {
+	for k := range strings.SplitSeq(path, ".") {
 		if _, isObj := item.(map[string]any); !isObj {
 			bail(at, "%s of an item that isn't an object", what)
 		}
@@ -866,7 +867,7 @@ func lookupPath(item any, path []string, at int, what string) any {
 }
 
 // mapProp is liquidjs's map: each item's property, undefined where it's missing.
-func mapProp(v val, path []string, at int) []any {
+func mapProp(v val, path string, at int) []any {
 	items := toArray(v, at)
 	out := make([]any, len(items))
 	for i, it := range items {
@@ -877,13 +878,13 @@ func mapProp(v val, path []string, at int) []any {
 
 // sum is liquidjs's sum: Number of each item (or its property), NaN counting as 0.
 func sum(v val, a []val, at int) val {
-	var path []string
+	var path string
 	if len(a) > 0 && truthy(a[0], at) {
 		path = argPath(a, 0, at)
 	}
 	total := 0.0
 	for _, it := range toArray(v, at) {
-		if path != nil {
+		if path != "" {
 			it = lookupPath(it, path, at, "sum")
 		}
 		switch it.(type) {
@@ -901,22 +902,21 @@ func sum(v val, a []val, at int) val {
 // sortBy is liquidjs's sort: stable, nil last, otherwise JavaScript's < on all-number or
 // all-string keys (strings without characters outside the BMP, so UTF-8 order is UTF-16 order).
 func sortBy(v val, a []val, at int) []any {
-	var path []string
+	var path string
 	if len(a) > 0 && truthy(a[0], at) {
 		path = argPath(a, 0, at)
 	}
 	items := toArray(v, at)
-	keys := make([]any, len(items))
+	type pair struct{ item, key any }
+	pairs := make([]pair, len(items))
 	kind := 0 // 1 numbers, 2 strings
 	for i, it := range items {
 		k := it
-		if path != nil {
+		if path != "" {
 			k = lookupPath(it, path, at, "sort by")
 		}
-		keys[i] = k
 		switch x := k.(type) {
 		case nil, undefinedT:
-			continue
 		case float64:
 			kind |= 1
 		case string:
@@ -927,25 +927,22 @@ func sortBy(v val, a []val, at int) []any {
 				}
 			}
 		default:
-			if _, ok := num(x, at); ok {
-				kind |= 1
-				keys[i], _ = num(x, at)
-				continue
+			f, ok := num(x, at)
+			if !ok {
+				bail(at, "sort of %T", k)
 			}
-			bail(at, "sort of %T", k)
+			kind |= 1
+			k = f
 		}
+		pairs[i] = pair{it, k}
 	}
 	if kind == 3 {
 		bail(at, "sort of mixed numbers and strings")
 	}
-	idx := make([]int, len(items))
-	for i := range idx {
-		idx[i] = i
-	}
-	slices.SortStableFunc(idx, func(i, j int) int { return orderedCompare(keys[i], keys[j]) })
-	out := make([]any, len(items))
-	for i, k := range idx {
-		out[i] = items[k]
+	slices.SortStableFunc(pairs, func(a, b pair) int { return orderedCompare(a.key, b.key) })
+	out := make([]any, len(pairs))
+	for i, p := range pairs {
+		out[i] = p.item
 	}
 	return out
 }
