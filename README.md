@@ -22,7 +22,7 @@ case errors.Is(err, mist.ErrUndefined):
 
 ## Custom tags and filters
 
-Register inline tags and filters on an `Engine`; the package-level functions use an `Engine` with none. Registered filters override built-in ones.
+Register inline tags and filters on an `Engine`; the package-level functions use an `Engine` with none. Registered filters override built-in ones. `PassUnknownFilters` passes filters liquidjs doesn't define through unchanged, as liquidjs does by default; leave it off unless `Filters` covers every filter your full engine has.
 
 ```go
 e := mist.Engine{Tags: map[string]mist.TagFunc{
@@ -63,7 +63,7 @@ Check whether templates are in the subset:
 go run github.com/hownowstephen/mist/cmd/mistcheck@latest template.liquid
 ```
 
-`-tags a,b` and `-filters a,b` treat those names as registered custom tags and filters. `-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks, and which sets of blockers most often appear together. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
+`-tags a,b` and `-filters a,b` treat those names as registered custom tags and filters, and `-pass-unknown-filters` sets `PassUnknownFilters`. `-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks, and which sets of blockers most often appear together. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
 
 ```bash
 mistcheck -stats templates.jsonl

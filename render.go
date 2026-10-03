@@ -48,22 +48,23 @@ type frame struct {
 func (f *frame) subject() val { return val{x: f.x, s: f.name, n: f.n, lit: f.lit} }
 
 type renderer struct {
-	tpl       string
-	out       []byte
-	vars      map[string]any
-	assigns   map[string]any
-	strict    bool
-	check     bool         // parse every branch, evaluate nothing
-	undef     pendingUndef // strict undefined, raised once the current tag parses cleanly
-	tags      map[string]TagFunc
-	filterFns map[string]FilterFunc
-	dialect   *Dialect
-	now       func() time.Time
-	stack     [maxDepth]frame
-	depth     int
-	iters     int  // loop iterations so far, against maxIterations
-	halt      int  // 1 + the stack index of the for a break or continue is unwinding to, or 0
-	haltBreak bool // the halt is a break, not a continue
+	tpl         string
+	out         []byte
+	vars        map[string]any
+	assigns     map[string]any
+	strict      bool
+	check       bool         // parse every branch, evaluate nothing
+	undef       pendingUndef // strict undefined, raised once the current tag parses cleanly
+	tags        map[string]TagFunc
+	filterFns   map[string]FilterFunc
+	passUnknown bool // Engine.PassUnknownFilters
+	dialect     *Dialect
+	now         func() time.Time
+	stack       [maxDepth]frame
+	depth       int
+	iters       int  // loop iterations so far, against maxIterations
+	halt        int  // 1 + the stack index of the for a break or continue is unwinding to, or 0
+	haltBreak   bool // the halt is a break, not a continue
 
 	// expression cursor: src is tpl[base:base+len(src)]
 	src  string

@@ -84,7 +84,8 @@ func (g *gen) filters() string {
 			}
 			f += " | " + g.pick([]string{"where: '" + g.pick(props) + "'", "where: '" + g.pick(props) + "', " + g.expr(), "join", "join: " + g.expr(),
 				"map: '" + g.pick(props) + "'", "sum", "sum: '" + g.pick(props) + "'", "sort", "sort: '" + g.pick(props) + "'",
-				"find: '" + g.pick(props) + "'", "find: '" + g.pick(props) + "', " + g.expr(), "push: " + g.expr(), "reverse"})
+				"find: '" + g.pick(props) + "'", "find: '" + g.pick(props) + "', " + g.expr(), "push: " + g.expr(), "reverse",
+				"nope", "nope: " + g.expr(), "my_filter: " + g.expr() + ", " + g.expr()})
 		case 6, 7:
 			f += " | " + g.pick([]string{"downcase", "upcase", "strip", "lstrip", "rstrip", "escape", "escape_once", "url_encode", "json", "first", "last",
 				"strip_newlines", "newline_to_br", "size", "abs", "ceil", "floor", "round"})

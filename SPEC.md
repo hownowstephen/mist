@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.12.0
+# mist Liquid subset — v0.13.x
 
-_Last updated 2026-10-04. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-03. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -81,7 +81,7 @@ Structural rules the EBNF doesn't express:
 | `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank`, `empty` or `nil` bails, because liquidjs is asymmetric there. |
 | `== empty` / `!= empty` | Only `""`, `[]` and `{}` are empty; whitespace, nil, undefined, `0` and `false` aren't. Works on either side. `empty` against `blank`, `empty` or `nil` bails. |
 | `contains` | Same precedence as `==`. An array contains an element equal by JavaScript's `===` (same type and value; arrays and objects are never equal to a scalar). A string contains the right side's string form, as `indexOf` coerces it: numbers as JavaScript prints them, booleans as `true`/`false`, nil as `null` and undefined (lax) as `undefined`; the empty string is always contained. Anything else contains nothing. |
-| Filters | Applied left to right in `{{ }}` and `assign`. Built in: `default`, `capitalize`, `date` and the string, array and math filters below. Registered filters (`Engine.Filters`) override built-ins of the same name. Any other filter name bails, even in a dead branch. Filter arguments are never lenient: under strict an undefined argument is `ErrUndefined`. |
+| Filters | Applied left to right in `{{ }}` and `assign`. Built in: `default`, `capitalize`, `date` and the string, array and math filters below. Registered filters (`Engine.Filters`) override built-ins of the same name. Any other filter name bails, even in a dead branch, unless `Engine.PassUnknownFilters` is set (below). Filter arguments are never lenient: under strict an undefined argument is `ErrUndefined`. |
 | Leading `default` | When `default` is the first filter, an undefined input is lenient under strict (liquidjs's `lenientIf`). Later in a chain it isn't: `{{ x \| capitalize \| default: 'd' }}` is `ErrUndefined` for an undefined `x`. |
 | `default: d` | Replaces nil, undefined, `false`, `""` and `[]` with `d` (nil with no argument). Whitespace-only strings, `0` and `{}` are kept. `allow_false: true` keeps `false`. |
 | `capitalize` | Stringifies the input (nil → `""`, booleans → `true`/`false`, numbers as JavaScript prints them, arrays joined), then upper-cases the first character and lower-cases the rest, exactly as JavaScript's `toUpperCase`/`toLowerCase` do. A first character outside the BMP is left as is (`charAt(0)` sees half a surrogate pair). |
@@ -128,7 +128,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters other than the built-ins above and registered ones; built-ins with more arguments than listed (or none where one is required); named filter arguments other than `allow_false`; `for…else`, `for` parameters other than `limit`, `offset` and `reversed` (and `reversed` with a value), `break`/`continue`/`forloop` outside a `for`, `cycle`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, a string escape of half a surrogate pair, and any tag not in the grammar.
+Filters other than the built-ins above and registered ones (with `Engine.PassUnknownFilters`, only those liquidjs defines); built-ins with more arguments than listed (or none where one is required); named filter arguments other than `allow_false`; `for…else`, `for` parameters other than `limit`, `offset` and `reversed` (and `reversed` with a value), `break`/`continue`/`forloop` outside a `for`, `cycle`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `increment`/`decrement`, `include`/`render`, `liquid`, `echo`, inline `#` comments, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, a string escape of half a surrogate pair, and any tag not in the grammar.
 
 ## Custom tags
 
@@ -147,6 +147,7 @@ Filters other than the built-ins above and registered ones; built-ins with more 
 - Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Other errors stop rendering and are returned wrapped.
 - A `nil` `FilterFunc` is accepted by `Check` and bails at render time.
 - The parity contract doesn't cover registered filters.
+- `Engine.PassUnknownFilters` matches liquidjs's `strictFilters: false`, its default: a filter that liquidjs 10.26 doesn't define and that isn't registered returns its input unchanged. Its arguments are still evaluated, so under strict an undefined argument is `ErrUndefined`, and the leading-`default` leniency doesn't apply to it. Filters liquidjs does define but mist doesn't implement (`uniq`, `compact`, …) still bail. Off by default, because an unknown name usually means a filter the full engine has and mist doesn't; set it only when `Filters` covers every filter the full engine defines.
 
 ## Dialects
 

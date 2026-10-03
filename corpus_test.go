@@ -30,8 +30,9 @@ type oracle struct {
 	Err string  `json:"err"`
 }
 
-// corpusEngine uses oracle.mjs's fixed Date.now.
-var corpusEngine = Engine{Now: func() time.Time { return time.UnixMilli(1700000000123) }}
+// corpusEngine uses oracle.mjs's fixed Date.now, and passes unknown filters through
+// as oracle.mjs's liquidjs does by default.
+var corpusEngine = Engine{Now: func() time.Time { return time.UnixMilli(1700000000123) }, PassUnknownFilters: true}
 
 var bailNoise = regexp.MustCompile(`"[^"]*"|\d+`)
 
