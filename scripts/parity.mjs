@@ -28,5 +28,12 @@ for (const c of cases) {
     console.log(`FAIL ${c.name}: want ${c.err ?? JSON.stringify(c.out)}, liquidjs gave ${err ? 'ERR ' + err : JSON.stringify(got)}`);
   }
 }
+// liquidjs_filters.go must name exactly the filters this liquidjs defines.
+const listed = [...readFileSync(new URL('../liquidjs_filters.go', import.meta.url), 'utf8').matchAll(/^\t"([^"]+)": +true,$/gm)].map((m) => m[1]);
+const defined = Object.keys(engine.filters).sort();
+if (listed.join(' ') !== defined.join(' ')) {
+  failed++;
+  console.log(`FAIL liquidjs_filters.go lists ${listed.length} filters; liquidjs defines ${defined.length}: ${defined.join(' ')}`);
+}
 console.log(failed ? `${failed} parity failures` : `all ${cases.length} cases agree with liquidjs`);
 process.exit(failed ? 1 : 0);

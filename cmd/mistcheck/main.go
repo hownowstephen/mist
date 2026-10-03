@@ -1,6 +1,6 @@
 // Command mistcheck reports whether Liquid templates are inside the mist subset.
 //
-//	mistcheck [-stats] [-tags a,b] [-filters a,b] FILE...   (reads stdin when no files are given)
+//	mistcheck [-stats] [-tags a,b] [-filters a,b] [-pass-unknown-filters] FILE...   (reads stdin when no files are given)
 //
 // A .jsonl file holds one template per line as a JSON string. By default each
 // out-of-spec template's first unsupported construct is printed and the exit status
@@ -29,8 +29,9 @@ func main() {
 	stats := flag.Bool("stats", false, "summarize every unsupported construct across templates")
 	tags := flag.String("tags", "", "comma-separated custom tag names to treat as registered")
 	filters := flag.String("filters", "", "comma-separated custom filter names to treat as registered")
+	passUnknown := flag.Bool("pass-unknown-filters", false, "pass filters liquidjs doesn't define through, as liquidjs's strictFilters: false does")
 	flag.Parse()
-	var e mist.Engine
+	e := mist.Engine{PassUnknownFilters: *passUnknown}
 	if *tags != "" {
 		e.Tags = map[string]mist.TagFunc{}
 		for name := range strings.SplitSeq(*tags, ",") {

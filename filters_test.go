@@ -117,3 +117,40 @@ func TestStripHTMLBailsWhereLiquidJSHangs(t *testing.T) {
 		}
 	}
 }
+
+// Outputs as liquidjs gives them with strictFilters off, its default.
+func TestPassUnknownFilters(t *testing.T) {
+	e := Engine{PassUnknownFilters: true}
+	vars := map[string]any{"x": "a", "xs": []any{1.0, 2.0}}
+	for tpl, want := range map[string]string{
+		`{{ x | nope }}`:                             "a",
+		`{{ x | nope: 1, "b" }}`:                     "a",
+		`{{ x | nope | upcase }}`:                    "A",
+		`{{ undef | default: "d" | nope }}`:          "d",
+		`{% if x | nope %}y{% endif %}`:              "y",
+		`{{ xs | nope | size }}`:                     "2",
+		`{% assign y = x | nope %}{{ y }}`:           "a",
+		`{% if false %}{{ x | nope: 1 }}{% endif %}`: "",
+	} {
+		if out, err := e.Render(tpl, vars, true); err != nil || out != want {
+			t.Errorf("%s: got %q, %v; want %q", tpl, out, err, want)
+		}
+	}
+	for _, tpl := range []string{`{{ x | nope: undef }}`, `{{ undef | nope }}`, `{{ undef | nope | default: "d" }}`} {
+		if _, err := e.Render(tpl, vars, true); !errors.Is(err, ErrUndefined) {
+			t.Errorf("%s: got %v; want ErrUndefined (liquidjs evaluates the arguments)", tpl, err)
+		}
+	}
+	// liquidjs defines these, so passing them through would be wrong.
+	for _, tpl := range []string{`{{ xs | uniq }}`, `{{ xs | compact }}`, `{{ x | default: 1, 2 }}`} {
+		if _, err := e.Render(tpl, vars, false); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
+		}
+	}
+	if err := e.Check(`{{ x | nope }}`); err != nil {
+		t.Errorf("Check: %v", err)
+	}
+	if _, err := Render(`{{ x | nope }}`, vars, false); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("without the option: got %v; want ErrUnsupported", err)
+	}
+}

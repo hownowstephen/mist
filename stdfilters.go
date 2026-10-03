@@ -39,6 +39,11 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		ok = arity(1, 2)
 	case "slice":
 		ok = arity(1, 2)
+	case "default": // only reaches here with more arguments than it takes
+	default:
+		if r.passUnknown && !liquidjsFilters[name] {
+			return v // liquidjs's strictFilters: false; the arguments were evaluated above
+		}
 	}
 	if !ok {
 		bail(at, "unsupported filter %q", name)

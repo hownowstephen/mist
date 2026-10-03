@@ -41,6 +41,11 @@ type Engine struct {
 	Dialect *Dialect
 	// Now is the clock for the date filter's 'now' and 'today'. nil means time.Now.
 	Now func() time.Time
+	// PassUnknownFilters passes the input of a filter that is neither built in nor in
+	// Filters through unchanged, after evaluating its arguments, as liquidjs does with
+	// strictFilters off (its default). Leave it false, so such templates bail, unless
+	// Filters already covers every filter the full engine defines.
+	PassUnknownFilters bool
 }
 
 // TagFunc appends a custom tag's output to dst. Returning an error that wraps
@@ -109,7 +114,7 @@ func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, er
 // Append is the package-level Append with e's custom tags.
 func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
 	defer recoverBail(&err)
-	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, now: e.Now}
+	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, now: e.Now, passUnknown: e.PassUnknownFilters}
 	r.run()
 	return r.out, nil
 }
@@ -117,7 +122,7 @@ func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool)
 // Check is the package-level Check, also accepting e's custom tags.
 func (e Engine) Check(tpl string) (err error) {
 	defer recoverBail(&err)
-	r := renderer{tpl: tpl, check: true, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect}
+	r := renderer{tpl: tpl, check: true, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, passUnknown: e.PassUnknownFilters}
 	r.run()
 	return nil
 }
