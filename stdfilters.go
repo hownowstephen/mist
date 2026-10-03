@@ -1,6 +1,10 @@
 package mist
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"html"
 	"math"
@@ -25,13 +29,19 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		ok = arity(1, 1)
 	case "sum", "sort":
 		ok = arity(0, 1)
-	case "find":
+	case "find", "find_index", "has", "reject":
 		ok = arity(1, 2)
+	case "compact", "uniq", "url_decode", "base64_encode", "base64_decode":
+		ok = arity(0, 0)
+	case "concat", "sort_natural", "hmac_sha256", "remove_last":
+		ok = arity(0, 1)
+	case "replace_last":
+		ok = arity(0, 2)
 	case "date", "replace", "replace_first", "truncate", "truncatewords":
 		ok = arity(0, 2)
 	case "remove", "remove_first", "strip", "lstrip", "rstrip", "split":
 		ok = arity(0, 1)
-	case "append", "prepend", "plus", "minus", "times", "divided_by", "modulo", "at_least":
+	case "append", "prepend", "plus", "minus", "times", "divided_by", "modulo", "at_least", "at_most":
 		ok = arity(1, 1)
 	case "join", "round":
 		ok = arity(0, 1)
@@ -109,13 +119,58 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		return strVal(join(v, a, at))
 	case "size":
 		return size(v, at)
-	case "where":
-		return val{x: r.matching(v, a, at, false)}
-	case "find":
-		if m := r.matching(v, a, at, true); len(m) > 0 {
+	case "where", "reject":
+		m, _ := r.matching(v, a, at, false, name == "where")
+		return val{x: m}
+	case "find", "find_index", "has":
+		m, i := r.matching(v, a, at, true, true)
+		switch {
+		case name == "has":
+			return val{x: len(m) > 0}
+		case len(m) == 0:
+			return val{x: undefinedT{}}
+		case name == "find":
 			return val{x: m[0]}
 		}
-		return val{x: undefinedT{}}
+		return val{x: boxInt(i)}
+	case "compact":
+		out := []any{}
+		for _, it := range toArray(v, at) {
+			if !isNil(val{x: it}) {
+				out = append(out, it)
+			}
+		}
+		return val{x: out}
+	case "uniq":
+		return val{x: uniq(v, at)}
+	case "concat":
+		var rest []any
+		if len(a) > 0 {
+			rest = toArray(a[0], at)
+		}
+		return val{x: append(slices.Clone(toArray(v, at)), rest...)}
+	case "sort_natural":
+		return val{x: r.sortNatural(v, a, at)}
+	case "url_decode":
+		return strVal(urlDecode(toStr(v, at), at))
+	case "base64_encode":
+		return strVal(base64.StdEncoding.EncodeToString([]byte(validStr(toStr(v, at), at))))
+	case "base64_decode":
+		return strVal(base64Decode(toStr(v, at), at))
+	case "hmac_sha256":
+		m := hmac.New(sha256.New, []byte(validStr(argStr(a, 0, at), at)))
+		m.Write([]byte(validStr(toStr(v, at), at)))
+		return strVal(hex.EncodeToString(m.Sum(nil)))
+	case "replace_last", "remove_last":
+		s, pat, rep := toStr(v, at), argStr(a, 0, at), ""
+		if name == "replace_last" {
+			rep = argStr(a, 1, at)
+		}
+		i := strings.LastIndex(s, pat)
+		if i < 0 {
+			return strVal(s)
+		}
+		return strVal(s[:i] + rep + s[i+len(pat):])
 	case "map":
 		return val{x: mapProp(v, argPath(a, 0, at), at)}
 	case "sum":
@@ -159,6 +214,8 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 			f = math.Mod(x, y)
 		case "at_least":
 			f = math.Max(x, y)
+		case "at_most":
+			f = math.Min(x, y)
 		}
 	}
 	if math.IsInf(f, 0) || math.IsNaN(f) {
@@ -777,7 +834,7 @@ func round(x float64, a []val, at int) float64 {
 
 // matching is liquidjs's where (and, with first, find): items whose property path is truthy,
 // or equals expected.
-func (r *renderer) matching(v val, a []val, at int, first bool) []any {
+func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any, idx int) {
 	path, ok := a[0].str()
 	if !ok || !propPath(path) {
 		bail(at, "where property that isn't a plain path")
@@ -800,8 +857,8 @@ func (r *renderer) matching(v val, a []val, at int, first bool) []any {
 		_, undef := a[1].x.(undefinedT)
 		matchTruthy = undef && a[1].lit == 0 // liquidjs's expected === undefined
 	}
-	out := []any{}
-	for _, it := range items {
+	out, idx = []any{}, -1
+	for i, it := range items {
 		x := it
 		for key := range strings.SplitSeq(path, ".") {
 			if r.strict && isNil(val{x: x}) {
@@ -812,14 +869,14 @@ func (r *renderer) matching(v val, a []val, at int, first bool) []any {
 		if _, undef := x.(undefinedT); undef && r.strict {
 			bail(at, "where on an item missing %q under strict", path)
 		}
-		if matchTruthy && truthy(val{x: x}, at) || !matchTruthy && eq(val{x: x}, a[1], at) {
+		if (matchTruthy && truthy(val{x: x}, at) || !matchTruthy && eq(val{x: x}, a[1], at)) == keep {
 			out = append(out, it)
 			if first {
-				break
+				return out, i
 			}
 		}
 	}
-	return out
+	return out, idx
 }
 
 // propPath accepts dotted identifiers, the property paths whose parse is unambiguous.
@@ -966,4 +1023,143 @@ func orderedCompare(a, b any) int {
 		return cmpFloat(x, b.(float64))
 	}
 	return strings.Compare(a.(string), b.(string))
+}
+
+// validStr bails on strings JavaScript couldn't hold, as the UTF-8 encoders would differ.
+func validStr(s string, at int) string {
+	if !utf8.ValidString(s) {
+		bail(at, "invalid UTF-8")
+	}
+	return s
+}
+
+// uniq is liquidjs's uniq: first occurrences by SameValueZero. Objects and arrays
+// compare by reference in JavaScript, so they bail.
+func uniq(v val, at int) []any {
+	items := toArray(v, at)
+	seen := make(map[any]bool, len(items))
+	out := []any{}
+	for _, it := range items {
+		k := it
+		switch x := it.(type) {
+		case nil, bool, string, float64:
+		case map[string]any, []any:
+			bail(at, "uniq of an object or array")
+		default:
+			f, ok := num(x, at)
+			if !ok {
+				bail(at, "uniq of %T", it)
+			}
+			k = f
+		}
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// sortNatural is liquidjs's sort_natural: sort with keys lower-cased by
+// String.prototype.toLowerCase, which stringifies numbers and booleans first.
+func (r *renderer) sortNatural(v val, a []val, at int) []any {
+	var path string
+	if len(a) > 0 && truthy(a[0], at) {
+		path = argPath(a, 0, at)
+	}
+	items := toArray(v, at)
+	type pair struct {
+		item any
+		key  string
+		nil  bool
+	}
+	pairs := make([]pair, len(items))
+	for i, it := range items {
+		k := it
+		if path != "" {
+			k = lookupPath(it, path, at, "sort_natural by")
+		}
+		p := pair{item: it, nil: isNil(val{x: k})}
+		if !p.nil {
+			switch k.(type) {
+			case map[string]any, []any:
+				bail(at, "sort_natural of an object or array")
+			}
+			p.key = caseMap(toStr(val{x: k}, at), false, at)
+			for _, c := range p.key {
+				if c > 0xFFFF {
+					bail(at, "sort_natural of a string outside the BMP")
+				}
+			}
+		}
+		pairs[i] = p
+	}
+	slices.SortStableFunc(pairs, func(x, y pair) int {
+		switch {
+		case x.nil && y.nil:
+			return 0
+		case x.nil:
+			return 1
+		case y.nil:
+			return -1
+		}
+		return strings.Compare(x.key, y.key)
+	})
+	out := make([]any, len(pairs))
+	for i, p := range pairs {
+		out[i] = p.item
+	}
+	return out
+}
+
+// urlDecode is decodeURIComponent, then + as a space; malformed escapes or UTF-8 bail,
+// as decodeURIComponent throws.
+func urlDecode(s string, at int) string {
+	if strings.IndexByte(s, '%') < 0 {
+		return strings.ReplaceAll(s, "+", " ")
+	}
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '%' {
+			b = append(b, s[i])
+			continue
+		}
+		if i+2 >= len(s) || !isHex(s[i+1]) || !isHex(s[i+2]) {
+			bail(at, "url_decode of a malformed escape")
+		}
+		hi, lo := strings.IndexByte("0123456789abcdef", s[i+1]|0x20), strings.IndexByte("0123456789abcdef", s[i+2]|0x20)
+		b = append(b, byte(hi<<4|lo))
+		i += 2
+	}
+	if !utf8.Valid(b) {
+		bail(at, "url_decode to invalid UTF-8")
+	}
+	return strings.ReplaceAll(string(b), "+", " ")
+}
+
+func isHex(c byte) bool { return isDigit(c) || c|0x20 >= 'a' && c|0x20 <= 'f' }
+
+// base64Decode is Node's lenient Buffer.from(s, 'base64'): standard and URL-safe
+// alphabets, everything else skipped, stopping at the first '='. Bytes that aren't
+// UTF-8 bail rather than reproduce the replacement characters.
+func base64Decode(s string, at int) string {
+	var clean []byte
+	for i := 0; i < len(s) && s[i] != '='; i++ {
+		switch c := s[i]; {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '+', c == '/':
+			clean = append(clean, c)
+		case c == '-':
+			clean = append(clean, '+')
+		case c == '_':
+			clean = append(clean, '/')
+		}
+	}
+	if len(clean)%4 == 1 {
+		clean = clean[:len(clean)-1] // Node drops a lone trailing sextet
+	}
+	out, err := base64.RawStdEncoding.DecodeString(string(clean))
+	if err != nil || !utf8.Valid(out) {
+		bail(at, "base64_decode to bytes that aren't UTF-8")
+	}
+	return string(out)
 }

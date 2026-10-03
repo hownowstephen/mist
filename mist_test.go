@@ -167,7 +167,7 @@ func FuzzRender(f *testing.F) {
 
 // runtimeBail reports data-dependent bails, which Check can't see.
 func runtimeBail(err error) bool {
-	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of", "date ", "math filter", "filter argument", "slice without", "first or last", "last of", "first of", "number from", "json of", "case mapping", "string filter", "url_encode of", "nil literal as a filter", "contains with an object", "round to", "strip_html of", "join of", "size of", "where ", "index of", "for offset", "for limit", "range ", "map of", "sum of", "sort of", "sort by", "find on", "push of", "reverse of", "array filter on", "loop iterations"} {
+	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== with", "unsupported value", "assigning nil", "stringify of an object", "capitalize of", "date ", "math filter", "filter argument", "slice without", "first or last", "last of", "first of", "number from", "json of", "case mapping", "string filter", "url_encode of", "nil literal as a filter", "contains with an object", "round to", "strip_html of", "join of", "size of", "where ", "index of", "for offset", "for limit", "range ", "map of", "sum of", "sort of", "sort by", "find on", "push of", "reverse of", "array filter on", "loop iterations", "sort_natural", "base64_decode", "url_decode", "uniq of", "invalid UTF-8"} {
 		if strings.Contains(err.Error(), s) {
 			return true
 		}
@@ -341,5 +341,16 @@ func BenchmarkModern(b *testing.B) {
 		if buf, err = Append(buf[:0], modernTpl, modernVars, true); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// uniq keys Go numbers by value, as JavaScript sees them after JSON.
+func TestUniqOfGoNumbers(t *testing.T) {
+	out, err := Render(`{{ xs | uniq | join: ',' }}`, map[string]any{"xs": []any{1, 1.0, int64(2), json.Number("2"), "2"}}, true)
+	if err != nil || out != "1,2,2" {
+		t.Fatalf("got %q, %v; want 1,2,2", out, err)
+	}
+	if _, err := Render(`{{ xs | uniq | size }}`, map[string]any{"xs": []any{json.Number("x")}}, false); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("got %v; want ErrUnsupported", err)
 	}
 }
