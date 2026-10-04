@@ -3,6 +3,7 @@
 [![CI](https://github.com/hownowstephen/mist/actions/workflows/ci.yml/badge.svg)](https://github.com/hownowstephen/mist/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/hownowstephen/mist.svg)](https://pkg.go.dev/github.com/hownowstephen/mist)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hownowstephen/mist/badge)](https://scorecard.dev/viewer/?uri=github.com/hownowstephen/mist)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15202/badge)](https://www.bestpractices.dev/projects/15202)
 
 A single-pass renderer for a strict subset of [Liquid](https://shopify.github.io/liquid/), fast enough that it's cheap to try before falling back to a full engine.
 
