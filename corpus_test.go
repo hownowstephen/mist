@@ -58,7 +58,8 @@ func TestCorpus(t *testing.T) {
 				want = *c.Strict
 			}
 			out, err := corpusEngine.Render(c.Tpl, c.Data, strict)
-			if e, ok := errors.AsType[*Error](err); ok && errors.Is(err, ErrUnsupported) {
+			var e *Error
+			if errors.As(err, &e) && errors.Is(err, ErrUnsupported) {
 				bailed++
 				reasons[bailNoise.ReplaceAllString(e.Msg, "…")]++
 				continue

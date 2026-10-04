@@ -31,8 +31,8 @@ func blockers(eng mist.Engine, tpl string) []string {
 	}
 	unknown := map[string]bool{} // unsupported tags, whose end tags aren't blockers of their own
 	for range 1000 {
-		e, ok := errors.AsType[*mist.Error](eng.Check(tpl))
-		if !ok {
+		var e *mist.Error
+		if !errors.As(eng.Check(tpl), &e) {
 			break
 		}
 		start, end, isTag := token(tpl, e.Pos)
