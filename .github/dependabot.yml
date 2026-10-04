@@ -11,4 +11,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
-  # scripts/package.json pins liquidjs to the SPEC.md parity target on purpose; not tracked.
+  - package-ecosystem: npm
+    directory: /scripts
+    schedule:
+      interval: weekly
+    ignore:
+      # Pinned to the SPEC.md parity target on purpose; moving it is a spec change.
+      - dependency-name: liquidjs

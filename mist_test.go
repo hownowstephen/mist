@@ -118,14 +118,16 @@ func TestChainBailStopsEarly(t *testing.T) {
 
 func TestUndefinedNamesWholePath(t *testing.T) {
 	_, err := Render("{{ trigger.first_name[0] }}", map[string]any{}, true)
-	if e, ok := errors.AsType[*Error](err); !ok || !errors.Is(err, ErrUndefined) || e.Msg != "trigger.first_name[0]" {
+	var e *Error
+	if !errors.As(err, &e) || !errors.Is(err, ErrUndefined) || e.Msg != "trigger.first_name[0]" {
 		t.Fatalf("got %v; want ErrUndefined naming trigger.first_name[0]", err)
 	}
 }
 
 func TestErrorPosition(t *testing.T) {
 	_, err := Render("line1\n{{ a | b }}", nil, false)
-	if e, ok := errors.AsType[*Error](err); !ok || e.Pos != 13 {
+	var e *Error
+	if !errors.As(err, &e) || e.Pos != 13 {
 		t.Fatalf("got %v; want unsupported at offset 13, the filter name", err)
 	}
 }

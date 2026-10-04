@@ -954,9 +954,9 @@ func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any
 
 // itemPath reads a dotted path off item as liquidjs's evalToken on a scope spawned from it does.
 func (r *renderer) itemPath(item any, path string, at int) any {
-	x := item
+	x, strict := item, r.strict // a range-over-func body capturing r moves the renderer to the heap before Go 1.25
 	for key := range strings.SplitSeq(path, ".") {
-		if r.strict && isNil(val{x: x}) {
+		if strict && isNil(val{x: x}) {
 			bail(at, "where on an item missing %q under strict", path) // liquidjs throws
 		}
 		x = prop(x, key, at)

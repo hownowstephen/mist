@@ -62,7 +62,8 @@ func main() {
 				all = append(all, blockers(e, t.body))
 				continue
 			}
-			if err, ok := errors.AsType[*mist.Error](e.Check(t.body)); ok {
+			var err *mist.Error
+			if errors.As(e.Check(t.body), &err) {
 				line := strings.Count(t.body[:err.Pos], "\n") + 1
 				col := err.Pos - strings.LastIndexByte(t.body[:err.Pos], '\n')
 				fmt.Printf("%s:%d:%d: %s\n", t.name, line, col, err.Msg)
