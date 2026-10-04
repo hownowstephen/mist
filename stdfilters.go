@@ -19,7 +19,7 @@ import (
 // A switch rather than a table of funcs, so calls stay direct and nothing escapes.
 func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int) val {
 	n := len(a)
-	arity := func(min, max int) bool { return n >= min && n <= max }
+	arity := func(lo, hi int) bool { return n >= lo && n <= hi }
 	var ok bool
 	switch name {
 	case "capitalize", "downcase", "upcase", "escape", "escape_once", "url_encode", "json", "first", "last",
@@ -253,7 +253,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		}
 		return strVal(s[:i] + rep + s[i+len(pat):])
 	case "map":
-		return val{x: mapProp(v, argPath(a, 0, at), at)}
+		return val{x: mapProp(v, argPath(a, at), at)}
 	case "sum":
 		return sum(v, a, at)
 	case "sort":
@@ -996,9 +996,9 @@ func toArray(v val, at int) []any {
 	return []any{v.any()}
 }
 
-// argPath is argument i as a dotted property path.
-func argPath(a []val, i, at int) string {
-	s, ok := a[i].str()
+// argPath is the first argument as a dotted property path.
+func argPath(a []val, at int) string {
+	s, ok := a[0].str()
 	if !ok || !propPath(s) {
 		bail(at, "property argument that isn't a plain path")
 	}
@@ -1030,7 +1030,7 @@ func mapProp(v val, path string, at int) []any {
 func sum(v val, a []val, at int) val {
 	var path string
 	if len(a) > 0 && truthy(a[0], at) {
-		path = argPath(a, 0, at)
+		path = argPath(a, at)
 	}
 	total := 0.0
 	for _, it := range toArray(v, at) {
@@ -1054,7 +1054,7 @@ func sum(v val, a []val, at int) val {
 func sortBy(v val, a []val, at int) []any {
 	var path string
 	if len(a) > 0 && truthy(a[0], at) {
-		path = argPath(a, 0, at)
+		path = argPath(a, at)
 	}
 	items := toArray(v, at)
 	type pair struct{ item, key any }
@@ -1156,7 +1156,7 @@ func uniq(v val, at int) []any {
 func (r *renderer) sortNatural(v val, a []val, at int) []any {
 	var path string
 	if len(a) > 0 && truthy(a[0], at) {
-		path = argPath(a, 0, at)
+		path = argPath(a, at)
 	}
 	items := toArray(v, at)
 	type pair struct {
@@ -1424,7 +1424,7 @@ func (r *renderer) groupBy(v val, a []val, exp bool, at int) []any {
 	}
 	var path string
 	if !exp {
-		path = argPath(a, 0, at)
+		path = argPath(a, at)
 	}
 	idx := map[any]int{}
 	var groups []map[string]any

@@ -22,6 +22,7 @@ type Dialect struct {
 // Constructs is a set of template constructs a Dialect can reject.
 type Constructs uint32
 
+// The constructs a Dialect can reject.
 const (
 	TrimMarkers       Constructs = 1 << iota // {{- -}} {%- -%}
 	NegativeLiterals                         // -3, including negative indexes

@@ -4,6 +4,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7 # let a new release age before it becomes a PR
     groups:
       actions:
         patterns: ["*"]
@@ -11,10 +13,14 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7 # let a new release age before it becomes a PR
   - package-ecosystem: npm
     directory: /scripts
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7 # let a new release age before it becomes a PR
     ignore:
       # Pinned to the SPEC.md parity target on purpose; moving it is a spec change.
       - dependency-name: liquidjs

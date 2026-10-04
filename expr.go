@@ -369,7 +369,9 @@ func (r *renderer) number() float64 {
 		j++
 	}
 	if j > i && j+1 < len(r.src) && r.src[j] == '.' && r.src[j+1] != '.' || j > i && j+1 == len(r.src) && r.src[j] == '.' {
-		for j++; j < len(r.src) && isDigit(r.src[j]); j++ {
+		j++
+		for j < len(r.src) && isDigit(r.src[j]) {
+			j++
 		}
 	}
 	rangeDots := strings.HasPrefix(r.src[j:], "..")
@@ -637,8 +639,7 @@ func canonicalInt(s string) (int, bool) {
 }
 
 func index(v any, n int, at int) any {
-	switch a := v.(type) {
-	case []any:
+	if a, ok := v.([]any); ok {
 		if n < 0 {
 			n += len(a)
 		}
