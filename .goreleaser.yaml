@@ -22,6 +22,16 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# Keyless: the signing identity is this repo's release workflow.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--bundle=${signature}", "${artifact}", "--yes"]
+
+release:
+  draft: true # the release workflow attaches provenance, then publishes
+
 changelog:
   use: github
   groups:
