@@ -29,9 +29,9 @@ func tagEngine(calls *int) Engine {
 			}
 			return append(dst, "lax"...), nil
 		},
-		"fallback": func(dst []byte, t Tag) ([]byte, error) { return nil, ErrUnsupported },
-		"broken":   func(dst []byte, t Tag) ([]byte, error) { return nil, errBroken },
-		"if":       func(dst []byte, t Tag) ([]byte, error) { return append(dst, "overridden"...), nil },
+		"fallback": func([]byte, Tag) ([]byte, error) { return nil, ErrUnsupported },
+		"broken":   func([]byte, Tag) ([]byte, error) { return nil, errBroken },
+		"if":       func(dst []byte, _ Tag) ([]byte, error) { return append(dst, "overridden"...), nil },
 	}}
 }
 

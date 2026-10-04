@@ -18,6 +18,7 @@ var (
 	ErrUndefined = errors.New("mist: undefined variable")
 )
 
+// Error is the error Render, Append and Check return. errors.Is matches its Kind.
 type Error struct {
 	Kind error // ErrUnsupported or ErrUndefined
 	Pos  int   // byte offset into the template
@@ -135,6 +136,7 @@ type Step struct {
 	Vars   map[string]any // replaces the chain vars for this step only
 }
 
+// Result is one step's output in a RenderChain.
 type Result struct {
 	Out string
 	Err error // ErrUndefined or a custom tag's error; unsupported steps are never returned

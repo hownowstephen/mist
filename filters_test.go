@@ -57,7 +57,7 @@ func TestRegisteredFilters(t *testing.T) {
 			b, _ := f.Args[0].(float64)
 			return a + b, nil
 		},
-		"capitalize": func(f Filter) (any, error) { return "overridden", nil },
+		"capitalize": func(Filter) (any, error) { return "overridden", nil },
 		"fallback":   func(Filter) (any, error) { return nil, ErrUnsupported },
 		"broken":     func(Filter) (any, error) { return nil, errBroken },
 		"nilfn":      nil,
