@@ -30,4 +30,4 @@ Titles start with `feat:`, `fix:` or `chore:` (or `docs:`, `refactor:`); release
 
 ## Releases
 
-Maintainers tag `vX.Y.Z` on `main`. The release workflow refuses a tag that isn't on `main` or doesn't pass the tests, then builds `mistcheck`, signs the checksums, attaches build provenance, publishes the release, and warms the Go module proxy.
+Maintainers tag `vX.Y.Z` on `main` with an annotated tag whose message body summarizes the release for users: what changed and whether upgrading needs anything. It heads the release notes, above the commits grouped by type. The release workflow refuses a tag that isn't on `main` or doesn't pass the tests, then builds `mistcheck`, signs the checksums, attaches build provenance, publishes the release, and warms the Go module proxy.

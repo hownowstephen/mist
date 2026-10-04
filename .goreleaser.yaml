@@ -31,6 +31,7 @@ signs:
 
 release:
   draft: true # the release workflow attaches provenance, then publishes
+  header: "{{ .TagBody }}" # the annotated tag's summary, above the grouped commits
 
 changelog:
   use: github

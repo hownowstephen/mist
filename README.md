@@ -18,6 +18,8 @@ case errors.Is(err, mist.ErrUndefined):
 }
 ```
 
+Install with `go get github.com/hownowstephen/mist`. Releases are tagged `vX.Y.Z` and summarized on the [releases page](https://github.com/hownowstephen/mist/releases); report bugs and request features in [issues](https://github.com/hownowstephen/mist/issues).
+
 `Append(dst, tpl, vars, strict)` does the same into a reusable buffer, with no allocations.
 
 `RenderChain` renders a sequence of templates whose outputs feed later ones, such as snippets, then subject, then body, then layout. It stops at the first step mist can't handle, so only the remaining steps go to the full engine.
