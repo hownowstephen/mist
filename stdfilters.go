@@ -37,6 +37,18 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		ok = arity(0, 1)
 	case "replace_last":
 		ok = arity(0, 2)
+	case "xml_escape", "cgi_escape", "uri_escape", "normalize_whitespace", "date_to_xmlschema", "date_to_rfc822", "pop", "shift":
+		ok = arity(0, 0)
+	case "unshift", "group_by":
+		ok = arity(1, 1)
+	case "number_of_words", "array_to_sentence_string":
+		ok = arity(0, 1)
+	case "slugify", "date_to_string", "date_to_long_string":
+		ok = arity(0, 2)
+	case "where_exp", "find_exp", "group_by_exp":
+		if ok = arity(2, 2); ok {
+			r.checkExp(a, at)
+		}
 	case "date", "replace", "replace_first", "truncate", "truncatewords":
 		ok = arity(0, 2)
 	case "remove", "remove_first", "strip", "lstrip", "rstrip", "split":
@@ -92,12 +104,81 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		return truncate(v, a, at)
 	case "truncatewords":
 		return strVal(truncatewords(v, a, at))
-	case "escape":
+	case "escape", "xml_escape":
 		return strVal(html.EscapeString(toStr(v, at)))
 	case "escape_once":
 		return strVal(html.EscapeString(unescaper.Replace(toStr(v, at))))
 	case "url_encode":
-		return strVal(urlEncode(toStr(v, at), at))
+		return strVal(percentEncode(toStr(v, at), "-_.!~*'()", true, at))
+	case "cgi_escape":
+		return strVal(percentEncode(toStr(v, at), "-_.~", true, at))
+	case "uri_escape":
+		return strVal(percentEncode(toStr(v, at), "-_.!~*'();,/?:@&=+$#[]", false, at))
+	case "normalize_whitespace":
+		return strVal(replaceRuns(validStr(toStr(v, at), at), ' ', jsSpace))
+	case "number_of_words":
+		var mode string
+		if len(a) > 0 {
+			mode, _ = a[0].str()
+		}
+		return val{n: float64(numberOfWords(validStr(toStr(v, at), at), mode)), lit: litNum}
+	case "slugify":
+		return strVal(slugify(toStr(v, at), a, at))
+	case "array_to_sentence_string":
+		return sentence(v, a, at)
+	case "date_to_xmlschema":
+		return r.dateFilter(v, []val{strVal("%Y-%m-%dT%H:%M:%S%:z")}, at)
+	case "date_to_rfc822":
+		return r.dateFilter(v, []val{strVal("%a, %d %b %Y %H:%M:%S %z")}, at)
+	case "date_to_string", "date_to_long_string":
+		month := "%b"
+		if name == "date_to_long_string" {
+			month = "%B"
+		}
+		format := "%d " + month + " %Y"
+		if len(a) > 0 {
+			if t, _ := a[0].str(); t == "ordinal" {
+				format = "%-d%q " + month + " %Y"
+				if len(a) > 1 {
+					if style, _ := a[1].str(); style == "US" {
+						format = month + " %-d%q, %Y"
+					}
+				}
+			}
+		}
+		return r.dateFilter(v, []val{strVal(format)}, at)
+	case "pop":
+		arr := toArray(v, at)
+		return val{x: arr[:max(len(arr)-1, 0)]}
+	case "shift":
+		arr := toArray(v, at)
+		return val{x: arr[min(1, len(arr)):]}
+	case "unshift":
+		if isNil(a[0]) {
+			bail(at, "unshift of nil or undefined") // liquidjs keeps distinct null-ish values
+		}
+		return val{x: append([]any{a[0].any()}, toArray(v, at)...)}
+	case "where_exp", "find_exp":
+		nm, exp := a[0].s, a[1].s
+		out := []any{}
+		for _, it := range toArray(v, at) {
+			x := r.expValue(true, exp, nm, it, at)
+			if name == "find_exp" {
+				if jsTruthy(x, at) {
+					return val{x: it}
+				}
+				continue
+			}
+			if b, ok := x.x.(bool); ok && b {
+				out = append(out, it)
+			}
+		}
+		if name == "find_exp" {
+			return val{x: undefinedT{}}
+		}
+		return val{x: out}
+	case "group_by", "group_by_exp":
+		return val{x: r.groupBy(v, a, name == "group_by_exp", at)}
 	case "json":
 		if _, undef := v.x.(undefinedT); undef && v.lit == 0 {
 			return v // JSON.stringify(undefined) is undefined
@@ -441,8 +522,9 @@ func truncatewords(v val, a []val, at int) string {
 	return ret
 }
 
-// urlEncode is encodeURIComponent with %20 as +.
-func urlEncode(s string, at int) string {
+// percentEncode is encodeURIComponent or encodeURI: UTF-8 bytes as %XX, except
+// alphanumerics, the safe punctuation and, with plus, spaces as +.
+func percentEncode(s, safe string, plus bool, at int) string {
 	if !utf8.ValidString(s) {
 		bail(at, "url_encode of invalid UTF-8")
 	}
@@ -451,9 +533,9 @@ func urlEncode(s string, at int) string {
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {
-		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', strings.IndexByte("-_.!~*'()", c) >= 0:
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', strings.IndexByte(safe, c) >= 0:
 			b.WriteByte(c)
-		case c == ' ':
+		case c == ' ' && plus:
 			b.WriteByte('+')
 		default:
 			b.WriteByte('%')
@@ -859,16 +941,7 @@ func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any
 	}
 	out, idx = []any{}, -1
 	for i, it := range items {
-		x := it
-		for key := range strings.SplitSeq(path, ".") {
-			if r.strict && isNil(val{x: x}) {
-				bail(at, "where on an item missing %q under strict", path) // liquidjs throws
-			}
-			x = prop(x, key, at)
-		}
-		if _, undef := x.(undefinedT); undef && r.strict {
-			bail(at, "where on an item missing %q under strict", path)
-		}
+		x := r.itemPath(it, path, at)
 		if (matchTruthy && truthy(val{x: x}, at) || !matchTruthy && eq(val{x: x}, a[1], at)) == keep {
 			out = append(out, it)
 			if first {
@@ -877,6 +950,21 @@ func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any
 		}
 	}
 	return out, idx
+}
+
+// itemPath reads a dotted path off item as liquidjs's evalToken on a scope spawned from it does.
+func (r *renderer) itemPath(item any, path string, at int) any {
+	x := item
+	for key := range strings.SplitSeq(path, ".") {
+		if r.strict && isNil(val{x: x}) {
+			bail(at, "where on an item missing %q under strict", path) // liquidjs throws
+		}
+		x = prop(x, key, at)
+	}
+	if _, undef := x.(undefinedT); undef && r.strict {
+		bail(at, "where on an item missing %q under strict", path)
+	}
+	return x
 }
 
 // propPath accepts dotted identifiers, the property paths whose parse is unambiguous.
@@ -1033,26 +1121,29 @@ func validStr(s string, at int) string {
 	return s
 }
 
-// uniq is liquidjs's uniq: first occurrences by SameValueZero. Objects and arrays
-// compare by reference in JavaScript, so they bail.
+// svzKey is x as a map key that compares as JavaScript's SameValueZero does. Objects
+// and arrays compare by reference in JavaScript, so they bail.
+func svzKey(x any, what string, at int) any {
+	switch x.(type) {
+	case nil, bool, string, undefinedT:
+		return x
+	case map[string]any, []any:
+		bail(at, "%s of an object or array", what)
+	}
+	f, ok := num(x, at)
+	if !ok || math.IsNaN(f) {
+		bail(at, "%s of %T", what, x)
+	}
+	return f
+}
+
+// uniq is liquidjs's uniq: first occurrences by SameValueZero.
 func uniq(v val, at int) []any {
 	items := toArray(v, at)
 	seen := make(map[any]bool, len(items))
 	out := []any{}
 	for _, it := range items {
-		k := it
-		switch x := it.(type) {
-		case nil, bool, string, float64:
-		case map[string]any, []any:
-			bail(at, "uniq of an object or array")
-		default:
-			f, ok := num(x, at)
-			if !ok {
-				bail(at, "uniq of %T", it)
-			}
-			k = f
-		}
-		if !seen[k] {
+		if k := svzKey(it, "uniq", at); !seen[k] {
 			seen[k] = true
 			out = append(out, it)
 		}
@@ -1162,4 +1253,200 @@ func base64Decode(s string, at int) string {
 		bail(at, "base64_decode to bytes that aren't UTF-8")
 	}
 	return string(out)
+}
+
+// replaceRuns replaces each run of characters in set with sep.
+func replaceRuns(s string, sep byte, set func(rune) bool) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	run := false
+	for _, c := range s {
+		switch {
+		case !set(c):
+			b.WriteRune(c)
+			run = false
+		case !run:
+			b.WriteByte(sep)
+			run = true
+		}
+	}
+	return b.String()
+}
+
+// numberOfWords is liquidjs's number_of_words: whitespace-separated words, or with
+// mode cjk (or auto, when s has any) each CJK character as a word of its own.
+func numberOfWords(s, mode string) int {
+	cjk := mode == "cjk" || mode == "auto" && strings.ContainsFunc(s, isCJK)
+	n, inWord := 0, false
+	for _, c := range s {
+		switch {
+		case cjk && isCJK(c):
+			n++
+			inWord = false
+		case jsSpace(c):
+			inWord = false
+		case !inWord:
+			n++
+			inWord = true
+		}
+	}
+	return n
+}
+
+func isCJK(c rune) bool {
+	return c >= 0x4E00 && c <= 0x9FFF || c >= 0xF900 && c <= 0xFAFF || c >= 0x3400 && c <= 0x4DBF ||
+		c >= 0x3040 && c <= 0x30FF || c >= 0xAC00 && c <= 0xD7AF
+}
+
+var removeAccents = strings.NewReplacer(
+	"à", "a", "á", "a", "â", "a", "ã", "a", "ä", "a", "å", "a", "æ", "ae", "ç", "c", "è", "e", "é", "e", "ê", "e", "ë", "e",
+	"ì", "i", "í", "i", "î", "i", "ï", "i", "ð", "d", "ñ", "n", "ò", "o", "ó", "o", "ô", "o", "õ", "o", "ö", "o", "ø", "o",
+	"ù", "u", "ú", "u", "û", "u", "ü", "u", "ý", "y", "ÿ", "y", "ß", "ss", "œ", "oe", "þ", "th", "ẞ", "SS", "Œ", "OE", "Þ", "TH")
+
+// slugify is liquidjs's slugify: runs of characters the mode doesn't keep become one
+// "-", then a leading and a trailing "-" go, and the result is lower-cased unless cased.
+func slugify(s string, a []val, at int) string {
+	mode := "default"
+	if len(a) > 0 {
+		mode = argOrDefault(a[0], mode, at)
+	}
+	s = validStr(s, at)
+	var keep func(rune) bool
+	switch mode {
+	case "raw":
+		keep = func(c rune) bool { return !jsSpace(c) }
+	case "default", "latin", "pretty":
+		pretty := mode == "pretty"
+		keep = func(c rune) bool {
+			if !unicode.In(c, unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.Z, unicode.Cc, unicode.Cf, unicode.Co) {
+				bail(at, "slugify of %q, unassigned in Go's Unicode version", c)
+			}
+			return unicode.In(c, unicode.L, unicode.M, unicode.Nd) || pretty && strings.ContainsRune("._~!$&'()+,;=@", c)
+		}
+		if mode == "latin" {
+			s = removeAccents.Replace(s)
+		}
+	case "ascii":
+		keep = func(c rune) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' }
+	case "none":
+	default:
+		bail(at, "slugify mode %q", mode)
+	}
+	if keep != nil {
+		s = replaceRuns(s, '-', func(c rune) bool { return !keep(c) })
+		s = strings.TrimPrefix(s, "-")
+		s = strings.TrimSuffix(s, "-")
+	}
+	if len(a) > 1 && jsTruthy(a[1], at) {
+		return s
+	}
+	return caseMap(s, false, at)
+}
+
+// jsString is JavaScript's String(x), for the values mist reproduces it for.
+func jsString(v val, at int) string {
+	if s, ok := v.str(); ok {
+		return s
+	}
+	if f, ok := v.check(at).num(at); ok {
+		return string(appendJSNumber(nil, f))
+	}
+	switch x := v.x.(type) {
+	case nil:
+		return "null"
+	case undefinedT:
+		return "undefined"
+	case bool:
+		return strconv.FormatBool(x)
+	}
+	bail(at, "string of %T", v.any())
+	return ""
+}
+
+// sentence is liquidjs's array_to_sentence_string: "a", "a and b", "a, b, and c".
+func sentence(v val, a []val, at int) val {
+	arr, ok := v.check(at).x.([]any)
+	if !ok || v.lit != 0 {
+		bail(at, "array_to_sentence_string of %T", v.any()) // liquidjs indexes strings, or throws
+	}
+	conn := "and"
+	if len(a) > 0 {
+		conn = argOrDefault(a[0], conn, at)
+	}
+	switch len(arr) {
+	case 0:
+		return strVal("")
+	case 1:
+		return val{x: arr[0]}
+	case 2:
+		return strVal(jsString(val{x: arr[0]}, at) + " " + conn + " " + jsString(val{x: arr[1]}, at))
+	}
+	var b strings.Builder
+	for i, e := range arr[:len(arr)-1] {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		if !isNil(val{x: e}) { // Array.prototype.join writes null and undefined as ""
+			b.WriteString(jsString(val{x: e}, at))
+		}
+	}
+	b.WriteString(", " + conn + " " + jsString(val{x: arr[len(arr)-1]}, at))
+	return strVal(b.String())
+}
+
+// checkExp requires literal arguments for where_exp, find_exp and group_by_exp, so Check
+// can parse the expression: an item name that reads back as a variable, and the expression.
+func (r *renderer) checkExp(a []val, at int) {
+	name := a[0].s
+	if a[0].lit != litStr || a[1].lit != litStr || name == "" || !isIdentStart(name[0]) || literal(name) || reserved(name) || name == "forloop" {
+		bail(at, "expression filter arguments other than an item name and an expression as string literals")
+	}
+	for i := range len(name) {
+		if !isIdentChar(name[i]) {
+			bail(at, "expression filter item name %q", name)
+		}
+	}
+	r.expValue(false, a[1].s, name, nil, at)
+}
+
+// groupBy is liquidjs's group_by and group_by_exp: {name, items} for each distinct key, in
+// order of appearance.
+func (r *renderer) groupBy(v val, a []val, exp bool, at int) []any {
+	var items []any
+	switch x := v.check(at).x.(type) {
+	case []any:
+		items = x
+	case map[string]any:
+		bail(at, "group_by of an object") // liquidjs groups its entries
+	}
+	if s, ok := v.str(); ok && s != "" {
+		items = []any{s}
+	}
+	var path string
+	if !exp {
+		path = argPath(a, 0, at)
+	}
+	idx := map[any]int{}
+	var groups []map[string]any
+	for _, it := range items {
+		var k any
+		if exp {
+			k = r.expValue(true, a[1].s, a[0].s, it, at).any()
+		} else {
+			k = r.itemPath(it, path, at)
+		}
+		sk := svzKey(k, "group_by", at)
+		i, ok := idx[sk]
+		if !ok {
+			i = len(groups)
+			idx[sk] = i
+			groups = append(groups, map[string]any{"name": k, "items": []any{}})
+		}
+		groups[i]["items"] = append(groups[i]["items"].([]any), it)
+	}
+	out := make([]any, len(groups))
+	for i, g := range groups {
+		out[i] = g
+	}
+	return out
 }

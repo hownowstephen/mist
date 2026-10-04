@@ -405,6 +405,7 @@ func (r *renderer) path(eval, lenient bool) any {
 		if eval && r.strict && v == (undefinedT{}) {
 			if lenient {
 				v = nil // liquidjs catches the strict error and substitutes null
+				r.lenientUndef = true
 			} else if !r.undef.set {
 				// Raised by end(): a trailing filter such as `| default` makes liquidjs lenient.
 				r.undef = pendingUndef{true, r.base + start, r.src[start:r.p]}
@@ -460,6 +461,11 @@ func (r *renderer) path(eval, lenient bool) any {
 }
 
 func (r *renderer) root(name string, at int) any {
+	for i := len(r.binds) - 1; i >= 0; i-- {
+		if r.binds[i].name == name {
+			return r.binds[i].item
+		}
+	}
 	for i := r.depth - 1; i >= 0; i-- {
 		if f := &r.stack[i]; f.kind == kFor && f.active && f.name == name {
 			return f.item()
@@ -475,6 +481,41 @@ func (r *renderer) root(name string, at int) any {
 		bail(r.base+at, "%q resolves to a liquidjs built-in", name)
 	}
 	return undefinedT{}
+}
+
+// binding is an expression filter's item, which shadows every other variable of its name.
+type binding struct {
+	name string
+	item any
+}
+
+// expValue evaluates exp as liquidjs's Value does for where_exp and the like (a condition's
+// value, as in filtered conditions, then its filters) with name bound to item. Under strict,
+// undefined variables throw unless the first filter is default.
+func (r *renderer) expValue(eval bool, exp, name string, item any, at int) val {
+	src, base, p, undef, hit := r.src, r.base, r.p, r.undef, r.lenientUndef
+	r.src, r.base, r.p, r.undef, r.lenientUndef = exp, at, 0, pendingUndef{}, false
+	r.binds = append(r.binds, binding{name, item})
+	res, v, lone := r.chain(eval)
+	if !lone {
+		v = val{x: res}
+	}
+	lenient := false
+	if r.peek() == '|' {
+		save := r.p
+		r.p++
+		r.ws()
+		lenient = r.ident() == "default"
+		r.p = save
+		v = r.filters(v, eval)
+	}
+	r.end()
+	if r.lenientUndef && !lenient {
+		panic(bailout{&Error{Kind: ErrUndefined, Pos: at, Msg: exp}})
+	}
+	r.binds = r.binds[:len(r.binds)-1]
+	r.src, r.base, r.p, r.undef, r.lenientUndef = src, base, p, undef, hit
+	return v
 }
 
 func literal(name string) bool {

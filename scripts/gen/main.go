@@ -88,7 +88,12 @@ func (g *gen) filters() string {
 				"nope", "nope: " + g.expr(), "my_filter: " + g.expr() + ", " + g.expr(),
 				"compact", "uniq", "sort_natural", "sort_natural: '" + g.pick(props) + "'", "concat: " + g.expr(), "url_decode", "base64_encode", "base64_decode",
 				"hmac_sha256: " + g.expr(), "at_most: " + g.expr(), "replace_last: " + g.expr() + ", " + g.expr(), "remove_last: " + g.expr(),
-				"has: '" + g.pick(props) + "'", "has: '" + g.pick(props) + "', " + g.expr(), "find_index: '" + g.pick(props) + "', " + g.expr(), "reject: '" + g.pick(props) + "'"})
+				"has: '" + g.pick(props) + "'", "has: '" + g.pick(props) + "', " + g.expr(), "find_index: '" + g.pick(props) + "', " + g.expr(), "reject: '" + g.pick(props) + "'",
+				"xml_escape", "cgi_escape", "uri_escape", "normalize_whitespace", "number_of_words", "number_of_words: " + g.pick([]string{"'cjk'", "'auto'", "n"}),
+				"slugify", "slugify: " + g.pick([]string{"'raw'", "'pretty'", "'ascii'", "'latin'", "'none'", "s"}) + g.pick([]string{"", ", true", ", " + g.expr()}),
+				"array_to_sentence_string", "array_to_sentence_string: " + g.expr(), "date_to_xmlschema", "date_to_rfc822", "date_to_string", "date_to_long_string",
+				"date_to_string: 'ordinal'" + g.pick([]string{"", ", 'US'", ", s"}), "pop", "shift", "unshift: " + g.expr(), "group_by: '" + g.pick(props) + "'",
+				g.pick([]string{"where_exp", "find_exp", "group_by_exp"}) + ": '" + g.pick([]string{"x", "x", "a", "item"}) + "', '" + g.exp() + "'"})
 		case 6, 7:
 			f += " | " + g.pick([]string{"downcase", "upcase", "strip", "lstrip", "rstrip", "escape", "escape_once", "url_encode", "json", "first", "last",
 				"strip_newlines", "newline_to_br", "size", "abs", "ceil", "floor", "round"})
@@ -116,6 +121,21 @@ func (g *gen) filters() string {
 		}
 	}
 	return f
+}
+
+// exp is an expression filter's expression over its item, which is mostly x.
+func (g *gen) exp() string {
+	e := g.pick([]string{"x", "x." + g.pick(props), "x." + g.pick(props), "x.size", "a", "item." + g.pick(props), "missing"})
+	switch g.r.IntN(5) {
+	case 0, 1:
+		e += " " + g.pick([]string{"==", "!=", ">", "<=", "contains"}) + " " + g.pick([]string{`"a"`, `""`, "1", "2", "true", "x." + g.pick(props), "b"})
+	case 2:
+		e += " " + g.pick([]string{"and", "or"}) + " x." + g.pick(props)
+	}
+	if g.r.IntN(4) == 0 {
+		e += " | " + g.pick([]string{"default: true", "size", "upcase", "default: false"})
+	}
+	return e
 }
 
 func (g *gen) cond() string {
@@ -217,6 +237,15 @@ func (g *gen) block(depth int) {
 			g.b.WriteString(g.open("capture " + g.pick(names[:6])))
 			g.block(depth + 1)
 			g.b.WriteString(g.open("endcapture"))
+		case k == 8 && g.r.IntN(3) == 0:
+			c := g.pick([]string{"", "", "'g': ", "a: ", "1: "})
+			for i := range g.r.IntN(3) + 1 {
+				if i > 0 {
+					c += ", "
+				}
+				c += g.expr()
+			}
+			g.b.WriteString(g.open("cycle " + c))
 		case k == 8:
 			g.b.WriteString("{% comment %}" + g.pick(words) + "{{ x }}{% endcomment %}")
 		default:
