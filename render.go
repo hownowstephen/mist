@@ -48,23 +48,26 @@ type frame struct {
 func (f *frame) subject() val { return val{x: f.x, s: f.name, n: f.n, lit: f.lit} }
 
 type renderer struct {
-	tpl         string
-	out         []byte
-	vars        map[string]any
-	assigns     map[string]any
-	strict      bool
-	check       bool         // parse every branch, evaluate nothing
-	undef       pendingUndef // strict undefined, raised once the current tag parses cleanly
-	tags        map[string]TagFunc
-	filterFns   map[string]FilterFunc
-	passUnknown bool // Engine.PassUnknownFilters
-	dialect     *Dialect
-	now         func() time.Time
-	stack       [maxDepth]frame
-	depth       int
-	iters       int  // loop iterations so far, against maxIterations
-	halt        int  // 1 + the stack index of the for a break or continue is unwinding to, or 0
-	haltBreak   bool // the halt is a break, not a continue
+	tpl          string
+	out          []byte
+	vars         map[string]any
+	assigns      map[string]any
+	strict       bool
+	check        bool         // parse every branch, evaluate nothing
+	undef        pendingUndef // strict undefined, raised once the current tag parses cleanly
+	tags         map[string]TagFunc
+	filterFns    map[string]FilterFunc
+	passUnknown  bool // Engine.PassUnknownFilters
+	dialect      *Dialect
+	now          func() time.Time
+	stack        [maxDepth]frame
+	depth        int
+	iters        int            // loop iterations so far, against maxIterations
+	halt         int            // 1 + the stack index of the for a break or continue is unwinding to, or 0
+	haltBreak    bool           // the halt is a break, not a continue
+	cycles       map[string]int // cycle positions by liquidjs's fingerprint
+	binds        []binding      // expression filter items, innermost last
+	lenientUndef bool           // a lenient path met an undefined variable under strict
 
 	// expression cursor: src is tpl[base:base+len(src)]
 	src  string
@@ -441,6 +444,8 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			bail(b, "trim markers on raw")
 		}
 		return r.raw(next, live), false
+	case "cycle":
+		r.cycle(live, b)
 	default:
 		fn, ok := r.tags[name]
 		if !ok {
@@ -452,6 +457,75 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 	}
 	return next, rt
+}
+
+// cycle is liquidjs's cycle: [ group ":" ] value { "," value }, writing the next value
+// unless it's falsy in JavaScript. liquidjs keys the position by the group and the
+// values' tokens, which stringify as [object Object], so cycles with the same group
+// and number of values share one.
+func (r *renderer) cycle(live bool, at int) {
+	r.ws()
+	start := r.p
+	r.cycleValue(false)
+	r.ws()
+	fp := "cycle:undefined:"
+	if r.peek() == ':' {
+		r.p = start
+		g := r.cycleValue(live)
+		r.ws()
+		r.p++
+		if live {
+			fp = "cycle:" + jsString(g, at) + ":"
+		}
+		start = r.p
+	}
+	r.p = start
+	n := 0
+	for {
+		r.cycleValue(false)
+		n++
+		r.ws()
+		if r.p == len(r.src) {
+			break
+		}
+		if r.peek() != ',' {
+			bail(r.pos(), "expected , between cycle values")
+		}
+		r.p++
+	}
+	if !live {
+		return
+	}
+	fp += strings.Repeat("[object Object],", n-1) + "[object Object]"
+	if r.cycles == nil {
+		r.cycles = map[string]int{}
+	}
+	idx := r.cycles[fp]
+	r.cycles[fp] = (idx + 1) % n
+	r.p = start
+	var v val
+	for i := range n {
+		if i > 0 {
+			r.ws()
+			r.p++
+		}
+		if c := r.cycleValue(i == idx); i == idx {
+			v = c
+		}
+	}
+	r.end()
+	if jsTruthy(v, at) {
+		r.out = stringify(r.out, v, at)
+	}
+}
+
+func (r *renderer) cycleValue(eval bool) val {
+	at := r.pos()
+	v := r.expr(eval, false)
+	if v.keyword() != "" || v.lit == 0 && v.x == nilLit {
+		bail(at, "cycle value %s", r.src[at-r.base:r.p])
+	}
+	return v
 }
 
 // forParams parses liquidjs's for modifiers. They apply as offset, then limit, then
