@@ -23,7 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ["1.24", stable] # go.mod's minimum, and the latest
+        # The last three Go releases: go.mod's minimum (bump both when a new Go ships), then the two newest.
+        go: ["1.24.x", oldstable, stable]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
