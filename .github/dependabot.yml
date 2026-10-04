@@ -24,3 +24,9 @@ updates:
     ignore:
       # Pinned to the SPEC.md parity target on purpose; moving it is a spec change.
       - dependency-name: liquidjs
+  - package-ecosystem: npm
+    directory: /scripts/latest # the newest liquidjs, for the nightly drift job
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7 # let a new release age before it becomes a PR
