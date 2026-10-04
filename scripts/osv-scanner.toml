@@ -1,0 +1,16 @@
+# liquidjs here is the test oracle, pinned to the SPEC.md parity target (10.26.0). It renders
+# only templates from this repo's tests and generator, never untrusted input, and mist itself
+# has no npm dependencies. Moving the pin is a spec change, tracked against liquidjs@latest
+# by the nightly drift job (scripts/latest).
+
+[[IgnoredVulns]]
+id = "GHSA-4r6h-5v86-94p3"
+reason = "liquidjs join resource consumption; oracle only, never sees untrusted templates."
+
+[[IgnoredVulns]]
+id = "GHSA-g357-x5c3-c72p"
+reason = "liquidjs pop memoryLimit bypass; oracle only, never sees untrusted templates."
+
+[[IgnoredVulns]]
+id = "GHSA-m7fp-h3p4-hr49"
+reason = "liquidjs strip_html infinite loop; oracle.mjs guards it, and the oracle never sees untrusted templates."

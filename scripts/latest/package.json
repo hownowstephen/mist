@@ -1,0 +1,4 @@
+{
+  "private": true,
+  "dependencies": { "liquidjs": "10.30.0" }
+}
