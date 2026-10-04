@@ -1,0 +1,34 @@
+name: Parity bug
+description: mist rendered a template differently from liquidjs instead of bailing
+labels: [parity]
+body:
+  - type: textarea
+    id: template
+    attributes:
+      label: Template
+      render: liquid
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Data (JSON)
+      render: json
+  - type: dropdown
+    id: strict
+    attributes:
+      label: Strict variables
+      options: ["false", "true"]
+  - type: textarea
+    id: mist
+    attributes:
+      label: mist output or error
+    validations:
+      required: true
+  - type: textarea
+    id: liquidjs
+    attributes:
+      label: liquidjs 10.26 output or error
+      description: "new Liquid({ lenientIf: true }), TZ=UTC"
+    validations:
+      required: true

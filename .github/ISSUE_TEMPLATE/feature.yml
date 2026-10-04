@@ -1,0 +1,16 @@
+name: Support a Liquid feature
+description: A liquidjs tag, filter or construct that mist bails on
+labels: [enhancement]
+body:
+  - type: input
+    id: feature
+    attributes:
+      label: Feature
+      placeholder: "e.g. the tablerow tag, or the sample filter"
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example template
+      render: liquid
