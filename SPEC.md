@@ -195,7 +195,7 @@ Filters other than the built-ins above and registered ones (with `Engine.PassUnk
 Regenerate the corpus (needs Ruby, Node, and clones of both Shopify repos):
 
 ```bash
-cd scripts && npm i
+cd scripts && npm ci
 ruby harvest.rb ../../liquid-spec ../../liquid /tmp/harvest.json
 go run ./gen -n 5000 -seed 1 > /tmp/gen.json
 node oracle.mjs /tmp/harvest.json /tmp/gen.json

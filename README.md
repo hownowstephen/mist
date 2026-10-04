@@ -1,6 +1,8 @@
 # mist
 
 [![CI](https://github.com/hownowstephen/mist/actions/workflows/ci.yml/badge.svg)](https://github.com/hownowstephen/mist/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/hownowstephen/mist.svg)](https://pkg.go.dev/github.com/hownowstephen/mist)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hownowstephen/mist/badge)](https://scorecard.dev/viewer/?uri=github.com/hownowstephen/mist)
 
 A single-pass renderer for a strict subset of [Liquid](https://shopify.github.io/liquid/), fast enough that it's cheap to try before falling back to a full engine.
 
@@ -72,6 +74,10 @@ mistcheck -stats templates.jsonl
 ## Testing
 
 Beyond unit tests, mist is diffed against liquidjs on every template from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) and Shopify/liquid's test suite, plus grammar-generated templates (100k new ones nightly) and fuzzing. See [SPEC.md § Verification](SPEC.md#verification).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
 
 ## License
 
