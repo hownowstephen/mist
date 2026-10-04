@@ -52,9 +52,62 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
+      # Keep the inputs fuzzing has found, so each night builds on the last.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build/fuzz
+          key: fuzz-${{ github.run_id }}
+          restore-keys: fuzz-
       - run: go test -run '^$' -fuzz FuzzRender -fuzztime 5m .
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-crashers
           path: testdata/fuzz
+
+  # liquidjs moves on; this shows what would change if the parity target did. Informational.
+  liquidjs-latest:
+    name: differential vs latest liquidjs
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund && npm install --no-save --no-audit --no-fund liquidjs@latest # zizmor: ignore[adhoc-packages] the point is the latest
+        working-directory: scripts
+      - run: node -p "'liquidjs ' + require('liquidjs/package.json').version" | tee -a "$GITHUB_STEP_SUMMARY"
+        working-directory: scripts
+      - run: node parity.mjs | tail -40 | tee -a "$GITHUB_STEP_SUMMARY"
+        working-directory: scripts
+        shell: bash -o pipefail {0}
+      - run: |
+          go run ./scripts/gen -n 20000 -seed "$GITHUB_RUN_ID" > "$RUNNER_TEMP/gen.json"
+          node scripts/oracle.mjs -o "$RUNNER_TEMP/oracle.json" "$RUNNER_TEMP/gen.json"
+          MIST_CORPUS="$RUNNER_TEMP/oracle.json" go test -run TestCorpus -v . | tail -40
+        shell: bash -o pipefail {0}
+
+  report:
+    name: open an issue on failure
+    needs: [differential, fuzz]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --label nightly --state open --json number -q '.[0].number')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "Failed again: $RUN_URL"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --label nightly --title "Nightly failed" --body "$RUN_URL"
+          fi

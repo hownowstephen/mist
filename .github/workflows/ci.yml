@@ -101,3 +101,52 @@ jobs:
         working-directory: scripts
       - run: node parity.mjs
         working-directory: scripts
+
+  differential:
+    name: generated differential vs liquidjs
+    runs-on: ubuntu-latest
+    env:
+      SEED: ${{ github.run_id }} # new templates every run; the seed is in the log to reproduce
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+        working-directory: scripts
+      - name: generate 20k templates (seed ${{ env.SEED }})
+        run: go run ./scripts/gen -n 20000 -seed "$SEED" > "$RUNNER_TEMP/gen.json"
+      - name: liquidjs oracle
+        run: node scripts/oracle.mjs -o "$RUNNER_TEMP/oracle.json" "$RUNNER_TEMP/gen.json"
+      - name: diff mist against liquidjs
+        run: MIST_CORPUS="$RUNNER_TEMP/oracle.json" go test -run TestCorpus -v . | tail -40
+        shell: bash -o pipefail {0}
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: differential-seed-${{ env.SEED }}
+          path: ${{ runner.temp }}/oracle.json
+
+  api:
+    name: API compatibility
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      # Reports exported API changes since the latest release and the version they call for.
+      - name: gorelease
+        run: |
+          base=$(git describe --tags --abbrev=0 --match 'v*')
+          go run golang.org/x/exp/cmd/gorelease@v0.0.0-20260908205506-85c1c2202aba -base="$base" | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -o pipefail {0}
