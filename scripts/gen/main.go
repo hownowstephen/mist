@@ -85,7 +85,10 @@ func (g *gen) filters() string {
 			f += " | " + g.pick([]string{"where: '" + g.pick(props) + "'", "where: '" + g.pick(props) + "', " + g.expr(), "join", "join: " + g.expr(),
 				"map: '" + g.pick(props) + "'", "sum", "sum: '" + g.pick(props) + "'", "sort", "sort: '" + g.pick(props) + "'",
 				"find: '" + g.pick(props) + "'", "find: '" + g.pick(props) + "', " + g.expr(), "push: " + g.expr(), "reverse",
-				"nope", "nope: " + g.expr(), "my_filter: " + g.expr() + ", " + g.expr()})
+				"nope", "nope: " + g.expr(), "my_filter: " + g.expr() + ", " + g.expr(),
+				"compact", "uniq", "sort_natural", "sort_natural: '" + g.pick(props) + "'", "concat: " + g.expr(), "url_decode", "base64_encode", "base64_decode",
+				"hmac_sha256: " + g.expr(), "at_most: " + g.expr(), "replace_last: " + g.expr() + ", " + g.expr(), "remove_last: " + g.expr(),
+				"has: '" + g.pick(props) + "'", "has: '" + g.pick(props) + "', " + g.expr(), "find_index: '" + g.pick(props) + "', " + g.expr(), "reject: '" + g.pick(props) + "'"})
 		case 6, 7:
 			f += " | " + g.pick([]string{"downcase", "upcase", "strip", "lstrip", "rstrip", "escape", "escape_once", "url_encode", "json", "first", "last",
 				"strip_newlines", "newline_to_br", "size", "abs", "ceil", "floor", "round"})
@@ -236,7 +239,7 @@ func (g *gen) value(depth int) any {
 		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085", "hELLO wORLD", "élodie", "иВАН", "ßtraße", "ΣΟΦΙΑΣ",
 			"now", "1700000000", "2024-02-29", "2024-03-10T07:30:00Z", "2024-11-03 01:30:00", "2024-03-15T10:20:30.5+05:45", "2024-02-30", "Mar 5 2024", "%d/%m", "Europe/Paris",
 			"a,b,,c", "one two  three", "a&amp;b<c>", "😀 hi", " 12 ", "0x1f", "Hello World, and more words than fit",
-			"a\r\nb\rc\n", "<b>hi</b> <script>s</script>t<!-- c -->", "<style>x</style><p>p"})
+			"a\r\nb\rc\n", "<b>hi</b> <script>s</script>t<!-- c -->", "<style>x</style><p>p", "a%20b+%C3%A9", "%zz", "aGk=", "aG k=x"})
 	case 5, 6:
 		if depth < 3 {
 			m := map[string]any{}
