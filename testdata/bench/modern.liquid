@@ -1,0 +1,5 @@
+{% assign total = order.items | sum: 'price' %}{% for item in order.items limit: 4 %}{% unless forloop.first %}, {% endunless %}{{ forloop.index }}. {{ item.name | strip_html | truncate: 20 }}{% case item.kind %}{% when 'gift', 'promo' %} (special){% when 'sale' %} (sale){% endcase %}{% if item.qty > 1 and item.price >= 10.5 or item.flag %} x{{ item.qty }}{% endif %}{% endfor %}
+Total: {{ total | times: 1.08 | round: 2 }}
+{{ order.items | map: 'name' | sort | join: ", " }}
+{% for i in (0..2) %}{{ labels[i] }}{% if forloop.last %}.{% else %}/{% endif %}{% endfor %}
+{% assign vip = order.items | where: 'flag' | size %}{% if vip > 0 %}VIP {{ vip }}{% endif %}{% if customer.name | default: false %} {{ "Say \"hi\", " | append: customer.name }}{% endif %}

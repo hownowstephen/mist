@@ -1,0 +1,17 @@
+{
+  "customer": {
+    "first_name": "ada",
+    "plan": "pro"
+  },
+  "event": {
+    "items": [
+      {
+        "name": "widget",
+        "qty": 2
+      },
+      {
+        "name": "gadget"
+      }
+    ]
+  }
+}

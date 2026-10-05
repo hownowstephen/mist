@@ -1,0 +1,77 @@
+name: Benchmarks
+
+on:
+  schedule:
+    - cron: "47 7 * * *"
+  push:
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+# Informational: shared runners are too noisy to fail a build on timings.
+jobs:
+  liquidjs:
+    name: mist vs liquidjs
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false # runs on release tags; nothing restored from cache
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: npm ci --no-audit --no-fund
+        working-directory: scripts
+      - name: mist
+        run: go test -run '^$' -bench Fixture -benchmem -count 6 . | tee "$RUNNER_TEMP/go.txt"
+        shell: bash -o pipefail {0}
+      - name: liquidjs, and the comparison
+        run: node scripts/bench.mjs -go "$RUNNER_TEMP/go.txt"
+
+  compare:
+    name: benchstat vs base
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false # runs on release tags; nothing restored from cache
+      # Alternating base and head runs spreads machine noise across both sides.
+      - name: benchmark base and head
+        run: |
+          git worktree add -q "$RUNNER_TEMP/base" "$BASE_SHA"
+          for _ in 1 2 3 4 5 6; do
+            (cd "$RUNNER_TEMP/base" && go test -run '^$' -bench . -benchmem -count 1 .) >> "$RUNNER_TEMP/base.txt"
+            go test -run '^$' -bench . -benchmem -count 1 . >> "$RUNNER_TEMP/head.txt"
+          done
+      - name: benchstat
+        run: |
+          {
+            echo '## Benchmarks vs base'
+            echo
+            echo 'Informational; shared runners are noisy, so read small differences with care.'
+            echo
+            echo '```'
+            go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260929162123-406019bb8b68 base="$RUNNER_TEMP/base.txt" head="$RUNNER_TEMP/head.txt"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -o pipefail {0}

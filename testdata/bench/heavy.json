@@ -1,0 +1,13 @@
+{
+  "customer": {
+    "first_name": "  ada ",
+    "tags": [
+      "a",
+      "vip"
+    ],
+    "notes": "",
+    "bio": "A long biography that goes on for a while",
+    "score": 3,
+    "name": "Ada & <Co>"
+  }
+}

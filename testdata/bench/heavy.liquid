@@ -1,0 +1,6 @@
+{% capture greeting %}Hi {{ customer.first_name | strip | capitalize }}{% endcapture %}{{ greeting }}
+Today is {{ 'now' | date: '%A, %B %-d, %Y at %l:%M %p %:z', 'Europe/Paris' }} ({{ 'now' | date: '%s' | plus: 86400 | date: '%Y-%m-%d' }}).
+{% if customer.tags contains 'vip' %}VIP{% endif %}{% if customer.notes == empty %}none{% endif %}
+{{ customer.bio | truncate: 20 }} {{ customer.score | times: 2 | plus: 2 }}
+<a href="https://example.com/?q={{ customer.name | url_encode }}">{{ customer.name | escape }}</a>
+<script>var c = {{ customer.tags | json }};</script>

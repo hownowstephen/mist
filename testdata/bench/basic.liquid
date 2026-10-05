@@ -1,0 +1,4 @@
+<p>Hi {{ customer.first_name }},</p>
+{% if customer.plan == "pro" %}<p>Thanks for being a Pro member since {{ customer.since }}.</p>{% else %}<p>Upgrade today!</p>{% endif %}
+<ul>{% for item in event.items %}<li>{{ item.name }} x{{ item.qty }}</li>{% endfor %}</ul>
+{% unless customer.unsubscribed %}<a href="https://example.com/u/{{ customer.id }}">Unsubscribe</a>{% endunless %}

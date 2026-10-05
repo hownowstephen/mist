@@ -24,6 +24,17 @@ node scripts/parity.mjs       # cases.json against liquidjs
 
 Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, so the code diff stays reviewable.
 
+## Performance
+
+`Append` must not allocate on the basic fixture; CI enforces that. The benchmark fixtures in `testdata/bench` (template, data and liquidjs's output) are what `BenchmarkFixture` renders and `scripts/bench.mjs` times liquidjs on; after changing one, rewrite its output with `node scripts/bench.mjs -w`. To compare locally:
+
+```bash
+go test -run '^$' -bench Fixture -benchmem -count 6 . > /tmp/go.txt
+node scripts/bench.mjs -go /tmp/go.txt
+```
+
+The Benchmarks workflow posts the same table nightly and on release tags, and a benchstat comparison against the base branch on every PR. Neither fails the build; the comparison warns if mist falls below 4× faster than liquidjs rendering a pre-parsed template.
+
 ## Pull requests
 
 Titles start with `feat:`, `fix:` or `chore:` (or `docs:`, `refactor:`); release notes are grouped by them. CI runs the tests on the last three Go releases, golangci-lint, govulncheck, liquidjs parity, a generated differential, and actionlint and zizmor on the workflows.
