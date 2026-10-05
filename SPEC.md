@@ -153,6 +153,7 @@ Filters other than the built-ins above and registered ones (with `Engine.PassUnk
 - Registered names take precedence over built-in filters, so an application can supply its own `default`, `divided_by` and so on.
 - The `nil` literal as a registered filter's input or argument bails: liquidjs passes it as a Drop, not null, so a JavaScript filter would see an object.
 - A registered filter may return `NaN` or an infinity: it prints as JavaScript prints it (`NaN`, `Infinity`), `json` writes it as `null`, and `<`, `>`, `<=` and `>=` with it are false.
+- A filter returning `ErrUnchanged` leaves its input as it was. Returning `Filter.Input` instead would turn an undefined input into null, which compares differently (in lax mode, null ≠ undefined).
 - A filter returning `ErrBuiltin` applies the built-in filter of the same name to the same input and arguments, as if it weren't registered; with no built-in of that name it bails (or, with `PassUnknownFilters`, passes through as an unknown filter would). This lets an application change a built-in for some inputs only, such as nil handling in lax mode. `Check` accepts a registered name without checking the built-in's arguments.
 - Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Other errors stop rendering and are returned wrapped.
 - A `nil` `FilterFunc` is accepted by `Check` and bails at render time.

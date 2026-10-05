@@ -198,3 +198,14 @@ func TestRegisteredFiltersAndNaN(t *testing.T) {
 		}
 	}
 }
+
+func TestErrUnchangedKeepsUndefined(t *testing.T) {
+	e := Engine{Filters: map[string]FilterFunc{
+		"keep":  func(Filter) (any, error) { return nil, ErrUnchanged },
+		"input": func(f Filter) (any, error) { return f.Input, nil },
+	}}
+	out, err := e.Render(`{% case missing | keep %}{% when other %}undefined{% endcase %}{% case missing | input %}{% when other %} null{% endcase %}{{ 'a' | keep }}`, nil, false)
+	if want := "undefineda"; err != nil || out != want {
+		t.Fatalf("got %q, %v; want %q", out, err, want)
+	}
+}

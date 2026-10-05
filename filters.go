@@ -8,8 +8,9 @@ import (
 )
 
 // FilterFunc implements a filter. Returning an error that wraps ErrUnsupported
-// hands the template to the full engine, and ErrBuiltin applies the built-in filter
-// of the same name instead; any other error stops rendering.
+// hands the template to the full engine, ErrBuiltin applies the built-in filter of
+// the same name instead, and ErrUnchanged leaves the input as it was; any other
+// error stops rendering.
 type FilterFunc func(f Filter) (any, error)
 
 // Filter is one application of a registered filter.
@@ -121,8 +122,11 @@ func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at 
 		f.Args[i] = a.data()
 	}
 	x, err := fn(f)
-	if errors.Is(err, ErrBuiltin) {
+	switch {
+	case errors.Is(err, ErrBuiltin):
 		return val{}, true
+	case errors.Is(err, ErrUnchanged):
+		return v, false
 	}
 	if err != nil {
 		panic(bailout{wrapErr("filter", name, at, err)})
