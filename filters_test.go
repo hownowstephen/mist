@@ -3,6 +3,7 @@ package mist
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -178,5 +179,22 @@ func TestErrBuiltinAppliesTheBuiltInFilter(t *testing.T) {
 	}
 	if err := e.Check("{{ s | append }}"); err != nil {
 		t.Errorf("Check of a registered filter: got %v; want nil", err)
+	}
+}
+
+func TestRegisteredFiltersAndNaN(t *testing.T) {
+	e := Engine{Filters: map[string]FilterFunc{
+		"nan": func(Filter) (any, error) { return math.NaN(), nil },
+		"inf": func(Filter) (any, error) { return math.Inf(-1), nil },
+		"id":  func(f Filter) (any, error) { return f.Input, nil },
+	}}
+	out, err := e.Render(`{{ 1 | nan }} {{ 1 | inf }} {{ 1 | nan | json }} {{ 1 | nan | upcase }}{% assign n = 1 | nan %}{% if n <= 1 or n >= 1 or n == n %} ordered{% endif %}`, nil, false)
+	if want := "NaN -Infinity null NAN"; err != nil || out != want {
+		t.Fatalf("got %q, %v; want %q", out, err, want)
+	}
+	for _, tpl := range []string{"{{ nil | id }}", "{{ 1 | id: nil }}"} {
+		if _, err := e.Render(tpl, nil, false); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
+		}
 	}
 }

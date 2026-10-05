@@ -553,6 +553,9 @@ func appendJSON(dst []byte, v val, at int) []byte {
 		return appendJSONString(dst, s)
 	}
 	if f, ok := v.check(at).num(at); ok {
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return append(dst, "null"...) // JSON.stringify's form
+		}
 		return appendJSNumber(dst, f)
 	}
 	switch x := v.x.(type) {
