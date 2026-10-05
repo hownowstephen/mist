@@ -154,3 +154,29 @@ func TestPassUnknownFilters(t *testing.T) {
 		t.Errorf("without the option: got %v; want ErrUnsupported", err)
 	}
 }
+
+func TestErrBuiltinAppliesTheBuiltInFilter(t *testing.T) {
+	builtin := func(f Filter) (any, error) {
+		if f.Input == nil {
+			return "wrapped", nil
+		}
+		return nil, ErrBuiltin
+	}
+	e := Engine{Filters: map[string]FilterFunc{"append": builtin, "where_exp": builtin, "default": builtin, "no_such_filter": builtin}}
+	vars := map[string]any{"s": "a", "xs": []any{1.0, 2.0, 3.0}, "f": false}
+	for tpl, want := range map[string]string{
+		"{{ s | append: 'b' }}|{{ missing | append: 'b' }}":               "ab|wrapped",
+		"{{ xs | where_exp: 'x', 'x > 1' | join: ',' }}":                  "2,3",
+		"{{ f | default: 'd' }}{{ f | default: 'd', allow_false: true }}": "dfalse",
+	} {
+		if out, err := e.Render(tpl, vars, false); err != nil || out != want {
+			t.Errorf("%s: got %q, %v; want %q", tpl, out, err, want)
+		}
+	}
+	if _, err := e.Render("{{ s | no_such_filter }}", vars, false); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("ErrBuiltin without a built-in: got %v; want ErrUnsupported", err)
+	}
+	if err := e.Check("{{ s | append }}"); err != nil {
+		t.Errorf("Check of a registered filter: got %v; want nil", err)
+	}
+}

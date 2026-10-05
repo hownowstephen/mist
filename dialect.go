@@ -1,5 +1,7 @@
 package mist
 
+import "math"
+
 // Dialect changes how values print and compare, and which constructs mist accepts,
 // so an application can target a Liquid engine that differs from liquidjs. With a
 // dialect set, matching that engine is up to the dialect's author.
@@ -46,13 +48,17 @@ func (r *renderer) rejects(c Constructs) bool {
 }
 
 // hookValue is v as dialect hooks see it: nil for nil, undefined and the nil
-// literal, int64 for integer literals, Blank and Empty for those keywords.
+// literal, int64 for integral number literals and results, float64 for the rest,
+// Blank and Empty for those keywords.
 func (v val) hookValue() any {
 	switch v.lit {
 	case litStr:
 		return v.s
 	case litNum:
-		return int64(v.n) // the grammar only has integer literals
+		if v.n == math.Trunc(v.n) && math.Abs(v.n) < maxSafeInt {
+			return int64(v.n)
+		}
+		return v.n
 	}
 	switch v.x.(type) {
 	case undefinedT, nilLitT:

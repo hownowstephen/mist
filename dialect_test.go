@@ -132,3 +132,11 @@ func TestDialectNoDefaultLeniency(t *testing.T) {
 		t.Errorf("lax: got %q, %v; want d", out, err)
 	}
 }
+
+func TestDialectSeesFractionalNumbers(t *testing.T) {
+	e := Engine{Dialect: toyDialect(new([]call))}
+	out, err := e.Render("{{ 1.5 }} {{ -2.5 | abs }} {{ 2 | times: 1 }} {{ 7 | divided_by: 2 }}", nil, false)
+	if want := "float:1.5 float:2.5 int:2 float:3.5"; err != nil || out != want {
+		t.Fatalf("got %q, %v; want %q", out, err, want)
+	}
+}
