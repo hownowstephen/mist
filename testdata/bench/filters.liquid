@@ -1,0 +1,3 @@
+<p>Hi {{ customer.first_name | default: "there" | capitalize }},</p>
+{% assign plan = customer.plan | default: "free" %}<p>Plan: {{ plan | capitalize }} since {{ customer.since | default: "today" }}.</p>
+{% for item in event.items %}<li>{{ item.name | capitalize }} x{{ item.qty | default: 1 }}</li>{% endfor %}

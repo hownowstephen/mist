@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -177,45 +178,71 @@ func runtimeBail(err error) bool {
 	return false
 }
 
-const benchTpl = `<p>Hi {{ customer.first_name }},</p>
-{% if customer.plan == "pro" %}<p>Thanks for being a Pro member since {{ customer.since }}.</p>{% else %}<p>Upgrade today!</p>{% endif %}
-<ul>{% for item in event.items %}<li>{{ item.name }} x{{ item.qty }}</li>{% endfor %}</ul>
-{% unless customer.unsubscribed %}<a href="https://example.com/u/{{ customer.id }}">Unsubscribe</a>{% endunless %}`
-
-func BenchmarkAppend(b *testing.B) {
-	vars := map[string]any{
-		"customer": map[string]any{"first_name": "Ada", "plan": "pro", "since": "2019", "id": 42.0, "unsubscribed": false},
-		"event":    map[string]any{"items": []any{map[string]any{"name": "Widget", "qty": 2.0}, map[string]any{"name": "Gadget", "qty": 1.0}}},
+// benchFixture loads testdata/bench/NAME: the template, its data, and liquidjs's output.
+func benchFixture(tb testing.TB, name string) (tpl string, vars map[string]any, out string) {
+	tb.Helper()
+	read := func(ext string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", "bench", name+ext))
+		if err != nil {
+			tb.Fatal(err)
+		}
+		return b
 	}
-	buf := make([]byte, 0, 1024)
-	b.ReportAllocs()
-	b.SetBytes(int64(len(benchTpl)))
-	for b.Loop() {
-		var err error
-		if buf, err = Append(buf[:0], benchTpl, vars, true); err != nil {
-			b.Fatal(err)
+	if err := json.Unmarshal(read(".json"), &vars); err != nil {
+		tb.Fatal(err)
+	}
+	return string(read(".liquid")), vars, string(read(".out"))
+}
+
+var benchFixtures = []string{"basic", "filters", "heavy", "modern"}
+
+// benchEngine shares scripts/bench.mjs's clock, so fixtures using 'now' render the same.
+var benchEngine = Engine{Now: func() time.Time { return time.UnixMilli(1700000000123) }}
+
+// The fixtures render exactly as liquidjs does (scripts/bench.mjs -check), so timing them compares like with like.
+func TestBenchFixturesMatchLiquidjs(t *testing.T) {
+	for _, name := range benchFixtures {
+		tpl, vars, want := benchFixture(t, name)
+		if out, err := benchEngine.Render(tpl, vars, true); err != nil || out != want {
+			t.Errorf("%s: got %q, %v; want %q", name, out, err, want)
 		}
 	}
 }
 
-func BenchmarkRender(b *testing.B) {
-	vars := map[string]any{
-		"customer": map[string]any{"first_name": "Ada", "plan": "pro", "since": "2019", "id": 42.0, "unsubscribed": false},
-		"event":    map[string]any{"items": []any{map[string]any{"name": "Widget", "qty": 2.0}, map[string]any{"name": "Gadget", "qty": 1.0}}},
+// BenchmarkFixture is what scripts/bench.mjs compares with liquidjs.
+func BenchmarkFixture(b *testing.B) {
+	for _, name := range benchFixtures {
+		tpl, vars, _ := benchFixture(b, name)
+		b.Run(name, func(b *testing.B) {
+			buf := make([]byte, 0, 4096)
+			b.ReportAllocs()
+			b.SetBytes(int64(len(tpl)))
+			for b.Loop() {
+				var err error
+				if buf, err = benchEngine.Append(buf[:0], tpl, vars, true); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
+}
+
+func BenchmarkRender(b *testing.B) {
+	tpl, vars, _ := benchFixture(b, "basic")
 	b.ReportAllocs()
-	b.SetBytes(int64(len(benchTpl)))
+	b.SetBytes(int64(len(tpl)))
 	for b.Loop() {
-		if _, err := Render(benchTpl, vars, true); err != nil {
+		if _, err := Render(tpl, vars, true); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
 func BenchmarkCheck(b *testing.B) {
+	tpl, _, _ := benchFixture(b, "basic")
 	b.ReportAllocs()
 	for b.Loop() {
-		if err := Check(benchTpl); err != nil {
+		if err := Check(tpl); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -248,50 +275,6 @@ func TestChainKeyThroughScalar(t *testing.T) {
 	}
 }
 
-const filterTpl = `<p>Hi {{ customer.first_name | default: "there" | capitalize }},</p>
-{% assign plan = customer.plan | default: "free" %}<p>Plan: {{ plan | capitalize }} since {{ customer.since | default: "today" }}.</p>
-{% for item in event.items %}<li>{{ item.name | capitalize }} x{{ item.qty | default: 1 }}</li>{% endfor %}`
-
-func BenchmarkFilters(b *testing.B) {
-	vars := map[string]any{
-		"customer": map[string]any{"first_name": "ada", "plan": "pro"},
-		"event":    map[string]any{"items": []any{map[string]any{"name": "widget", "qty": 2.0}, map[string]any{"name": "gadget"}}},
-	}
-	buf := make([]byte, 0, 1024)
-	b.ReportAllocs()
-	b.SetBytes(int64(len(filterTpl)))
-	for b.Loop() {
-		var err error
-		if buf, err = Append(buf[:0], filterTpl, vars, true); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// heavyTpl exercises the allocating filters: date with a zone, capture, truncate, escape, url_encode, json.
-
-const heavyTpl = `{% capture greeting %}Hi {{ customer.first_name | strip | capitalize }}{% endcapture %}{{ greeting }}
-Today is {{ 'now' | date: '%A, %B %-d, %Y at %l:%M %p %:z', 'Europe/Paris' }} ({{ 'now' | date: '%s' | plus: 86400 | date: '%Y-%m-%d' }}).
-{% if customer.tags contains 'vip' %}VIP{% endif %}{% if customer.notes == empty %}none{% endif %}
-{{ customer.bio | truncate: 20 }} {{ customer.score | times: 2 | plus: 2 }}
-<a href="https://example.com/?q={{ customer.name | url_encode }}">{{ customer.name | escape }}</a>
-<script>var c = {{ customer.tags | json }};</script>`
-
-func BenchmarkHeavy(b *testing.B) {
-	vars := map[string]any{"customer": map[string]any{
-		"first_name": "  ada ", "tags": []any{"a", "vip"}, "notes": "",
-		"bio": "A long biography that goes on for a while", "score": 3.0, "name": "Ada & <Co>",
-	}}
-	buf := make([]byte, 0, 2048)
-	b.ReportAllocs()
-	for b.Loop() {
-		var err error
-		if buf, err = Append(buf[:0], heavyTpl, vars, true); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 func TestNestedRangesHitTheIterationBudget(t *testing.T) {
 	start := time.Now()
 	_, err := Render(`{% for i in (1..99999) %}{% for j in (1..99999) %}x{% endfor %}{% endfor %}`, nil, false)
@@ -312,37 +295,6 @@ func TestSortOfGoNumbers(t *testing.T) {
 	out, err := Render(`{{ xs | sort | join: ',' }}`, map[string]any{"xs": []any{3, int64(1), json.Number("2")}}, true)
 	if err != nil || out != "1,2,3" {
 		t.Fatalf("got %q, %v; want 1,2,3", out, err)
-	}
-}
-
-// modernTpl exercises v0.9–v0.12: case, loops with forloop and limit, ranges, variable
-// indexes, filtered and mixed conditions, floats, escapes and the array filters.
-const modernTpl = `{% assign total = order.items | sum: 'price' %}{% for item in order.items limit: 4 %}{% unless forloop.first %}, {% endunless %}{{ forloop.index }}. {{ item.name | strip_html | truncate: 20 }}{% case item.kind %}{% when 'gift', 'promo' %} (special){% when 'sale' %} (sale){% endcase %}{% if item.qty > 1 and item.price >= 10.5 or item.flag %} x{{ item.qty }}{% endif %}{% endfor %}
-Total: {{ total | times: 1.08 | round: 2 }}
-{{ order.items | map: 'name' | sort | join: ", " }}
-{% for i in (0..2) %}{{ labels[i] }}{% if forloop.last %}.{% else %}/{% endif %}{% endfor %}
-{% assign vip = order.items | where: 'flag' | size %}{% if vip > 0 %}VIP {{ vip }}{% endif %}{% if customer.name | default: false %} {{ "Say \"hi\", " | append: customer.name }}{% endif %}`
-
-var modernVars = map[string]any{
-	"customer": map[string]any{"name": "Ada"},
-	"labels":   []any{"one", "two", "three"},
-	"order": map[string]any{"items": []any{
-		map[string]any{"name": "<b>Widget</b>", "kind": "gift", "qty": 2.0, "price": 12.5, "flag": true},
-		map[string]any{"name": "Gadget", "kind": "sale", "qty": 1.0, "price": 9.99, "flag": false},
-		map[string]any{"name": "Doohickey with a long name", "kind": "plain", "qty": 3.0, "price": 4.25, "flag": false},
-		map[string]any{"name": "Thing", "kind": "promo", "qty": 1.0, "price": 20.0, "flag": true},
-		map[string]any{"name": "Extra", "kind": "plain", "qty": 5.0, "price": 1.0, "flag": false},
-	}},
-}
-
-func BenchmarkModern(b *testing.B) {
-	buf := make([]byte, 0, 2048)
-	b.ReportAllocs()
-	for b.Loop() {
-		var err error
-		if buf, err = Append(buf[:0], modernTpl, modernVars, true); err != nil {
-			b.Fatal(err)
-		}
 	}
 }
 

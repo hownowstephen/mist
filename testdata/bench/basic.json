@@ -1,0 +1,21 @@
+{
+  "customer": {
+    "first_name": "Ada",
+    "plan": "pro",
+    "since": "2019",
+    "id": 42,
+    "unsubscribed": false
+  },
+  "event": {
+    "items": [
+      {
+        "name": "Widget",
+        "qty": 2
+      },
+      {
+        "name": "Gadget",
+        "qty": 1
+      }
+    ]
+  }
+}

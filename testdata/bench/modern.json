@@ -1,0 +1,49 @@
+{
+  "customer": {
+    "name": "Ada"
+  },
+  "labels": [
+    "one",
+    "two",
+    "three"
+  ],
+  "order": {
+    "items": [
+      {
+        "name": "<b>Widget</b>",
+        "kind": "gift",
+        "qty": 2,
+        "price": 12.5,
+        "flag": true
+      },
+      {
+        "name": "Gadget",
+        "kind": "sale",
+        "qty": 1,
+        "price": 9.99,
+        "flag": false
+      },
+      {
+        "name": "Doohickey with a long name",
+        "kind": "plain",
+        "qty": 3,
+        "price": 4.25,
+        "flag": false
+      },
+      {
+        "name": "Thing",
+        "kind": "promo",
+        "qty": 1,
+        "price": 20,
+        "flag": true
+      },
+      {
+        "name": "Extra",
+        "kind": "plain",
+        "qty": 5,
+        "price": 1,
+        "flag": false
+      }
+    ]
+  }
+}

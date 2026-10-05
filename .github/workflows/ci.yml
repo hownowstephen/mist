@@ -101,6 +101,9 @@ jobs:
         working-directory: scripts
       - run: node parity.mjs
         working-directory: scripts
+      - name: benchmark fixtures render as liquidjs does
+        run: node bench.mjs -check
+        working-directory: scripts
 
   differential:
     name: generated differential vs liquidjs
