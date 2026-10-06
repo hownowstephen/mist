@@ -1,13 +1,16 @@
 package mist
 
 import (
+	"errors"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
 // FilterFunc implements a filter. Returning an error that wraps ErrUnsupported
-// hands the template to the full engine; any other error stops rendering.
+// hands the template to the full engine, ErrBuiltin applies the built-in filter of
+// the same name instead, and ErrUnchanged leaves the input as it was; any other
+// error stops rendering.
 type FilterFunc func(f Filter) (any, error)
 
 // Filter is one application of a registered filter.
@@ -69,11 +72,17 @@ func (r *renderer) filters(v val, eval bool) val {
 		}
 
 		fn, registered := r.filterFns[name]
-		switch {
-		case registered:
-			if eval {
-				v = r.callFilter(fn, name, v, args, at)
+		if registered {
+			if !eval {
+				continue
 			}
+			out, builtin := r.callFilter(fn, name, v, args, at)
+			if !builtin {
+				v = out
+				continue
+			}
+		}
+		switch {
 		case name == "default" && len(args) <= 1:
 			if eval {
 				v = defaultFilter(v, args, allowFalse, at)
@@ -97,19 +106,32 @@ func (r *renderer) namedArg() (string, bool) {
 	return "", false
 }
 
-func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at int) val {
+// callFilter applies a registered filter, or reports that it asked for the built-in.
+func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at int) (out val, builtin bool) {
 	if fn == nil {
 		bail(at, "filter %q is registered without a function", name) // e.g. for Check only
 	}
 	f := Filter{Name: name, Input: v.data(), Args: make([]any, len(args)), Strict: r.strict}
+	if v.lit == 0 && v.x == nilLit {
+		bail(at, "the nil literal into a registered filter, which liquidjs passes as a Drop")
+	}
 	for i, a := range args {
+		if a.lit == 0 && a.x == nilLit {
+			bail(at, "the nil literal into a registered filter, which liquidjs passes as a Drop")
+		}
 		f.Args[i] = a.data()
 	}
-	out, err := fn(f)
+	x, err := fn(f)
+	switch {
+	case errors.Is(err, ErrBuiltin):
+		return val{}, true
+	case errors.Is(err, ErrUnchanged):
+		return v, false
+	}
 	if err != nil {
 		panic(bailout{wrapErr("filter", name, at, err)})
 	}
-	return val{x: out}
+	return val{x: x}, false
 }
 
 // data is v as a registered filter sees it: nil stands for undefined too.

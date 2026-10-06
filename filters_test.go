@@ -3,6 +3,7 @@ package mist
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -152,5 +153,59 @@ func TestPassUnknownFilters(t *testing.T) {
 	}
 	if _, err := Render(`{{ x | nope }}`, vars, false); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("without the option: got %v; want ErrUnsupported", err)
+	}
+}
+
+func TestErrBuiltinAppliesTheBuiltInFilter(t *testing.T) {
+	builtin := func(f Filter) (any, error) {
+		if f.Input == nil {
+			return "wrapped", nil
+		}
+		return nil, ErrBuiltin
+	}
+	e := Engine{Filters: map[string]FilterFunc{"append": builtin, "where_exp": builtin, "default": builtin, "no_such_filter": builtin}}
+	vars := map[string]any{"s": "a", "xs": []any{1.0, 2.0, 3.0}, "f": false}
+	for tpl, want := range map[string]string{
+		"{{ s | append: 'b' }}|{{ missing | append: 'b' }}":               "ab|wrapped",
+		"{{ xs | where_exp: 'x', 'x > 1' | join: ',' }}":                  "2,3",
+		"{{ f | default: 'd' }}{{ f | default: 'd', allow_false: true }}": "dfalse",
+	} {
+		if out, err := e.Render(tpl, vars, false); err != nil || out != want {
+			t.Errorf("%s: got %q, %v; want %q", tpl, out, err, want)
+		}
+	}
+	if _, err := e.Render("{{ s | no_such_filter }}", vars, false); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("ErrBuiltin without a built-in: got %v; want ErrUnsupported", err)
+	}
+	if err := e.Check("{{ s | append }}"); err != nil {
+		t.Errorf("Check of a registered filter: got %v; want nil", err)
+	}
+}
+
+func TestRegisteredFiltersAndNaN(t *testing.T) {
+	e := Engine{Filters: map[string]FilterFunc{
+		"nan": func(Filter) (any, error) { return math.NaN(), nil },
+		"inf": func(Filter) (any, error) { return math.Inf(-1), nil },
+		"id":  func(f Filter) (any, error) { return f.Input, nil },
+	}}
+	out, err := e.Render(`{{ 1 | nan }} {{ 1 | inf }} {{ 1 | nan | json }} {{ 1 | nan | upcase }}{% assign n = 1 | nan %}{% if n <= 1 or n >= 1 or n == n %} ordered{% endif %}`, nil, false)
+	if want := "NaN -Infinity null NAN"; err != nil || out != want {
+		t.Fatalf("got %q, %v; want %q", out, err, want)
+	}
+	for _, tpl := range []string{"{{ nil | id }}", "{{ 1 | id: nil }}"} {
+		if _, err := e.Render(tpl, nil, false); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
+		}
+	}
+}
+
+func TestErrUnchangedKeepsUndefined(t *testing.T) {
+	e := Engine{Filters: map[string]FilterFunc{
+		"keep":  func(Filter) (any, error) { return nil, ErrUnchanged },
+		"input": func(f Filter) (any, error) { return f.Input, nil },
+	}}
+	out, err := e.Render(`{% case missing | keep %}{% when other %}undefined{% endcase %}{% case missing | input %}{% when other %} null{% endcase %}{{ 'a' | keep }}`, nil, false)
+	if want := "undefineda"; err != nil || out != want {
+		t.Fatalf("got %q, %v; want %q", out, err, want)
 	}
 }

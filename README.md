@@ -27,7 +27,7 @@ Install with `go get github.com/hownowstephen/mist`. Releases are tagged `vX.Y.Z
 
 ## Custom tags and filters
 
-Register inline tags and filters on an `Engine`; the package-level functions use an `Engine` with none. Registered filters override built-in ones. `PassUnknownFilters` passes filters liquidjs doesn't define through unchanged, as liquidjs does by default; leave it off unless `Filters` covers every filter your full engine has.
+Register inline tags and filters on an `Engine`; the package-level functions use an `Engine` with none. Registered filters override built-in ones, and can return `ErrBuiltin` to apply the built-in after all. `PassUnknownFilters` passes filters liquidjs doesn't define through unchanged, as liquidjs does by default; leave it off unless `Filters` covers every filter your full engine has.
 
 ```go
 e := mist.Engine{Tags: map[string]mist.TagFunc{

@@ -792,6 +792,14 @@ func (r *renderer) write(v val) {
 
 // appendJSNumber formats f as JavaScript's Number.prototype.toString does.
 func appendJSNumber(dst []byte, f float64) []byte {
+	switch {
+	case math.IsNaN(f):
+		return append(dst, "NaN"...) // only registered filters produce these
+	case math.IsInf(f, 1):
+		return append(dst, "Infinity"...)
+	case math.IsInf(f, -1):
+		return append(dst, "-Infinity"...)
+	}
 	if f == 0 {
 		return append(dst, '0') // including -0
 	}
@@ -858,6 +866,9 @@ func compare(op string, a, b val, at int) bool {
 		y, ok := b.num(at)
 		if !ok {
 			bail(at, "%s between number and %T", op, b.any())
+		}
+		if math.IsNaN(x) || math.IsNaN(y) {
+			return false // only registered filters produce NaN; every ordering with it is false
 		}
 		c = cmpFloat(x, y)
 	} else {

@@ -16,6 +16,12 @@ var (
 	// ErrUndefined is a strict-mode undefined variable. The full engine fails too, though a
 	// syntax error later in the template may take precedence there.
 	ErrUndefined = errors.New("mist: undefined variable")
+	// ErrBuiltin returned by a FilterFunc applies the built-in filter of the same name
+	// to the same input and arguments, as if none were registered.
+	ErrBuiltin = errors.New("mist: use the built-in filter")
+	// ErrUnchanged returned by a FilterFunc leaves the filter's input as it was. Unlike
+	// returning Filter.Input, it keeps an undefined input undefined rather than null.
+	ErrUnchanged = errors.New("mist: leave the input unchanged")
 )
 
 // Error is the error Render, Append and Check return. errors.Is matches its Kind.
