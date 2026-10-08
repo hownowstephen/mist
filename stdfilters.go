@@ -979,6 +979,13 @@ func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any
 
 // itemPath reads a dotted path off item as liquidjs's evalToken on a scope spawned from it does.
 func (r *renderer) itemPath(item any, path string, at int) any {
+	if _, isMap := item.(map[string]any); !isMap && item != nil {
+		if first, _, _ := strings.Cut(path, "."); magic(first) {
+			// liquidjs scopes the lookup to the item, where a string's or array's size, first
+			// and last aren't computed.
+			bail(at, "where by %s on an item that isn't an object", first)
+		}
+	}
 	x, strict := item, r.strict // a range-over-func body capturing r moves the renderer to the heap before Go 1.25
 	for key := range strings.SplitSeq(path, ".") {
 		if strict && isNil(val{x: x}) {
