@@ -283,6 +283,58 @@ func (g *gen) block(depth int) {
 	}
 }
 
+// dateString is a random date string in the forms V8's Date.parse reads, valid or not,
+// with the near misses (two-digit years, month prefixes, odd zones) mist must bail on.
+func (g *gen) dateString() string {
+	day := fmt.Sprint(g.r.IntN(33))
+	mon := g.r.IntN(14)
+	year := g.pick([]string{"2024", "1970", "1969", "2000", "2038", "1999", "24", "0999"})
+	names := []string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}
+	name := g.pick([]string{"Jan", "Feb", "Mar", "apr", "MAY", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Marc", "Sept"})
+	if mon >= 1 && mon <= 12 && g.r.IntN(2) == 0 {
+		name = names[mon-1]
+	}
+	var d string
+	switch g.r.IntN(8) {
+	case 0:
+		d = day + " " + name + " " + year
+	case 1:
+		d = name + " " + day + g.pick([]string{" ", ", "}) + year
+	case 2:
+		d = fmt.Sprintf("%d/%s/%s", mon, day, year)
+	case 3:
+		d = fmt.Sprintf("%s/%02d/%s", year, mon, day)
+	case 4:
+		d = fmt.Sprintf("%s-%02d-%02s", year, mon, day)
+	case 5:
+		d = fmt.Sprintf("%s-%02d-%02sT%02d:%02d:%02d", year, mon, day, g.r.IntN(25), g.r.IntN(61), g.r.IntN(61))
+	case 6:
+		d = name + " " + day + " " + fmt.Sprintf("%02d:%02d:%02d", g.r.IntN(25), g.r.IntN(61), g.r.IntN(61)) + " " + year
+	default:
+		d = fmt.Sprintf("%s-%02d-%02s %02d:%02d", year, mon, day, g.r.IntN(25), g.r.IntN(61))
+	}
+	if g.r.IntN(3) == 0 {
+		d = g.pick([]string{"Mon", "Fri,", "Sunday", "thu", "Xyz"}) + " " + d
+	}
+	if g.r.IntN(2) == 0 {
+		switch g.r.IntN(3) {
+		case 0:
+			d += fmt.Sprintf(" %d:%02d", g.r.IntN(25), g.r.IntN(61))
+		case 1:
+			d += fmt.Sprintf(" %02d:%02d:%02d", g.r.IntN(25), g.r.IntN(61), g.r.IntN(61))
+		default:
+			d += fmt.Sprintf(" %d:%02d %s", g.r.IntN(14), g.r.IntN(60), g.pick([]string{"AM", "PM", "pm", "am"}))
+		}
+	}
+	if g.r.IntN(2) == 0 {
+		d += " " + g.pick([]string{"UTC", "GMT", "UT", "Z", "EST", "PDT", "cst", "CET", "+0530", "-0700", "GMT+0100", "UTC-0330", "+05:30", "+2400"})
+	}
+	if g.r.IntN(5) == 0 {
+		d += g.pick([]string{" (Coordinated Universal Time)", " (x (y))", " ("})
+	}
+	return d
+}
+
 func (g *gen) value(depth int) any {
 	switch g.r.IntN(10) {
 	case 0:
@@ -294,6 +346,9 @@ func (g *gen) value(depth int) any {
 	case 3:
 		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000, 1700000000, 1710460800.5, -86400})
 	case 4:
+		if g.r.IntN(4) == 0 {
+			return g.dateString()
+		}
 		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085", "hELLO wORLD", "élodie", "иВАН", "ßtraße", "ΣΟΦΙΑΣ",
 			"now", "1700000000", "2024-02-29", "2024-03-10T07:30:00Z", "2024-11-03 01:30:00", "2024-03-15T10:20:30.5+05:45", "2024-02-30", "Mar 5 2024", "%d/%m", "Europe/Paris",
 			"a,b,,c", "one two  three", "a&amp;b<c>", "😀 hi", " 12 ", "0x1f", "Hello World, and more words than fit",
