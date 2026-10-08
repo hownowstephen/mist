@@ -2,6 +2,7 @@ package mist
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -96,5 +97,32 @@ func TestCustomTagsChain(t *testing.T) {
 	res, n, _ := e.RenderChain([]Step{{Body: "{% greet a %}", Key: []string{"x"}}, {Body: "{{ x }}{% fallback %}"}}, nil)
 	if n != 1 || len(res) != 1 || res[0].Out != "hi a" {
 		t.Fatalf("got n=%d res=%+v; want the fallback step handed to the full engine", n, res)
+	}
+}
+
+// liquidjs keeps counters in the data, so later chain steps that share it see them.
+func TestCountersInChains(t *testing.T) {
+	steps := []Step{
+		{Body: "{% increment n %}{% increment n %}"},
+		{Body: "{{ n }}", Key: []string{"out"}},
+		{Body: "{% increment m %}", Vars: map[string]any{}},
+		{Body: "[{{ m }}]"},
+	}
+	res, n, vars := RenderChain(steps, map[string]any{"n": 5.0})
+	if n != len(steps) || res[0].Out != "56" || res[1].Out != "7" || res[2].Out != "0" || res[3].Out != "[]" {
+		t.Fatalf("got %+v, %d", res, n)
+	}
+	if vars["n"] != 7.0 || vars["out"] != "7" {
+		t.Errorf("hydrated vars %v", vars)
+	}
+}
+
+func TestTagLookupSeesCounters(t *testing.T) {
+	e := Engine{Tags: map[string]TagFunc{"show": func(dst []byte, t Tag) ([]byte, error) {
+		v, _ := t.Lookup("n")
+		return fmt.Appendf(dst, "%v", v), nil
+	}}}
+	if out, err := e.Render("{% increment n %}|{% show %}", nil, false); err != nil || out != "0|1" {
+		t.Fatalf("got %q, %v", out, err)
 	}
 }

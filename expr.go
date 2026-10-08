@@ -469,11 +469,14 @@ func (r *renderer) root(name string, at int) any {
 		}
 	}
 	for i := r.depth - 1; i >= 0; i-- {
-		if f := &r.stack[i]; f.kind == kFor && f.active && f.name == name {
+		if f := &r.stack[i]; f.looping() && f.active && f.name == name {
 			return f.item()
 		}
 	}
 	if v, ok := r.assigns[name]; ok {
+		return v
+	}
+	if v, ok := r.env[name]; ok {
 		return v
 	}
 	if v, ok := r.vars[name]; ok {
@@ -1078,7 +1081,7 @@ func (r *renderer) forloop(eval bool, start int) any {
 // loop is the innermost for frame, or nil.
 func (r *renderer) loop() *frame {
 	for i := r.depth - 1; i >= 0; i-- {
-		if r.stack[i].kind == kFor {
+		if r.stack[i].looping() {
 			return &r.stack[i]
 		}
 	}

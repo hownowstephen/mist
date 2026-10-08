@@ -16,7 +16,7 @@ func ExampleRender() {
 
 // Templates outside the subset return ErrUnsupported; render those with the full engine.
 func ExampleRender_fallback() {
-	_, err := mist.Render("{% increment n %}", nil, false)
+	_, err := mist.Render("{% tablerow x in xs %}{% endtablerow %}", nil, false)
 	if errors.Is(err, mist.ErrUnsupported) {
 		fmt.Println("render with the full engine")
 	}
