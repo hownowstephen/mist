@@ -1500,13 +1500,7 @@ func jsNumberOf(v val, at int) float64 {
 			return math.Inf(-1)
 		}
 		if base := radix(t); base != 0 {
-			n, err := strconv.ParseUint(t[2:], base, 64)
-			if errors.Is(err, strconv.ErrRange) {
-				bail(at, "to_integer of %q", t)
-			}
-			if err == nil {
-				return float64(n)
-			}
+			return radixValue(t[2:], base, at)
 		}
 		return math.NaN()
 	}
@@ -1528,6 +1522,22 @@ func jsNumberOf(v val, at int) float64 {
 	}
 	bail(at, "to_integer of %T", v.any()) // arrays convert through their joined string
 	return 0
+}
+
+// radixValue is the value of base-radix digits s, NaN if one isn't a digit. Values from
+// 2^53 up bail, where JavaScript's rounding would need reproducing.
+func radixValue(s string, base int, at int) float64 {
+	n := 0.0
+	for i := range len(s) {
+		d := strings.IndexByte("0123456789abcdef", s[i]|0x20)
+		if d < 0 || d >= base || s[i] == '_' {
+			return math.NaN()
+		}
+		if n = n*float64(base) + float64(d); n >= maxSafeInt {
+			bail(at, "to_integer of a %d-digit base-%d integer", len(s), base)
+		}
+	}
+	return n
 }
 
 // radix is the base of a 0x, 0o or 0b integer literal, or 0.
