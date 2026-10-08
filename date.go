@@ -65,12 +65,16 @@ func (r *renderer) dateInput(v val, at int) (int64, bool) {
 		f, _ := strconv.ParseFloat(s, 64)
 		return clipMs(f * 1000)
 	}
-	t, ok := isoMs(s)
-	if !ok {
-		// ponytail: V8's legacy parser accepts far more; widen this if real inputs need it.
-		bail(at, "date of a string outside the ISO 8601 subset")
+	if t, ok := isoMs(s); ok {
+		return t, true
 	}
-	return t, true
+	if t, ok := legacyMs(s); ok {
+		return t, true
+	}
+	// ponytail: V8's fallback parser accepts still more (two-digit years, day rollover, any
+	// month prefix); widen this if real inputs need it.
+	bail(at, "date of a string in none of the supported formats")
+	return 0, false
 }
 
 // isoMs parses YYYY-MM-DD[(T| )HH:MM[:SS[.fraction]][Z|±HH:MM]] with in-range fields.
@@ -109,9 +113,10 @@ func isoMs(s string) (int64, bool) {
 		}
 		switch {
 		case rest == "" || rest == "Z":
-		case len(rest) == 6 && (rest[0] == '+' || rest[0] == '-') && rest[3] == ':':
+		case len(rest) == 6 && (rest[0] == '+' || rest[0] == '-') && rest[3] == ':',
+			len(rest) == 5 && (rest[0] == '+' || rest[0] == '-'):
 			oh, ok7 := digits(rest[1:3])
-			om, ok8 := digits(rest[4:6])
+			om, ok8 := digits(rest[len(rest)-2:])
 			if !ok7 || !ok8 || oh > 23 || om > 59 {
 				return 0, false
 			}
@@ -426,4 +431,96 @@ func weekOfYear(d time.Time, startDay int) int {
 	jan1 := time.Date(d.Year(), 1, 1, 0, 0, 0, 0, time.UTC).Weekday()
 	then := 7 - int(jan1) + startDay
 	return int(math.Floor(float64(now-then)/7)) + 1
+}
+
+// The layouts V8's fallback parser reads as it does, after legacyMs strips a weekday and a
+// zone: day-month-year and month-day-year with month names, US numeric dates, year/month/day
+// and year-month-day, each optionally followed by a 24- or 12-hour time, and asctime.
+var legacyLayouts = func() []string {
+	var ls []string
+	for _, d := range []string{"2 Jan 2006", "2 January 2006", "Jan 2 2006", "Jan 2, 2006", "January 2 2006", "January 2, 2006", "1/2/2006", "2006/1/2"} {
+		for _, t := range []string{"", " 15:04", " 15:04:05", " 3:04 PM", " 3:04:05 PM"} {
+			ls = append(ls, d+t)
+		}
+	}
+	for _, t := range []string{" 15:04", " 15:04:05", " 3:04 PM", " 3:04:05 PM"} {
+		ls = append(ls, "2006-01-02"+t) // V8 reads one-digit hours and 12-hour times here too
+	}
+	return append(ls, "Jan 2 15:04:05 2006", "January 2 15:04:05 2006") // asctime, as Date#toString once printed
+}()
+
+// zoneOffsets are the zone names V8 knows, in minutes east of UTC.
+var zoneOffsets = map[string]int{"UTC": 0, "UT": 0, "GMT": 0, "EST": -300, "EDT": -240, "CST": -360, "CDT": -300, "MST": -420, "MDT": -360, "PST": -480, "PDT": -420}
+
+var weekdays = []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}
+
+// legacyMs parses the strings outside ISO 8601 that V8's Date.parse accepts and mist
+// reproduces: an optional weekday, a date and time in one of legacyLayouts, and an
+// optional zone (a name V8 knows, ±hhmm, or GMT±hhmm) and trailing (comment). Without a
+// zone the time is UTC, as it is for V8 under TZ=UTC.
+func legacyMs(s string) (int64, bool) {
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, ")") {
+		i := strings.LastIndexByte(s, '(')
+		if i < 0 || strings.ContainsAny(s[i+1:len(s)-1], "()") {
+			return 0, false
+		}
+		s = strings.TrimSpace(s[:i]) // V8 skips parenthesized comments
+	}
+	off := 0
+	if i := strings.LastIndexByte(s, ' '); i > 0 {
+		if o, ok := zoneOffset(s[i+1:]); ok {
+			if _, named := zoneOffsets[strings.ToUpper(s[i+1:])]; !named && !strings.Contains(s[:i], ":") {
+				return 0, false // V8 rejects a numeric offset after a date with no time
+			}
+			s, off = strings.TrimSpace(s[:i]), o
+		}
+	}
+	if word, rest, ok := strings.Cut(s, " "); ok && isWeekday(strings.TrimSuffix(word, ",")) {
+		s = strings.TrimSpace(rest)
+	}
+	if t, ok := isoMs(s); ok && !strings.ContainsRune(s, 'T') {
+		return t - int64(off)*60000, true // an ISO date and time with a space, then a zone
+	}
+	if n := len(s); n > 3 && (strings.EqualFold(s[n-3:], " am") || strings.EqualFold(s[n-3:], " pm")) {
+		s = s[:n-2] + strings.ToUpper(s[n-2:])
+	}
+	for _, l := range legacyLayouts {
+		if t, err := time.ParseInLocation(l, s, time.UTC); err == nil {
+			return t.UnixMilli() - int64(off)*60000, true
+		}
+	}
+	return 0, false
+}
+
+// zoneOffset reads a zone V8 knows: a name, ±hhmm, or GMT or UTC followed by ±hhmm.
+func zoneOffset(z string) (int, bool) {
+	if o, ok := zoneOffsets[strings.ToUpper(z)]; ok {
+		return o, true
+	}
+	if len(z) > 3 && (strings.EqualFold(z[:3], "GMT") || strings.EqualFold(z[:3], "UTC")) {
+		z = z[3:]
+	}
+	if len(z) != 5 || (z[0] != '+' && z[0] != '-') {
+		return 0, false
+	}
+	h, ok1 := digits(z[1:3])
+	m, ok2 := digits(z[3:])
+	if !ok1 || !ok2 || h > 23 || m > 59 {
+		return 0, false
+	}
+	if z[0] == '-' {
+		return -(h*60 + m), true
+	}
+	return h*60 + m, true
+}
+
+func isWeekday(w string) bool {
+	w = strings.ToLower(w)
+	for _, d := range weekdays {
+		if w == d || len(w) > 3 && strings.HasPrefix(w, d) && strings.HasSuffix(w, "day") {
+			return true
+		}
+	}
+	return false
 }
