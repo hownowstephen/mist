@@ -22,7 +22,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 	arity := func(lo, hi int) bool { return n >= lo && n <= hi }
 	var ok bool
 	switch name {
-	case "capitalize", "downcase", "upcase", "escape", "escape_once", "url_encode", "json", "first", "last",
+	case "capitalize", "downcase", "upcase", "escape", "escape_once", "url_encode", "json", "jsonify", "inspect", "first", "last",
 		"strip_newlines", "newline_to_br", "strip_html", "size", "abs", "ceil", "floor", "reverse":
 		ok = arity(0, 0)
 	case "map", "push":
@@ -45,7 +45,9 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		ok = arity(0, 1)
 	case "slugify", "date_to_string", "date_to_long_string":
 		ok = arity(0, 2)
-	case "where_exp", "find_exp", "group_by_exp":
+	case "sha256", "to_integer", "raw":
+		ok = arity(0, 0)
+	case "where_exp", "find_exp", "group_by_exp", "reject_exp", "find_index_exp", "has_exp":
 		if ok = arity(2, 2); ok {
 			r.checkExp(a, at)
 		}
@@ -158,28 +160,48 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 			bail(at, "unshift of nil or undefined") // liquidjs keeps distinct null-ish values
 		}
 		return val{x: append([]any{a[0].any()}, toArray(v, at)...)}
-	case "where_exp", "find_exp":
-		nm, exp := a[0].s, a[1].s
+	case "where_exp", "reject_exp":
+		// liquidjs keeps the items whose value is exactly true (where_exp) or false (reject_exp).
+		keep := name == "where_exp"
 		out := []any{}
 		for _, it := range toArray(v, at) {
-			x := r.expValue(true, exp, nm, it, at)
-			if name == "find_exp" {
-				if jsTruthy(x, at) {
-					return val{x: it}
-				}
-				continue
-			}
-			if b, ok := x.x.(bool); ok && b {
+			x := r.expValue(true, a[1].s, a[0].s, it, at)
+			if b, ok := x.x.(bool); ok && b == keep {
 				out = append(out, it)
 			}
 		}
-		if name == "find_exp" {
-			return val{x: undefinedT{}}
-		}
 		return val{x: out}
+	case "find_exp", "find_index_exp", "has_exp":
+		// The first item whose value is truthy in JavaScript.
+		for i, it := range toArray(v, at) {
+			if !jsTruthy(r.expValue(true, a[1].s, a[0].s, it, at), at) {
+				continue
+			}
+			switch name {
+			case "find_exp":
+				return val{x: it}
+			case "find_index_exp":
+				return val{x: boxInt(i)}
+			}
+			return val{x: true}
+		}
+		if name == "has_exp" {
+			return val{x: false}
+		}
+		return val{x: undefinedT{}}
+	case "sha256":
+		sum := sha256.Sum256([]byte(validStr(toStr(v, at), at)))
+		return strVal(hex.EncodeToString(sum[:]))
+	case "to_integer":
+		return val{n: jsNumberOf(v, at), lit: litNum}
+	case "raw":
+		if r.dialect != nil && r.dialect.Output != nil {
+			bail(at, "raw with a dialect Output hook") // it makes liquidjs skip outputEscape
+		}
+		return v
 	case "group_by", "group_by_exp":
 		return val{x: r.groupBy(v, a, name == "group_by_exp", at)}
-	case "json":
+	case "json", "jsonify", "inspect":
 		if _, undef := v.x.(undefinedT); undef && v.lit == 0 {
 			return v // JSON.stringify(undefined) is undefined
 		}
@@ -1452,4 +1474,67 @@ func (r *renderer) groupBy(v val, a []val, exp bool, at int) []any {
 		out[i] = g
 	}
 	return out
+}
+
+// jsNumberOf is JavaScript's Number(v), which liquidjs's to_integer is: strings as
+// numeric literals (NaN otherwise), null 0, undefined NaN, booleans 1 and 0.
+func jsNumberOf(v val, at int) float64 {
+	if s, ok := v.str(); ok {
+		t := strings.TrimFunc(s, jsSpace)
+		switch {
+		case t == "":
+			return 0
+		case decimal(t):
+			f, _ := strconv.ParseFloat(t, 64)
+			return f
+		case t == "Infinity", t == "+Infinity":
+			return math.Inf(1)
+		case t == "-Infinity":
+			return math.Inf(-1)
+		}
+		if base := radix(t); base != 0 {
+			n, err := strconv.ParseUint(t[2:], base, 64)
+			if errors.Is(err, strconv.ErrRange) {
+				bail(at, "to_integer of %q", t)
+			}
+			if err == nil {
+				return float64(n)
+			}
+		}
+		return math.NaN()
+	}
+	if f, ok := v.check(at).num(at); ok {
+		return f
+	}
+	switch x := v.x.(type) {
+	case nil:
+		return 0
+	case undefinedT:
+		return math.NaN()
+	case bool:
+		if x {
+			return 1
+		}
+		return 0
+	case map[string]any:
+		return math.NaN()
+	}
+	bail(at, "to_integer of %T", v.any()) // arrays convert through their joined string
+	return 0
+}
+
+// radix is the base of a 0x, 0o or 0b integer literal, or 0.
+func radix(t string) int {
+	if len(t) < 3 || t[0] != '0' {
+		return 0
+	}
+	switch t[1] {
+	case 'x', 'X':
+		return 16
+	case 'o', 'O':
+		return 8
+	case 'b', 'B':
+		return 2
+	}
+	return 0
 }
