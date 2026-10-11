@@ -4,7 +4,7 @@ mist's contract is simple: for any template it accepts, its output matches [liqu
 
 ## Setup
 
-- Go 1.24 or newer (`go.mod`'s minimum; CI tests the last three releases).
+- Go 1.25 or newer (`go.mod`'s minimum; CI tests the last three releases).
 - Node 22, for the liquidjs oracle: `cd scripts && npm ci`.
 
 ```bash
