@@ -5,82 +5,55 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hownowstephen/mist/badge)](https://scorecard.dev/viewer/?uri=github.com/hownowstephen/mist)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15202/badge)](https://www.bestpractices.dev/projects/15202)
 
-A single-pass renderer for a strict subset of [Liquid](https://shopify.github.io/liquid/), fast enough that it's cheap to try before falling back to a full engine.
+A single-pass Go renderer for most of [Liquid](https://shopify.github.io/liquid/), fast enough to try before falling back to a full engine.
 
-mist evaluates as it scans: no tokenize, compile or AST step, and no allocations on the hot path. As soon as it meets anything outside the subset it returns `ErrUnsupported`, and you render with your full Liquid engine instead. For every template it accepts, its output matches [liquidjs](https://liquidjs.com) 10 (`lenientIf: true`) byte for byte.
+mist evaluates as it scans, with no parse tree and no allocations on the hot path: about 10–80× faster than [liquidjs](https://liquidjs.com) on its benchmark templates. For every template it accepts, its output matches liquidjs 10 (`lenientIf: true`) byte for byte. Anything it can't render exactly returns `ErrUnsupported`, so you render that template with your full engine instead.
+
+Use it in front of liquidjs (or an engine that behaves like it) when you render many templates and most of them are ordinary. It isn't a complete Liquid engine on its own.
+
+## Install
+
+```bash
+go get github.com/hownowstephen/mist
+```
+
+Requires Go 1.25 or newer.
+
+## Quickstart
 
 ```go
 out, err := mist.Render(tpl, vars, strict)
 switch {
 case errors.Is(err, mist.ErrUnsupported):
-	// outside the subset: render with the full engine
+	out, err = fullEngine.Render(tpl, vars, strict) // outside what mist renders exactly
 case errors.Is(err, mist.ErrUndefined):
 	// strict mode, undefined variable; the full engine fails too
 }
 ```
 
-Install with `go get github.com/hownowstephen/mist`. Releases are tagged `vX.Y.Z` and summarized on the [releases page](https://github.com/hownowstephen/mist/releases); report bugs and request features in [issues](https://github.com/hownowstephen/mist/issues).
+`vars` is plain JSON-shaped data (`map[string]any`). `mist.Append` renders into a reusable buffer without allocating.
 
-`Append(dst, tpl, vars, strict)` does the same into a reusable buffer, with no allocations.
-
-`RenderChain` renders a sequence of templates whose outputs feed later ones, such as snippets, then subject, then body, then layout. It stops at the first step mist can't handle, so only the remaining steps go to the full engine.
-
-## Custom tags and filters
-
-Register inline tags and filters on an `Engine`; the package-level functions use an `Engine` with none. Registered filters override built-in ones, and can return `ErrBuiltin` to apply the built-in after all. `PassUnknownFilters` passes filters liquidjs doesn't define through unchanged, as liquidjs does by default; leave it off unless `Filters` covers every filter your full engine has.
-
-```go
-e := mist.Engine{Tags: map[string]mist.TagFunc{
-	"link": func(dst []byte, t mist.Tag) ([]byte, error) {
-		url, ok := t.Lookup(t.Args) // {% link product.url %}, resolved in scope
-		if !ok {
-			return nil, mist.ErrUnsupported // let the full engine handle it
-		}
-		return fmt.Appendf(dst, `<a href="%s">`, url), nil
-	},
-}}
-out, err := e.Render(tpl, vars, strict)
-```
-
-```go
-e.Filters = map[string]mist.FilterFunc{
-	"shout": func(f mist.Filter) (any, error) {
-		s, ok := f.Input.(string)
-		if !ok {
-			return nil, mist.ErrUnsupported
-		}
-		return strings.ToUpper(s) + "!", nil
-	},
-}
-```
-
-## Dialects
-
-`Engine.Dialect` adapts mist to a Liquid engine that differs from liquidjs. It has hooks for how values print (`Output`) and compare (`Compare`), a set of constructs to reject, and a switch for `default`'s leniency. Parity with the target engine is then up to the dialect's author; see [SPEC.md § Dialects](SPEC.md#dialects).
-
-## What's supported
-
-Variables and paths (`{{ a.b[0]['k'] }}`, `{{ a[key] }}`), string literals with escapes, number/boolean/nil literals, `if`/`elsif`/`else`/`unless`, `case`/`when`, `for … in` with ranges and `else`, `limit`/`offset`/`reversed`, `break`/`continue` and `forloop`, `assign`, `comment` and inline `#` comments, `raw`, `capture`, `cycle`, `echo`, `increment`/`decrement`, `liquid`, comparisons including `contains` and `== blank`/`== empty`, `and`/`or` (with filters on conditions), whitespace control, and the `default`, `capitalize`, `date`, `downcase`, `upcase`, `append`, `prepend`, `replace`, `replace_first`, `remove`, `remove_first`, `strip`, `lstrip`, `rstrip`, `truncate`, `truncatewords`, `escape`, `escape_once`, `url_encode`, `strip_newlines`, `newline_to_br`, `strip_html`, `json`, `split`, `slice`, `first`, `last`, `join`, `size`, `where`, `reject`, `map`, `sum`, `sort`, `sort_natural`, `find`, `find_index`, `has`, `push`, `concat`, `compact`, `uniq`, `reverse`, `replace_last`, `remove_last`, `url_decode`, `base64_encode`, `base64_decode`, `hmac_sha256`, `xml_escape`, `cgi_escape`, `uri_escape`, `normalize_whitespace`, `number_of_words`, `slugify`, `array_to_sentence_string`, `pop`, `shift`, `unshift`, `group_by`, `where_exp`, `reject_exp`, `find_exp`, `find_index_exp`, `has_exp`, `group_by_exp`, `jsonify`, `inspect`, `to_integer`, `sha256`, `raw`, `date_to_xmlschema`, `date_to_rfc822`, `date_to_string`, `date_to_long_string`, `at_most`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `abs`, `ceil`, `floor`, `round` and `at_least` filters. `date` reads ISO 8601 and the other common forms `new Date` reads: RFC 2822, month names (`Mar 15, 2024 3:04 PM`), US dates (`3/15/2024`), `Date#toString` output and the US zone names. [SPEC.md](SPEC.md) is the normative grammar and semantics.
-
-Check whether templates are in the subset:
+## Will my templates render?
 
 ```bash
 go run github.com/hownowstephen/mist/cmd/mistcheck@latest template.liquid
 ```
 
-`-tags a,b` and `-filters a,b` treat those names as registered custom tags and filters, and `-pass-unknown-filters` sets `PassUnknownFilters`. `-stats` finds every unsupported construct, not just the first, and summarizes how many templates each one blocks, and which sets of blockers most often appear together. That shows what to add next. `.jsonl` input holds one template per line as a JSON string:
+It reports the first construct each template uses that mist doesn't render; `-stats` summarizes a whole set. See [docs/mistcheck.md](docs/mistcheck.md).
 
-```bash
-mistcheck -stats templates.jsonl
-```
+## Docs
 
-## Testing
+| | |
+|---|---|
+| [docs/supported.md](docs/supported.md) | What renders, by tag, expression and filter, and what falls back |
+| [docs/extending.md](docs/extending.md) | `Engine`: custom tags and filters, chains of templates, dialects for other Liquid engines |
+| [docs/mistcheck.md](docs/mistcheck.md) | The template checker |
+| [SPEC.md](SPEC.md) | The normative grammar and semantics, and how parity is verified |
+| [pkg.go.dev](https://pkg.go.dev/github.com/hownowstephen/mist) | API reference with runnable examples |
+| [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) | Working on mist, for people and coding agents |
+| [SECURITY.md](SECURITY.md) | Reporting vulnerabilities, verifying releases |
 
-Beyond unit tests, mist is diffed against liquidjs on every template from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) and Shopify/liquid's test suite, plus grammar-generated templates (100k new ones nightly) and fuzzing. See [SPEC.md § Verification](SPEC.md#verification).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+Releases and their notes are on the [releases page](https://github.com/hownowstephen/mist/releases). Report bugs, including any output that differs from liquidjs, in [issues](https://github.com/hownowstephen/mist/issues).
 
 ## License
 
