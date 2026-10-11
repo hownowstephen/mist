@@ -47,6 +47,10 @@ type frame struct {
 
 func (f *frame) subject() val { return val{x: f.x, s: f.name, n: f.n, lit: f.lit} }
 
+// looping reports whether f is a for loop still iterating, not in its else part, which
+// has no loop variable or forloop and where break and continue reach the enclosing loop.
+func (f *frame) looping() bool { return f.kind == kFor && !f.sawElse }
+
 type renderer struct {
 	tpl          string
 	out          []byte
@@ -68,6 +72,7 @@ type renderer struct {
 	cycles       map[string]int // cycle positions by liquidjs's fingerprint
 	binds        []binding      // expression filter items, innermost last
 	lenientUndef bool           // a lenient path met an undefined variable under strict
+	env          map[string]any // increment and decrement counters, which liquidjs keeps in the data scope
 
 	// expression cursor: src is tpl[base:base+len(src)]
 	src  string
@@ -246,6 +251,10 @@ func (r *renderer) output(b, e int) {
 func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	r.setSrc(b, e)
 	r.ws()
+	if r.peek() == '#' {
+		r.inlineComment(b)
+		return next, rt
+	}
 	name := r.ident()
 	live := r.live()
 	switch name {
@@ -270,8 +279,17 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "else":
 		r.end()
 		f := r.top()
-		if f == nil || f.kind == kFor || f.kind == kCapture || f.sawElse {
+		if f == nil || f.kind == kCapture || f.sawElse {
 			bail(b, "unexpected else")
+		}
+		if f.kind == kFor {
+			// The else ends the loop body: iterate again, or move to the else part, which
+			// renders only when the collection was empty before limit, offset and reversed.
+			if again := r.endIteration(b); again {
+				return f.body, f.rtrim
+			}
+			f.sawElse, f.active = true, f.taken
+			break
 		}
 		f.sawElse, f.active, f.taken = true, !f.taken, true
 	case "case":
@@ -349,7 +367,9 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			switch c := coll.(type) {
 			case []any:
 				f.coll = mods.apply(c)
+				f.taken = len(c) == 0 // for its else part
 			case nil, undefinedT:
+				f.taken = true
 			default:
 				bail(b, "for over non-array %T", coll)
 			}
@@ -360,7 +380,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "break", "continue":
 		r.end()
 		i := r.depth - 1
-		for i >= 0 && r.stack[i].kind != kFor {
+		for i >= 0 && !r.stack[i].looping() {
 			i--
 		}
 		if i < 0 {
@@ -376,18 +396,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		if f == nil || f.kind != kFor {
 			bail(b, "unexpected endfor")
 		}
-		if r.halt == r.depth {
-			r.halt = 0
-			if r.haltBreak {
-				r.depth--
-				return next, rt
-			}
-		}
-		if f.active && !r.check && int(f.idx)+1 < len(f.coll) {
-			if r.iters++; r.iters > maxIterations {
-				bail(b, "more than %d loop iterations", maxIterations) // ranges make loop counts template-controlled
-			}
-			f.idx++
+		if !f.sawElse && r.endIteration(b) {
 			return f.body, f.rtrim
 		}
 		r.depth--
@@ -446,6 +455,38 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		return r.raw(next, live), false
 	case "cycle":
 		r.cycle(live, b)
+	case "echo":
+		r.ws()
+		if r.p == len(r.src) {
+			break // liquidjs's echo of nothing
+		}
+		v := r.expr(live, false)
+		if k := v.keyword(); k != "" {
+			bail(b, "%s is only supported with == and !=", k)
+		}
+		v = r.filters(v, live)
+		r.end()
+		if live {
+			if _, isStr := v.str(); !isStr && !isNil(v) && r.dialect != nil && r.dialect.Output != nil {
+				bail(b, "echo of a non-string with a dialect Output hook") // liquidjs's echo skips outputEscape
+			}
+			r.write(v)
+		}
+	case "increment", "decrement":
+		r.ws()
+		v := r.ident()
+		r.end()
+		if v == "" {
+			bail(b, "expected: %s <ident>", name)
+		}
+		if live {
+			r.counter(v, name == "increment")
+		}
+	case "liquid":
+		if lt || rt {
+			bail(b, "trim markers on liquid") // they'd apply to the text around the tag, as usual, but keep it simple
+		}
+		r.liquid(r.base+r.p, e)
 	default:
 		fn, ok := r.tags[name]
 		if !ok {
@@ -607,7 +648,7 @@ func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
 	if fn == nil {
 		bail(pos, "tag %q is registered without a function", name) // e.g. for Check only
 	}
-	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, assigns: r.assigns, frames: slices.Clone(r.stack[:r.depth])}
+	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, assigns: r.assigns, env: r.env, frames: slices.Clone(r.stack[:r.depth])}
 	out, err := fn(r.out, t)
 	if err != nil {
 		panic(bailout{wrapErr("tag", name, pos, err)})
@@ -711,4 +752,98 @@ func trimRightBlank(s string) string {
 		s = s[:len(s)-n]
 	}
 	return s
+}
+
+// endIteration ends one pass over a for loop's body at an else or endfor, reporting
+// whether the loop runs again from its body.
+func (r *renderer) endIteration(at int) bool {
+	f := r.top()
+	if r.halt == r.depth {
+		r.halt = 0
+		if r.haltBreak {
+			return false
+		}
+	}
+	if f.active && !r.check && int(f.idx)+1 < len(f.coll) {
+		if r.iters++; r.iters > maxIterations {
+			bail(at, "more than %d loop iterations", maxIterations) // ranges make loop counts template-controlled
+		}
+		f.idx++
+		return true
+	}
+	return false
+}
+
+// inlineComment validates {% # … %}: liquidjs requires every line to start with #.
+func (r *renderer) inlineComment(at int) {
+	rest := r.src[r.p:]
+	for i := strings.IndexByte(rest, '\n'); i >= 0; i = strings.IndexByte(rest, '\n') {
+		rest = strings.TrimLeftFunc(rest[i+1:], func(c rune) bool { return c != '\n' && jsSpace(c) })
+		if rest != "" && rest[0] != '#' && rest[0] != '\n' {
+			bail(at, "an inline comment line that doesn't start with #") // liquidjs errors
+		}
+	}
+}
+
+// counter is liquidjs's increment (print, then add one) and decrement (subtract one,
+// then print). Counters live in the data scope: they start from a numeric variable of
+// the same name, and assigns and loop variables shadow them.
+func (r *renderer) counter(name string, inc bool) {
+	cur, ok := r.env[name]
+	if !ok {
+		cur = r.vars[name]
+	}
+	n, isNum := 0.0, false
+	switch cur.(type) {
+	case nil, bool, string, map[string]any, []any:
+	default:
+		n, isNum = num(cur, r.base)
+	}
+	if !isNum {
+		n = 0
+	}
+	if !inc {
+		n--
+	}
+	if r.env == nil {
+		r.env = map[string]any{}
+	}
+	r.out = appendJSNumber(r.out, n)
+	if inc {
+		n++
+	}
+	r.env[name] = n
+}
+
+// liquid runs the {% liquid %} tag's lines, each a tag without delimiters, from start
+// to end. Blocks opened in it must close in it, as liquidjs parses it on its own.
+func (r *renderer) liquid(start, end int) {
+	depth := r.depth
+	for pos := start; pos < end; {
+		eol := strings.IndexByte(r.tpl[pos:end], '\n')
+		next := end
+		if eol >= 0 {
+			eol += pos
+			next = eol + 1
+		} else {
+			eol = end
+		}
+		b := pos + len(r.tpl[pos:eol]) - len(strings.TrimLeftFunc(r.tpl[pos:eol], isTrimBlank))
+		e := b + len(strings.TrimRightFunc(r.tpl[b:eol], isTrimBlank))
+		if b == e {
+			pos = next
+			continue
+		}
+		r.setSrc(b, e)
+		if r.peek() != '#' {
+			switch name := r.ident(); name {
+			case "comment", "raw", "liquid":
+				bail(b, "%s inside a liquid tag", name)
+			}
+		}
+		pos, _ = r.tag(b, e, next, false, false)
+	}
+	if r.depth != depth {
+		bail(end, "a block left open in a liquid tag")
+	}
 }

@@ -93,7 +93,8 @@ func (g *gen) filters() string {
 				"slugify", "slugify: " + g.pick([]string{"'raw'", "'pretty'", "'ascii'", "'latin'", "'none'", "s"}) + g.pick([]string{"", ", true", ", " + g.expr()}),
 				"array_to_sentence_string", "array_to_sentence_string: " + g.expr(), "date_to_xmlschema", "date_to_rfc822", "date_to_string", "date_to_long_string",
 				"date_to_string: 'ordinal'" + g.pick([]string{"", ", 'US'", ", s"}), "pop", "shift", "unshift: " + g.expr(), "group_by: '" + g.pick(props) + "'",
-				g.pick([]string{"where_exp", "find_exp", "group_by_exp"}) + ": '" + g.pick([]string{"x", "x", "a", "item"}) + "', '" + g.exp() + "'"})
+				g.pick([]string{"where_exp", "find_exp", "group_by_exp", "reject_exp", "find_index_exp", "has_exp"}) + ": '" + g.pick([]string{"x", "x", "a", "item"}) + "', '" + g.exp() + "'",
+				"jsonify", "inspect", "to_integer", "sha256", "raw"})
 		case 6, 7:
 			f += " | " + g.pick([]string{"downcase", "upcase", "strip", "lstrip", "rstrip", "escape", "escape_once", "url_encode", "json", "first", "last",
 				"strip_newlines", "newline_to_br", "size", "abs", "ceil", "floor", "round"})
@@ -212,6 +213,10 @@ func (g *gen) block(depth int) {
 				g.block(depth + 1)
 			}
 			g.loops = g.loops[:len(g.loops)-1]
+			if g.r.IntN(3) == 0 {
+				g.b.WriteString(g.open("else"))
+				g.block(depth + 1)
+			}
 			g.b.WriteString(g.open("endfor"))
 		case k == 7 && g.r.IntN(3) == 0 && depth < 4:
 			g.b.WriteString(g.open("case " + g.expr() + g.filters()))
@@ -237,6 +242,30 @@ func (g *gen) block(depth int) {
 			g.b.WriteString(g.open("capture " + g.pick(names[:6])))
 			g.block(depth + 1)
 			g.b.WriteString(g.open("endcapture"))
+		case k == 9 && g.r.IntN(2) == 0:
+			switch g.r.IntN(4) {
+			case 0:
+				g.b.WriteString(g.open("echo " + g.expr() + g.filters()))
+			case 1:
+				g.b.WriteString(g.open(g.pick([]string{"increment ", "decrement "}) + g.pick(names[:6])))
+			case 2:
+				g.b.WriteString(g.open("# " + g.pick(words) + g.pick([]string{"", "\n # more", "\n x"})))
+			default:
+				lines := []string{"liquid"}
+				for range g.r.IntN(4) + 1 {
+					switch g.r.IntN(4) {
+					case 0:
+						lines = append(lines, "echo "+g.expr()+g.filters())
+					case 1:
+						lines = append(lines, "assign "+g.pick(names[:6])+" = "+g.expr()+g.filters())
+					case 2:
+						lines = append(lines, "if "+g.cond(), "echo "+g.expr(), "endif")
+					default:
+						lines = append(lines, "for i in (1..3)", "echo i", "endfor")
+					}
+				}
+				g.b.WriteString(g.open(strings.Join(lines, g.pick([]string{"\n", "\n  ", "\n\n"}))))
+			}
 		case k == 8 && g.r.IntN(3) == 0:
 			c := g.pick([]string{"", "", "'g': ", "a: ", "1: "})
 			for i := range g.r.IntN(3) + 1 {

@@ -67,6 +67,7 @@ type Tag struct {
 	Strict bool
 
 	assigns map[string]any
+	env     map[string]any
 	frames  []frame
 }
 
@@ -82,7 +83,7 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 			v, ok = nil, false
 		}
 	}()
-	r := renderer{tpl: path, vars: t.Vars, assigns: t.assigns}
+	r := renderer{tpl: path, vars: t.Vars, assigns: t.assigns, env: t.env}
 	r.depth = copy(r.stack[:], t.frames)
 	r.setSrc(0, len(path))
 	r.ws()
@@ -120,10 +121,18 @@ func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, er
 
 // Append is the package-level Append with e's custom tags.
 func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
-	defer recoverBail(&err)
+	out, _, err = e.append(dst, tpl, vars, strict)
+	return out, err
+}
+
+// append is Append that also returns the increment and decrement counters, which
+// liquidjs writes into the data a chain's later steps share.
+func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
 	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, now: e.Now, passUnknown: e.PassUnknownFilters}
+	defer func() { env = r.env }()
+	defer recoverBail(&err)
 	r.run()
-	return r.out, nil
+	return r.out, nil, nil
 }
 
 // Check is the package-level Check, also accepting e's custom tags.
@@ -166,9 +175,18 @@ func (e Engine) RenderChain(steps []Step, vars map[string]any) (res []Result, n 
 		if v == nil {
 			v = vars
 		}
-		out, err := e.Append(buf[:0], st.Body, v, st.Strict)
+		out, env, err := e.append(buf[:0], st.Body, v, st.Strict)
 		if errors.Is(err, ErrUnsupported) {
 			return res, i, vars
+		}
+		if len(env) > 0 && st.Vars == nil {
+			if !owned {
+				vars, owned = maps.Clone(vars), true
+				if vars == nil {
+					vars = map[string]any{}
+				}
+			}
+			maps.Copy(vars, env) // counters persist in the shared data, even when the step fails
 		}
 		buf = out
 		body := st.Body // bound as content on error, so the layout still renders
