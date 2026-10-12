@@ -865,22 +865,29 @@ func compare(op string, a, b val, at int) bool {
 		return !eq(a, b, at)
 	}
 	var c int
-	if x, ok := a.num(at); ok {
-		y, ok := b.num(at)
-		if !ok {
-			bail(at, "%s between number and %T", op, b.any())
-		}
+	x, xNum := a.num(at)
+	y, yNum := b.num(at)
+	xs, xStr := a.str()
+	ys, yStr := b.str()
+	// JavaScript compares a number and a string as numbers, reading the string as Number does.
+	switch {
+	case xNum && yStr:
+		y, yNum = jsNumberOf(b, at), true
+	case xStr && yNum:
+		x, xNum = jsNumberOf(a, at), true
+	}
+	switch {
+	case xNum && yNum:
 		if math.IsNaN(x) || math.IsNaN(y) {
-			return false // only registered filters produce NaN; every ordering with it is false
+			return false
 		}
 		c = cmpFloat(x, y)
-	} else {
-		x, ok1 := a.str()
-		y, ok2 := b.str()
-		if !ok1 || !ok2 || !ascii(x) || !ascii(y) {
-			bail(at, "%s needs two numbers or two ASCII strings", op)
-		}
-		c = strings.Compare(x, y)
+	case xNum:
+		bail(at, "%s between number and %T", op, b.any())
+	case xStr && yStr && ascii(xs) && ascii(ys):
+		c = strings.Compare(xs, ys)
+	default:
+		bail(at, "%s needs two numbers, two ASCII strings, or a number and a string TYPES %T %T %v %v", op, a.any(), b.any(), ascii(xs), ascii(ys))
 	}
 	switch op {
 	case "<":
