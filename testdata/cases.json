@@ -499,6 +499,7 @@
   {"name": "echo of an undefined variable under strict", "tpl": "{% echo missing %}", "strict": true, "err": "undefined"},
   {"name": "liquid tag", "tpl": "{% liquid\n assign a = 'x'\n # a comment\n if a == 'x'\n  echo a | upcase\n endif\n for i in (1..3)\n  if i == 2\n   continue\n  endif\n  echo i\n endfor\n case a\n when 'x'\n  echo '!'\n endcase\n%}|{% liquid echo 'one' %}{% liquid\n\n%}", "out": "X13!|one"},
   {"name": "liquid tag with a block left open", "tpl": "{% liquid if true %}x", "err": "unsupported"},
+  {"name": "liquid tag with trim markers", "tpl": "a {%- liquid\n echo 1\n assign x = 2 -%} b{{ x }}|a\n{%- liquid -%}\nb|a {%liquid echo 1 -%}\n b", "out": "a1b2|ab|a 1b"},
   {"name": "liquid tag in a loop", "tpl": "{% for i in (1..2) %}{% liquid\n  if i == 2\n    break\n  endif\n  echo i %}{% endfor %}", "out": "1"},
   {"name": "for else", "tpl": "{% for i in xs %}{{ i }}{% else %}empty{% endfor %}|{% for i in ys limit: 0 %}{{ i }}{% else %}empty{% endfor %}|{% for i in missing %}x{% else %}none{% endfor %}|{% for i in ys %}{{ i }}{% else %}no{% endfor %}", "data": {"xs": [], "ys": [1, 2]}, "out": "empty||none|12"},
   {"name": "for else breaks the enclosing loop", "tpl": "{% for o in (1..2) %}{% for i in xs %}x{% else %}{{ forloop.index }}{{ o }}{% break %}{% endfor %}y{% endfor %}", "data": {"xs": []}, "out": "11"},

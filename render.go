@@ -483,9 +483,6 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			r.counter(v, name == "increment")
 		}
 	case "liquid":
-		if lt || rt {
-			bail(b, "trim markers on liquid") // they'd apply to the text around the tag, as usual, but keep it simple
-		}
 		r.liquid(r.base+r.p, e)
 	default:
 		fn, ok := r.tags[name]
