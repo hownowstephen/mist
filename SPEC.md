@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.18.x
+# mist Liquid subset — v0.19.x
 
-_Last updated 2026-10-03. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-11. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -80,7 +80,7 @@ Structural rules the EBNF doesn't express:
 | `cycle` | Writes its values in turn, one per render of the tag, skipping the write when the value is falsy in JavaScript (`0`, `""`, `false`, nil, undefined). Only the value written is evaluated, so under strict only it can be `ErrUndefined`. The position is kept for the whole render, keyed as liquidjs keys it: by the group (`String` of its value, or `undefined` without one) and the number of values, not the values themselves, so `{% cycle 'a', 'b' %}{% cycle 'c', 'd' %}` prints `ad`. |
 | `echo` | `{% echo x \| f %}` prints as `{{ x \| f }}` does; an empty `echo` prints nothing. liquidjs skips its `outputEscape` for `echo`, so with a dialect `Output` hook a non-string value bails. |
 | `increment` / `decrement` | `increment n` prints `n` then adds one; `decrement n` subtracts one then prints. liquidjs keeps the counter in the data scope: it starts from a number variable `n` in the data (anything else starts at 0), `{{ n }}` sees it unless an `assign` or a loop variable shadows it, and in a `RenderChain` it carries to later steps that share the chain's variables. Under strict, a missing counter is 0, not `ErrUndefined`. |
-| `liquid` | Each non-blank line of `{% liquid … %}` is a tag without delimiters, rendered as if written `{% … %}`; lines starting with `#` are comments. Blocks opened in it must close in it. `comment`, `raw` and a nested `liquid` inside it bail. |
+| `liquid` | Each non-blank line of `{% liquid … %}` is a tag without delimiters, rendered as if written `{% … %}`; lines starting with `#` are comments. Trim markers on the tag trim the text around it, as on any tag. Blocks opened in it must close in it. `comment`, `raw` and a nested `liquid` inside it bail. |
 | Inline comments | `{% # … %}` renders nothing. Every line after the first must start with `#` (after blanks), or liquidjs errors and mist bails. |
 | `for` | Arrays and ranges only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. `offset: n`, `limit: n` and `reversed` apply in that order whatever order they're written in, as `slice(n)`, `slice(0, n)` and a reversal; `n` must be an integer, and a negative one counts from the end. A render runs at most 1,000,000 loop iterations; past that it bails. An `else` part renders when the collection is empty before the modifiers apply (so `limit: 0` doesn't trigger it); in it there's no loop variable or `forloop`, and `break`/`continue` reach the enclosing loop. |
 | `break` / `continue` | End the innermost `for`, or move it to its next item. The rest of its body is skipped, including inside nested `if`, `case` and `capture` blocks; a `capture` still assigns what it rendered before the `break`. |
