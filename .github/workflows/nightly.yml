@@ -87,15 +87,26 @@ jobs:
       - run: node -p "'liquidjs ' + require('liquidjs/package.json').version" | tee -a "$GITHUB_STEP_SUMMARY"
         working-directory: scripts
       # Known drift fails this step; the differential still runs.
-      - run: node parity.mjs | tail -40 | tee -a "$GITHUB_STEP_SUMMARY"
+      - run: node parity.mjs | tee -a "$GITHUB_STEP_SUMMARY"
         working-directory: scripts
         shell: bash -o pipefail {0}
         continue-on-error: true
       - run: |
           go run ./scripts/gen -n 20000 -seed "$GITHUB_RUN_ID" > "$RUNNER_TEMP/gen.json"
           node scripts/oracle.mjs -o "$RUNNER_TEMP/oracle.json" "$RUNNER_TEMP/gen.json"
-          MIST_CORPUS="$RUNNER_TEMP/oracle.json" go test -run TestCorpus -v . | tail -40 | tee -a "$GITHUB_STEP_SUMMARY"
+          MIST_CORPUS="$RUNNER_TEMP/oracle.json" go test -run TestCorpus -v . > "$RUNNER_TEMP/diff.txt"
         shell: bash -o pipefail {0}
+      - if: always()
+        run: |
+          { echo '```'; head -c 900000 "$RUNNER_TEMP/diff.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY" # summaries cap at 1 MiB
+          cat "$RUNNER_TEMP/diff.txt"
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: liquidjs-latest-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/diff.txt
+            ${{ runner.temp }}/oracle.json
 
   report:
     name: open an issue on failure

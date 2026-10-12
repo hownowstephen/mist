@@ -49,7 +49,7 @@ func TestCorpus(t *testing.T) {
 	if err := json.Unmarshal(b, &cs); err != nil {
 		t.Fatal(err)
 	}
-	var accepted, bailed int
+	var accepted, mismatched, bailed int
 	reasons := map[string]int{}
 	for _, c := range cs {
 		for _, strict := range []bool{false, true} {
@@ -72,6 +72,7 @@ func TestCorpus(t *testing.T) {
 			case err == nil && want.Out != nil && out == *want.Out:
 			case errors.Is(err, ErrUndefined) && want.Err != "":
 			default:
+				mismatched++
 				wantS := want.Err
 				if want.Out != nil {
 					wantS = *want.Out
@@ -80,7 +81,7 @@ func TestCorpus(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("%d renders agreed with liquidjs, %d bailed (%.0f%% accepted)", accepted, bailed, 100*float64(accepted)/float64(accepted+bailed))
+	t.Logf("%d renders agreed with liquidjs, %d didn't, %d bailed (%.0f%% accepted)", accepted-mismatched, mismatched, bailed, 100*float64(accepted)/float64(accepted+bailed))
 	type kv struct {
 		k string
 		v int
