@@ -887,7 +887,7 @@ func compare(op string, a, b val, at int) bool {
 	case xStr && yStr && ascii(xs) && ascii(ys):
 		c = strings.Compare(xs, ys)
 	default:
-		bail(at, "%s needs two numbers, two ASCII strings, or a number and a string TYPES %T %T %v %v", op, a.any(), b.any(), ascii(xs), ascii(ys))
+		bail(at, "%s needs two numbers, two ASCII strings, or a number and a string", op)
 	}
 	switch op {
 	case "<":
