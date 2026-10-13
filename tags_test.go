@@ -117,6 +117,17 @@ func TestCountersInChains(t *testing.T) {
 	}
 }
 
+func TestTagLookupAssignedNil(t *testing.T) {
+	e := Engine{Tags: map[string]TagFunc{"show": func(dst []byte, t Tag) ([]byte, error) {
+		a, aok := t.Lookup("a")
+		b, bok := t.Lookup("b")
+		return fmt.Appendf(dst, "%v %v %v %v", a, aok, b, bok), nil
+	}}}
+	if out, err := e.Render("{% assign a = nil %}{% assign b = m %}{% show %}", nil, false); err != nil || out != "<nil> true <nil> false" {
+		t.Fatalf("got %q, %v", out, err)
+	}
+}
+
 func TestTagLookupSeesCounters(t *testing.T) {
 	e := Engine{Tags: map[string]TagFunc{"show": func(dst []byte, t Tag) ([]byte, error) {
 		v, _ := t.Lookup("n")

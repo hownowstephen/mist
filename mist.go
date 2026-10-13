@@ -89,8 +89,11 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 	r.ws()
 	v = r.path(true, true)
 	r.end()
-	if _, undefined := v.(undefinedT); undefined {
+	switch v.(type) {
+	case undefinedT:
 		return nil, false
+	case nilLitT:
+		return nil, true // an assigned nil literal
 	}
 	return v, true
 }
