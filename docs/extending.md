@@ -11,6 +11,8 @@ The package-level `Render`, `Append` and `Check` use an `Engine` with nothing re
 
 `Engine.Now` sets the clock for `'now'` and `'today'`.
 
+Errors are `*mist.Error`s matching `ErrUnsupported` (render with the full engine) or `ErrUndefined` (strict mode). A panic in mist or in your tags, filters or dialect hooks comes back as `ErrInternal`, which also matches `ErrUnsupported`, so falling back is still right; log it with `Error.Stack`, since it's a bug.
+
 ## Custom tags
 
 Inline tags only (`{% name args %}`); block tags aren't supported. `Tag.Lookup` resolves a path in the tag's scope: loop variables, then assigns, then data.

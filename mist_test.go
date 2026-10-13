@@ -41,6 +41,9 @@ func TestCases(t *testing.T) {
 				e.Now = func() time.Time { return time.UnixMilli(*c.Now) }
 			}
 			out, err := e.Render(c.Tpl, c.Data, c.Strict)
+			if errors.Is(err, ErrInternal) {
+				t.Fatalf("%v\n%s", err, err.(*Error).Stack)
+			}
 			switch c.Err {
 			case "":
 				if err != nil || out != c.Out {
@@ -150,6 +153,11 @@ func FuzzRender(f *testing.F) {
 	f.Fuzz(func(t *testing.T, tpl string) {
 		_, err1 := Render(tpl, vars, false)
 		_, err2 := Render(tpl, vars, true)
+		for _, err := range []error{err1, err2, Check(tpl)} {
+			if errors.Is(err, ErrInternal) {
+				t.Fatalf("%v\n%s", err, err.(*Error).Stack)
+			}
+		}
 		d := Engine{Dialect: &Dialect{Reject: TrimMarkers | NegativeLiterals | UnspacedOperators | RawBlocks | BlankKeyword}}
 		if err := d.Check(tpl); err != nil {
 			if _, rerr := d.Render(tpl, vars, false); rerr == nil {
@@ -334,5 +342,28 @@ func TestDeepNesting(t *testing.T) {
 	tpl := strings.Repeat("{% if true %}", 20) + "{% for x in (7..7) %}{% show %}{% endfor %}" + strings.Repeat("{% endif %}", 20)
 	if out, err := e.Render(tpl, nil, false); err != nil || out != "7" {
 		t.Fatalf("got %q, %v", out, err)
+	}
+}
+
+func TestPanicsBecomeErrInternal(t *testing.T) {
+	boom := func() { var m map[string]int; m["x"] = 1 }
+	e := Engine{
+		Filters: map[string]FilterFunc{"boom": func(Filter) (any, error) { boom(); return nil, nil }},
+		Tags:    map[string]TagFunc{"boom": func([]byte, Tag) ([]byte, error) { boom(); return nil, nil }},
+	}
+	d := Engine{Dialect: &Dialect{Output: func([]byte, any) ([]byte, error) { boom(); return nil, nil }}}
+	for _, c := range []struct {
+		e   Engine
+		tpl string
+	}{{e, "ab{{ 1 | boom }}"}, {e, "ab{% boom %}"}, {d, "ab{{ 1 }}"}} {
+		_, err := c.e.Render(c.tpl, nil, false)
+		var me *Error
+		if !errors.Is(err, ErrInternal) || !errors.Is(err, ErrUnsupported) || !errors.As(err, &me) || me.Pos < 2 || !strings.Contains(string(me.Stack), "TestPanicsBecomeErrInternal") {
+			t.Fatalf("%s: got %v", c.tpl, err)
+		}
+	}
+	// A chain falls back at the step that panicked.
+	if res, n, _ := e.RenderChain([]Step{{Body: "ok"}, {Body: "{{ 1 | boom }}"}}, nil); n != 1 || len(res) != 1 {
+		t.Fatalf("got %v, %d", res, n)
 	}
 }

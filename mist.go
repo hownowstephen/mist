@@ -22,13 +22,18 @@ var (
 	// ErrUnchanged returned by a FilterFunc leaves the filter's input as it was. Unlike
 	// returning Filter.Input, it keeps an undefined input undefined rather than null.
 	ErrUnchanged = errors.New("mist: leave the input unchanged")
+	// ErrInternal is a panic in mist or in a registered tag, filter or dialect hook,
+	// recovered so the caller can fall back. It wraps ErrUnsupported. It means a bug, so
+	// report it: Error.Stack says where it happened.
+	ErrInternal = fmt.Errorf("%w: internal error", ErrUnsupported)
 )
 
 // Error is the error Render, Append and Check return. errors.Is matches its Kind.
 type Error struct {
-	Kind error // ErrUnsupported or ErrUndefined
-	Pos  int   // byte offset into the template
-	Msg  string
+	Kind  error // ErrUnsupported, ErrUndefined or ErrInternal
+	Pos   int   // byte offset into the template
+	Msg   string
+	Stack []byte // ErrInternal: the stack where the panic happened
 }
 
 func (e *Error) Error() string { return fmt.Sprintf("%v at offset %d: %s", e.Kind, e.Pos, e.Msg) }
@@ -135,15 +140,15 @@ func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool)
 func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
 	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, now: e.Now, passUnknown: e.PassUnknownFilters}
 	defer func() { env = r.env }()
-	defer recoverBail(&err)
+	defer r.recoverBail(&err)
 	r.run()
 	return r.out, nil, nil
 }
 
 // Check is the package-level Check, also accepting e's custom tags.
 func (e Engine) Check(tpl string) (err error) {
-	defer recoverBail(&err)
 	r := renderer{tpl: tpl, check: true, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, passUnknown: e.PassUnknownFilters}
+	defer r.recoverBail(&err)
 	r.run()
 	return nil
 }
