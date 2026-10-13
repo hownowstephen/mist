@@ -707,6 +707,28 @@ func (v val) check(at int) val {
 	return v
 }
 
+// objEq is liquidjs's equals with an array or object operand: arrays compare item by item,
+// anything else by reference.
+func objEq(a, b val, at int) bool {
+	x, xArr := a.x.([]any)
+	y, yArr := b.x.([]any)
+	switch {
+	case xArr && yArr:
+		if len(x) != len(y) {
+			return false
+		}
+		for i := range x {
+			if !eq(val{x: x[i]}, val{x: y[i]}, at) {
+				return false
+			}
+		}
+		return true
+	case isObj(a) && isObj(b) && !xArr && !yArr:
+		bail(at, "== between two objects") // JavaScript compares references
+	}
+	return false
+}
+
 func isObj(v val) bool {
 	switch v.x.(type) {
 	case map[string]any, []any:
@@ -936,7 +958,7 @@ func eq(a, b val, at int) bool {
 		return isNil(a) && isNil(b)
 	}
 	if isObj(a) || isObj(b) {
-		bail(at, "== with an object or array")
+		return objEq(a, b, at)
 	}
 	if x, ok := a.num(at); ok {
 		y, ok := b.num(at)

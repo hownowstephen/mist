@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.19.x
+# mist Liquid subset — v0.20.x
 
-_Last updated 2026-10-11. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-12. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails.
 
@@ -87,7 +87,7 @@ Structural rules the EBNF doesn't express:
 | `forloop` | Inside a `for`, `forloop.index`, `index0`, `rindex`, `rindex0`, `first`, `last`, `length` (after the modifiers) and `name` (`variable-collection` as written) describe the innermost loop. Any other property, including `parentloop`, is undefined, as in liquidjs 10.26. |
 | Ranges | `(a..b)` with integer bounds is the array `a`, `a+1`, … `b` (empty when `b < a`), at most 100,000 items. |
 | `.size` / `.first` / `.last` | An object's own key wins. Otherwise `size` is an array's length, a string's UTF-16 length or an object's key count, and `first`/`last` are an array's first and last items; on strings and objects they're undefined. Other keys of arrays and strings are undefined. |
-| `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. |
+| `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. Two arrays are equal when they have the same length and their items are pairwise `==`; an array or object never equals a scalar, and an object never equals an array. |
 | `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank`, `empty` or `nil` bails, because liquidjs is asymmetric there. |
 | `== empty` / `!= empty` | Only `""`, `[]` and `{}` are empty; whitespace, nil, undefined, `0` and `false` aren't. Works on either side. `empty` against `blank`, `empty` or `nil` bails. |
 | `contains` | Same precedence as `==`. An array contains an element equal by JavaScript's `===` (same type and value; arrays and objects are never equal to a scalar). A string contains the right side's string form, as `indexOf` coerces it: numbers as JavaScript prints them, booleans as `true`/`false`, nil as `null` and undefined (lax) as `undefined`; the empty string is always contained. Anything else contains nothing. |
@@ -129,7 +129,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - `map`, `sum`, `sort` and `find` on an object, or with a path reaching an item that isn't an object; `sum` of an object or array item; `sort` of booleans, arrays or objects, of mixed numbers and strings, or of strings outside the BMP; `push` or `unshift` of nil or undefined; `group_by` of an object, or by a key that's an object or array.
 - `contains` with an array or object on the right.
 - `array_to_sentence_string` of anything but an array (liquidjs indexes a string's characters or throws), or of two or more items including an object or array; `slugify` with a mode other than those above, or of a character Go's Unicode tables don't assign.
-- `==` with an array or object operand; ordering across other types or with non-ASCII strings.
+- `==` between two objects, including objects met while comparing arrays (JavaScript compares their references); ordering across other types or with non-ASCII strings.
 - `for` over anything but an array or nil.
 - `assign` of nil, null or undefined. liquidjs stores a different null-ish value depending on the source, and each one compares differently.
 - String filters splitting a character outside the BMP, as `truncate`, `slice`, `first`, `last`, `split: ''`, `replace: ''` or `strip` with such a character can; string filters on invalid UTF-8; `downcase` or `upcase` of a character whose JavaScript mapping differs; `strip` whose argument is the `nil` literal (liquidjs passes it as a truthy Drop).
