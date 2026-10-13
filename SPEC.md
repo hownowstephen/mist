@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.20.x
+# mist Liquid subset — v0.21.x
 
 _Last updated 2026-10-12. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -51,7 +51,7 @@ ws       = { " " | "\t" | "\n" | "\v" | "\f" | "\r" | U+00A0 } ;
 ```
 
 Structural rules the EBNF doesn't express:
-- Blocks must nest and close: `if…endif` and `unless…endunless`, each with optional `elsif`s and at most one final `else`, `case…endcase` with any number of `when`s and at most one final `else`, `for…endfor` with no `else`, and `capture…endcapture`. `break`, `continue` and `forloop` must be inside a `for`. The maximum nesting depth is 16.
+- Blocks must nest and close: `if…endif` and `unless…endunless`, each with optional `elsif`s and at most one final `else`, `case…endcase` with any number of `when`s and at most one final `else`, `for…endfor` with no `else`, and `capture…endcapture`. `break`, `continue` and `forloop` must be inside a `for`. The maximum nesting depth is 1024.
 - `comment … endcomment`: the body is tokenized but ignored. A nested `comment` or `raw`, or a tag with no name, bails.
 - `contains`, `and`, `or` and `not` can't be variable names at the root of a path; liquidjs parses them as operators. They are fine as properties (`a.and`). Literal keywords can't start a path either (`for x in nil` bails).
 - `raw … endraw`: the body is emitted verbatim. Trim markers on either tag bail.

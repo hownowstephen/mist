@@ -9,7 +9,10 @@ import (
 	"unicode/utf8"
 )
 
-const maxDepth = 16
+const (
+	inlineDepth = 16   // frames kept in the renderer; deeper ones go to a slice
+	maxDepth    = 1024 // liquidjs has no limit; this bounds pathological templates
+)
 
 // ponytail: a flat budget per render; make it an Engine option if callers need more.
 const maxIterations = 1_000_000
@@ -24,7 +27,7 @@ const (
 	kCase
 )
 
-// frame is kept small because the renderer zeroes all maxDepth of them on every render;
+// frame is kept small because the renderer zeroes all inlineDepth of them on every render;
 // fields are shared between kinds where they can be.
 type frame struct {
 	kind       frameKind
@@ -64,7 +67,8 @@ type renderer struct {
 	passUnknown  bool // Engine.PassUnknownFilters
 	dialect      *Dialect
 	now          func() time.Time
-	stack        [maxDepth]frame
+	stack        [inlineDepth]frame
+	deep         []frame // frames from inlineDepth on
 	depth        int
 	iters        int            // loop iterations so far, against maxIterations
 	halt         int            // 1 + the stack index of the for a break or continue is unwinding to, or 0
@@ -103,7 +107,7 @@ func (r *renderer) live() bool {
 	if r.depth == 0 {
 		return true
 	}
-	f := &r.stack[r.depth-1]
+	f := r.frame(r.depth - 1)
 	return f.parentLive && f.active
 }
 
@@ -111,15 +115,33 @@ func (r *renderer) top() *frame {
 	if r.depth == 0 {
 		return nil
 	}
-	return &r.stack[r.depth-1]
+	return r.frame(r.depth - 1)
+}
+
+func (r *renderer) frame(i int) *frame {
+	if i < inlineDepth {
+		return &r.stack[i]
+	}
+	return &r.deep[i-inlineDepth]
 }
 
 func (r *renderer) push(f frame) {
-	if r.depth == maxDepth {
+	switch {
+	case r.depth == maxDepth:
 		bail(r.base, "nesting deeper than %d", maxDepth)
+	case r.depth < inlineDepth:
+		r.stack[r.depth] = f
+	case r.depth-inlineDepth < len(r.deep):
+		r.deep[r.depth-inlineDepth] = f
+	default:
+		r.deep = append(r.deep, f)
 	}
-	r.stack[r.depth] = f
 	r.depth++
+}
+
+// frames is a copy of the open frames, outermost first.
+func (r *renderer) frames() []frame {
+	return append(slices.Clone(r.stack[:min(r.depth, inlineDepth)]), r.deep[:max(r.depth-inlineDepth, 0)]...)
 }
 
 func (r *renderer) run() {
@@ -380,7 +402,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "break", "continue":
 		r.end()
 		i := r.depth - 1
-		for i >= 0 && !r.stack[i].looping() {
+		for i >= 0 && !r.frame(i).looping() {
 			i--
 		}
 		if i < 0 {
@@ -642,7 +664,7 @@ func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
 	if fn == nil {
 		bail(pos, "tag %q is registered without a function", name) // e.g. for Check only
 	}
-	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, assigns: r.assigns, env: r.env, frames: slices.Clone(r.stack[:r.depth])}
+	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, assigns: r.assigns, env: r.env, frames: r.frames()}
 	out, err := fn(r.out, t)
 	if err != nil {
 		panic(bailout{wrapErr("tag", name, pos, err)})
