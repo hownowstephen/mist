@@ -9,7 +9,7 @@ The package-level `Render`, `Append` and `Check` use an `Engine` with nothing re
 - `Check(tpl)` reports whether a template parses within what mist renders, without data. A template that passes can still fall back at render time on data-dependent rules.
 - `RenderChain(steps, vars)` renders templates whose outputs feed later ones, such as snippets, then subject, then body, then layout. Each `Step` can bind its output to a variable path (`Key`); a step keyed `content` is bound even when it fails, so a layout still renders. It stops at the first step mist can't render and returns its index, with the variables hydrated so far, for the full engine to continue from.
 
-`Engine.Now` sets the clock for `'now'` and `'today'`.
+`Engine.Now` sets the clock for `'now'` and `'today'`. `Engine.Limits` bounds each render's filter memory, output and loop iterations; keep `Limits.Memory` at or below your full engine's `memoryLimit` so mist falls back wherever that engine would refuse (see [SPEC.md § Limits](../SPEC.md#limits)).
 
 Errors are `*mist.Error`s matching `ErrUnsupported` (render with the full engine) or `ErrUndefined` (strict mode). A panic in mist or in your tags, filters or dialect hooks comes back as `ErrInternal`, which also matches `ErrUnsupported`, so falling back is still right; log it with `Error.Stack`, since it's a bug.
 

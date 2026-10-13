@@ -82,7 +82,7 @@ Structural rules the EBNF doesn't express:
 | `increment` / `decrement` | `increment n` prints `n` then adds one; `decrement n` subtracts one then prints. liquidjs keeps the counter in the data scope: it starts from a number variable `n` in the data (anything else starts at 0), `{{ n }}` sees it unless an `assign` or a loop variable shadows it, and in a `RenderChain` it carries to later steps that share the chain's variables. Under strict, a missing counter is 0, not `ErrUndefined`. |
 | `liquid` | Each non-blank line of `{% liquid … %}` is a tag without delimiters, rendered as if written `{% … %}`; lines starting with `#` are comments. Trim markers on the tag trim the text around it, as on any tag. Blocks opened in it must close in it. `comment`, `raw` and a nested `liquid` inside it bail. |
 | Inline comments | `{% # … %}` renders nothing. Every line after the first must start with `#` (after blanks), or liquidjs errors and mist bails. |
-| `for` | Arrays and ranges only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. `offset: n`, `limit: n` and `reversed` apply in that order whatever order they're written in, as `slice(n)`, `slice(0, n)` and a reversal; `n` must be an integer, and a negative one counts from the end. A render runs at most 1,000,000 loop iterations; past that it bails. An `else` part renders when the collection is empty before the modifiers apply (so `limit: 0` doesn't trigger it); in it there's no loop variable or `forloop`, and `break`/`continue` reach the enclosing loop. |
+| `for` | Arrays and ranges only. Null or undefined (lax) means zero iterations. The loop variable shadows and is restored after `endfor`. `offset: n`, `limit: n` and `reversed` apply in that order whatever order they're written in, as `slice(n)`, `slice(0, n)` and a reversal; `n` must be an integer, and a negative one counts from the end. A render runs at most `Engine.Limits.Iterations` loop iterations (default 1,000,000); past that it bails. An `else` part renders when the collection is empty before the modifiers apply (so `limit: 0` doesn't trigger it); in it there's no loop variable or `forloop`, and `break`/`continue` reach the enclosing loop. |
 | `break` / `continue` | End the innermost `for`, or move it to its next item. The rest of its body is skipped, including inside nested `if`, `case` and `capture` blocks; a `capture` still assigns what it rendered before the `break`. |
 | `forloop` | Inside a `for`, `forloop.index`, `index0`, `rindex`, `rindex0`, `first`, `last`, `length` (after the modifiers) and `name` (`variable-collection` as written) describe the innermost loop. Any other property, including `parentloop`, is undefined, as in liquidjs 10.26. |
 | Ranges | `(a..b)` with integer bounds is the array `a`, `a+1`, … `b` (empty when `b < a`), at most 100,000 items. |
@@ -125,6 +125,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - `.name` or `["key"]` on anything but an object, array or string, `[n]` on anything but an array or object, `length` of an array or string and digit keys of a string (JavaScript own properties), and `[k]` whose key evaluates to nil, a bool, an object or an array (or, in lax mode, is undefined).
 - `size`, `first` or `last` as a root variable that isn't defined, because liquidjs computes them from the scope.
 - `for` over anything but an array, a range or nil; `limit`/`offset` that aren't integers; range bounds that aren't integers or span more than 100,000 items; more than 1,000,000 loop iterations in one render.
+- Going over `Engine.Limits` (see [Limits](#limits)).
 - `uniq` of objects or arrays (JavaScript compares them by reference); `sort_natural` of objects, arrays or strings outside the BMP; `url_decode` of a malformed escape or of bytes that aren't UTF-8 (`decodeURIComponent` throws); `base64_decode` to bytes that aren't UTF-8 (Node substitutes U+FFFD).
 - `map`, `sum`, `sort` and `find` on an object, or with a path reaching an item that isn't an object; `sum` of an object or array item; `sort` of booleans, arrays or objects, of mixed numbers and strings, or of strings outside the BMP; `push` or `unshift` of nil or undefined; `group_by` of an object, or by a key that's an object or array.
 - `contains` with an array or object on the right.
@@ -145,6 +146,15 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 ### Out of spec (always bails)
 
 Filters other than the built-ins above and registered ones (with `Engine.PassUnknownFilters`, only those liquidjs defines); built-ins with more arguments than listed (or none where one is required); named filter arguments other than `allow_false`; `for` parameters other than `limit`, `offset` and `reversed` (and `reversed` with a value), `break`/`continue`/`forloop` outside a `for`, `cycle` values not separated by commas or that are `blank`, `empty` or `nil`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `tablerow`, `include`/`render`, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, a string escape of half a surrogate pair, and any tag not in the grammar.
+
+## Limits
+
+`Engine.Limits` bounds each render; zero fields take the defaults, and going over one bails.
+- `Memory` (default 10,000,000) is a budget in liquidjs's `memoryLimit` units. Before it runs, each filter is charged at least what liquidjs charges it: the length of its input and each argument (UTF-16 length, counted as UTF-8 bytes, which is never less), an array's length plus its items', 24 for a number, boolean or object, and for `join` the array's length times one plus the separator's, for `slice` the length argument. `replace` is also charged for the text it adds, and `date` for its output, the two filters whose output can far exceed their input. So with `Memory` at or below the full engine's `memoryLimit`, mist never renders a template that engine refuses. liquidjs's default has no limit, so the default only bails.
+- `Output` (default 4 MiB) caps the bytes one render writes, captures included.
+- `Iterations` (default 1,000,000) caps `for` loop iterations across the render.
+
+liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far faster, and the limits above bound its work.
 
 ## Custom tags
 

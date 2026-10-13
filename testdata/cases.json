@@ -307,6 +307,7 @@
   {"name": "first and last of strings and scalars", "tpl": "{{ 'xyz' | first }}{{ 'xyz' | last }}|{{ 5 | first }}|{{ nope | first }}", "out": "xz||"},
   {"name": "last of a number", "tpl": "{{ 5 | last }}", "err": "unsupported"},
   {"name": "slice", "tpl": "{{ s | slice: 1 }}|{{ s | slice: 1, 3 }}|{{ s | slice: -2 }}|{{ s | slice: -3, 2 }}|{{ s | slice: 2, 100 }}|{{ xs | slice: 1, 2 | first }}", "data": {"s": "abcdef", "xs": [1, 2, 3]}, "out": "b|bcd|e|de|cdef|2"},
+  {"name": "slice longer than render's memory limit", "tpl": "{{ 'abc' | slice: 0, 100000000 }}", "err": "unsupported"},
   {"name": "math filters", "tpl": "{{ 1 | plus: 2 }}|{{ '10' | minus: h | plus: 0 }}|{{ 3 | times: f }}|{{ 7 | divided_by: 2 }}|{{ -7 | modulo: 3 }}|{{ a | plus: b }}", "data": {"h": 2.5, "f": 1.5, "a": 0.1, "b": 0.2}, "out": "3|7.5|4.5|3.5|-1|0.30000000000000004"},
   {"name": "math filters coerce like Number", "tpl": "{{ ' 12 ' | plus: 1 }}|{{ '0x10' | plus: 0 }}|{{ 'abc' | plus: 1 }}|{{ true | plus: nothing }}|{{ '1_0' | times: 2 }}", "out": "13|16|1|1|0"},
   {"name": "divided_by zero", "tpl": "{{ 1 | divided_by: 0 }}", "err": "unsupported"},
