@@ -41,9 +41,7 @@ func TestCases(t *testing.T) {
 				e.Now = func() time.Time { return time.UnixMilli(*c.Now) }
 			}
 			out, err := e.Render(c.Tpl, c.Data, c.Strict)
-			if errors.Is(err, ErrInternal) {
-				t.Fatalf("%v\n%s", err, err.(*Error).Stack)
-			}
+			failInternal(t, err)
 			switch c.Err {
 			case "":
 				if err != nil || out != c.Out {
@@ -154,9 +152,7 @@ func FuzzRender(f *testing.F) {
 		_, err1 := Render(tpl, vars, false)
 		_, err2 := Render(tpl, vars, true)
 		for _, err := range []error{err1, err2, Check(tpl)} {
-			if errors.Is(err, ErrInternal) {
-				t.Fatalf("%v\n%s", err, err.(*Error).Stack)
-			}
+			failInternal(t, err)
 		}
 		d := Engine{Dialect: &Dialect{Reject: TrimMarkers | NegativeLiterals | UnspacedOperators | RawBlocks | BlankKeyword}}
 		if err := d.Check(tpl); err != nil {
@@ -346,7 +342,7 @@ func TestDeepNesting(t *testing.T) {
 }
 
 func TestPanicsBecomeErrInternal(t *testing.T) {
-	boom := func() { var m map[string]int; m["x"] = 1 }
+	boom := func() { panic("boom") }
 	e := Engine{
 		Filters: map[string]FilterFunc{"boom": func(Filter) (any, error) { boom(); return nil, nil }},
 		Tags:    map[string]TagFunc{"boom": func([]byte, Tag) ([]byte, error) { boom(); return nil, nil }},
@@ -365,5 +361,13 @@ func TestPanicsBecomeErrInternal(t *testing.T) {
 	// A chain falls back at the step that panicked.
 	if res, n, _ := e.RenderChain([]Step{{Body: "ok"}, {Body: "{{ 1 | boom }}"}}, nil); n != 1 || len(res) != 1 {
 		t.Fatalf("got %v, %d", res, n)
+	}
+}
+
+// failInternal fails t on ErrInternal, which tests must never see: it's a recovered panic.
+func failInternal(t *testing.T, err error) {
+	t.Helper()
+	if e := (*Error)(nil); errors.Is(err, ErrInternal) && errors.As(err, &e) {
+		t.Fatalf("%v\n%s", err, e.Stack)
 	}
 }
