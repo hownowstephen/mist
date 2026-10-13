@@ -74,7 +74,7 @@ Structural rules the EBNF doesn't express:
 | Missing key / out-of-range index | Undefined. Negative indexes count from the end. |
 | Output: string, bool, nil | As-is; `true`/`false`; `""` for a nil or undefined variable. Printing the `nil`/`null` literal itself (including through `default: nil`) bails: liquidjs represents it as a Drop, which prints differently depending on the `outputEscape` configuration. |
 | Output: number | Number literals and data print as JavaScript's `String(n)`: shortest round-trip digits, fixed notation for 1e-7 ≤ \|n\| < 1e21, otherwise exponent notation (`1e+21`, `2.5e-8`). |
-| `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. |
+| `assign` | Writes the render's scope, so it is visible after an enclosing `for` and never visible to other chain steps. A null-ish value keeps its kind: an assigned undefined, null or `nil` literal reads back, compares and prints exactly as the original would, and shadows data of the same name. `Tag.Lookup` reports an assigned `nil` literal as nil with ok true, and an assigned undefined as not found. |
 | `capture` | Renders its body instead of printing it, and assigns the result as a string, exactly as `assign` would (so it replaces data and earlier assigns of the same name). A quoted name is stored as written. In a dead branch nothing is rendered or assigned. |
 | `case` / `when` | The `case` value (with any filters) and each `when` value are evaluated as conditions are: undefined variables are lenient under strict. Every `when` with a value `==` to the `case` value renders, in order, not just the first; a `when` stops evaluating its values at the first match. `else` renders only when no `when` matched. The body between `case` and the first `when` is parsed but never rendered. A `nil` case value is null, so it doesn't match an undefined `when` value. |
 | `cycle` | Writes its values in turn, one per render of the tag, skipping the write when the value is falsy in JavaScript (`0`, `""`, `false`, nil, undefined). Only the value written is evaluated, so under strict only it can be `ErrUndefined`. The position is kept for the whole render, keyed as liquidjs keys it: by the group (`String` of its value, or `undefined` without one) and the number of values, not the values themselves, so `{% cycle 'a', 'b' %}{% cycle 'c', 'd' %}` prints `ad`. |
@@ -131,7 +131,6 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - `array_to_sentence_string` of anything but an array (liquidjs indexes a string's characters or throws), or of two or more items including an object or array; `slugify` with a mode other than those above, or of a character Go's Unicode tables don't assign.
 - `==` between two objects, including objects met while comparing arrays (JavaScript compares their references); ordering across other types or with non-ASCII strings.
 - `for` over anything but an array or nil.
-- `assign` of nil, null or undefined. liquidjs stores a different null-ish value depending on the source, and each one compares differently.
 - String filters splitting a character outside the BMP, as `truncate`, `slice`, `first`, `last`, `split: ''`, `replace: ''` or `strip` with such a character can; string filters on invalid UTF-8; `downcase` or `upcase` of a character whose JavaScript mapping differs; `strip` whose argument is the `nil` literal (liquidjs passes it as a truthy Drop).
 - `truncate`, `truncatewords` or `slice` with a non-numeric count; `first` or `last` of an empty array, `last` of anything but a non-empty string or array, `first` of an object; `json` of an object.
 - `strip_html` of an unclosed `<` that follows text or a kept character, where liquidjs 10.26 loops forever.
@@ -183,7 +182,7 @@ Filters other than the built-ins above and registered ones (with `Engine.PassUnk
 
 - **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integral number literals and results (`3`, `2 | times: 1`) and `float64` for fractional ones (`1.5`), `nil` for nil, undefined and the `nil` literal, and `mist.Blank` and `mist.Empty` for those keywords.
 - **Errors:** a hook returning an error that wraps `ErrUnsupported` bails; other errors stop rendering and are returned wrapped.
-- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` or `empty` against a keyword or `nil`, assigning nil, and everything out of spec) still apply. `contains` and `case` bail when `Compare` is set, since the hook doesn't cover them.
+- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` or `empty` against a keyword or `nil`, and everything out of spec) still apply. `contains` and `case` bail when `Compare` is set, since the hook doesn't cover them.
 
 ## Chains
 

@@ -436,9 +436,6 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		val = r.filters(val, live)
 		r.end()
 		if live {
-			if isNil(val) {
-				bail(b, "assigning nil") // liquidjs stores distinct null-ish values per source
-			}
 			r.setAssign(v, val.any())
 		}
 	case "comment":
