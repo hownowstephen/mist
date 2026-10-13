@@ -10,9 +10,11 @@ import (
 	"unicode/utf8"
 )
 
-// undefinedT is a missing variable. liquidjs distinguishes it from null: only
-// undefined trips strict mode, and undefined != null under ==.
-type undefinedT struct{}
+// Undefined is JavaScript's undefined, a missing value, which liquidjs distinguishes from
+// null: only undefined trips strict mode, and undefined != null under ==. Hooks see it
+// inside arrays and objects mist builds, such as `map` of a missing property; at the top
+// level they get nil for it instead.
+type Undefined struct{}
 
 // nilLitT is the nil/null literal, which == matches against both null and undefined.
 type nilLitT struct{}
@@ -404,7 +406,7 @@ func (r *renderer) path(eval, lenient bool) any {
 		v = r.root(name, start)
 	}
 	for {
-		if eval && r.strict && v == (undefinedT{}) {
+		if eval && r.strict && v == (Undefined{}) {
 			if lenient {
 				v = nil // liquidjs catches the strict error and substitutes null
 				r.lenientUndef = true
@@ -441,7 +443,7 @@ func (r *renderer) path(eval, lenient bool) any {
 			if k.keyword() != "" {
 				bail(at, "%s as an index", k.keyword())
 			}
-			if _, undef := k.x.(undefinedT); eval && r.strict && undef && k.lit == 0 {
+			if _, undef := k.x.(Undefined); eval && r.strict && undef && k.lit == 0 {
 				// liquidjs evaluates index keys strictly, even where the path itself is lenient.
 				panic(bailout{&Error{Kind: ErrUndefined, Pos: at, Msg: r.src[at-r.base : r.p]}})
 			}
@@ -485,7 +487,7 @@ func (r *renderer) root(name string, at int) any {
 	if magic(name) {
 		bail(r.base+at, "%q resolves to a liquidjs built-in", name)
 	}
-	return undefinedT{}
+	return Undefined{}
 }
 
 // binding is an expression filter's item, which shadows every other variable of its name.
@@ -551,7 +553,7 @@ func magic(key string) bool { return key == "size" || key == "first" || key == "
 // first and last.
 func prop(v any, key string, at int) any {
 	switch m := v.(type) {
-	case nil, undefinedT:
+	case nil, Undefined:
 		return v // liquidjs propagates nil without tripping strict mode
 	case map[string]any:
 		if x, ok := m[key]; ok {
@@ -560,14 +562,14 @@ func prop(v any, key string, at int) any {
 		if key == "size" {
 			return boxInt(len(m))
 		}
-		return undefinedT{}
+		return Undefined{}
 	case []any:
 		switch key {
 		case "size":
 			return boxInt(len(m))
 		case "first", "last":
 			if len(m) == 0 {
-				return undefinedT{}
+				return Undefined{}
 			}
 			if key == "first" {
 				return m[0]
@@ -576,7 +578,7 @@ func prop(v any, key string, at int) any {
 		case "length":
 			bail(at, "length of an array, an own JavaScript property")
 		}
-		return undefinedT{}
+		return Undefined{}
 	case string:
 		switch {
 		case key == "size":
@@ -587,7 +589,7 @@ func prop(v any, key string, at int) any {
 		case key == "length" || strings.Trim(key, "0123456789") == "":
 			bail(at, "property %q of a string, an own JavaScript property", key)
 		}
-		return undefinedT{}
+		return Undefined{}
 	}
 	bail(at, "property %q on %T", key, v)
 	return nil
@@ -597,7 +599,7 @@ func prop(v any, key string, at int) any {
 // canonical integer strings index arrays (negative from the end).
 func key(v any, k val, at int) any {
 	switch v.(type) {
-	case nil, undefinedT:
+	case nil, Undefined:
 		return v
 	}
 	_, isArr := v.([]any)
@@ -609,7 +611,7 @@ func key(v any, k val, at int) any {
 			return index(v, n, at)
 		}
 		if strings.TrimLeft(strings.TrimPrefix(s, "-"), "0123456789") == "" && s != "-" && s != "" {
-			return undefinedT{} // a digit string JavaScript doesn't print, such as "01"
+			return Undefined{} // a digit string JavaScript doesn't print, such as "01"
 		}
 		return prop(v, s, at)
 	}
@@ -620,7 +622,7 @@ func key(v any, k val, at int) any {
 		case f == math.Trunc(f) && math.Abs(f) < maxSafeInt:
 			return index(v, int(f), at)
 		}
-		return undefinedT{}
+		return Undefined{}
 	}
 	bail(at, "index of %T", k.any())
 	return nil
@@ -647,7 +649,7 @@ func index(v any, n int, at int) any {
 			n += len(a)
 		}
 		if n < 0 || n >= len(a) {
-			return undefinedT{}
+			return Undefined{}
 		}
 		return a[n]
 	}
@@ -698,7 +700,7 @@ func (v val) check(at int) val {
 		return v
 	}
 	switch v.x.(type) {
-	case nil, undefinedT, nilLitT, bool, string, map[string]any, []any:
+	case nil, Undefined, nilLitT, bool, string, map[string]any, []any:
 		return v
 	}
 	if _, ok := num(v.x, at); !ok {
@@ -748,7 +750,7 @@ func blankValue(v val) bool {
 		return true
 	}
 	switch x := v.x.(type) {
-	case nil, undefinedT:
+	case nil, Undefined:
 		return v.lit == 0
 	case bool:
 		return !x
@@ -771,7 +773,7 @@ func jsSpace(c rune) bool {
 
 func isNil(v val) bool {
 	switch v.x.(type) {
-	case nil, undefinedT, nilLitT:
+	case nil, Undefined, nilLitT:
 		return v.lit == 0
 	}
 	return false
@@ -779,7 +781,7 @@ func isNil(v val) bool {
 
 func truthy(v val, at int) bool {
 	switch x := v.check(at).x.(type) {
-	case nil, undefinedT, nilLitT:
+	case nil, Undefined, nilLitT:
 		return v.lit != 0
 	case bool:
 		return x
@@ -1011,7 +1013,7 @@ func contains(a, b val, at int) bool {
 		return false
 	}
 	needle := "null"
-	switch _, undef := b.x.(undefinedT); {
+	switch _, undef := b.x.(Undefined); {
 	case b.lit != 0 || b.x != nil && !undef:
 		needle = string(stringify(nil, b, at))
 	case undef:
@@ -1102,7 +1104,7 @@ func (r *renderer) forloop(eval bool, start int) any {
 	case "":
 		bail(at, "expected property name")
 	default:
-		v = undefinedT{} // liquidjs 10.26 has no parentloop or other properties
+		v = Undefined{} // liquidjs 10.26 has no parentloop or other properties
 	}
 	return v
 }

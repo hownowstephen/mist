@@ -168,7 +168,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 ## Custom filters
 
 `Engine.Filters` registers filters. A `FilterFunc` receives a `Filter` with the input, positional arguments and the strict flag.
-- Undefined and nil both arrive as `nil`. Returned values render as built-in values do: strings, booleans, numbers and nil output, while arrays and objects bail.
+- Undefined and nil both arrive as `nil`. Inside arrays and objects mist built, such as the result of `map` over items missing the property, undefined is `mist.Undefined{}`, as it is from `Tag.Lookup` and for dialect hooks. Returned values render as built-in values do: strings, booleans, numbers and nil output, while arrays and objects bail.
 - Registered names take precedence over built-in filters, so an application can supply its own `default`, `divided_by` and so on.
 - The `nil` literal as a registered filter's input or argument bails: liquidjs passes it as a Drop, not null, so a JavaScript filter would see an object.
 - A registered filter may return `NaN` or an infinity: it prints as JavaScript prints it (`NaN`, `Infinity`), `json` writes it as `null`, and `<`, `>`, `<=` and `>=` with it are false.
@@ -190,7 +190,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | `Reject` | A set of constructs that bail in both `Render` and `Check`, including in dead branches: `TrimMarkers`, `NegativeLiterals` (including negative indexes), `UnspacedOperators` (a comparison operator with no whitespace before it, such as `x==2`), `RawBlocks`, `BlankKeyword`, `EmptyKeyword`. |
 | `NoDefaultLeniency` | Turns off the leading-`default` leniency rule. Combine with an overriding `default` in `Engine.Filters` to change `default` itself. |
 
-- **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integral number literals and results (`3`, `2 | times: 1`) and `float64` for fractional ones (`1.5`), `nil` for nil, undefined and the `nil` literal, and `mist.Blank` and `mist.Empty` for those keywords.
+- **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integral number literals and results (`3`, `2 | times: 1`) and `float64` for fractional ones (`1.5`), `nil` for nil, undefined and the `nil` literal (but `mist.Undefined{}` for undefined inside arrays and objects), and `mist.Blank` and `mist.Empty` for those keywords.
 - **Errors:** a hook returning an error that wraps `ErrUnsupported` bails; other errors stop rendering and are returned wrapped.
 - **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` or `empty` against a keyword or `nil`, and everything out of spec) still apply. `contains` and `case` bail when `Compare` is set, since the hook doesn't cover them.
 

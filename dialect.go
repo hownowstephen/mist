@@ -61,7 +61,7 @@ func (v val) hookValue() any {
 		return v.n
 	}
 	switch v.x.(type) {
-	case undefinedT, nilLitT:
+	case Undefined, nilLitT:
 		return nil
 	case blankT:
 		return Blank

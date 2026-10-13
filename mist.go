@@ -107,7 +107,7 @@ type Tag struct {
 
 // Lookup resolves a variable path such as `product.url` or `items[0]` in the tag's
 // scope: loop variables, then assigns, then Vars. ok is false if it's undefined or
-// not a valid path.
+// not a valid path; undefined items of an array or object it returns are Undefined.
 func (t Tag) Lookup(path string) (v any, ok bool) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -126,7 +126,7 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 	v = r.path(true, true)
 	r.end()
 	switch v.(type) {
-	case undefinedT:
+	case Undefined:
 		return nil, false
 	case nilLitT:
 		return nil, true // an assigned nil literal

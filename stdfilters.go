@@ -188,7 +188,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		if name == "has_exp" {
 			return val{x: false}
 		}
-		return val{x: undefinedT{}}
+		return val{x: Undefined{}}
 	case "sha256":
 		sum := sha256.Sum256([]byte(validStr(toStr(v, at), at)))
 		return strVal(hex.EncodeToString(sum[:]))
@@ -202,7 +202,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 	case "group_by", "group_by_exp":
 		return val{x: r.groupBy(v, a, name == "group_by_exp", at)}
 	case "json", "jsonify", "inspect":
-		if _, undef := v.x.(undefinedT); undef && v.lit == 0 {
+		if _, undef := v.x.(Undefined); undef && v.lit == 0 {
 			return v // JSON.stringify(undefined) is undefined
 		}
 		return strVal(string(appendJSON(nil, v, at)))
@@ -231,7 +231,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		case name == "has":
 			return val{x: len(m) > 0}
 		case len(m) == 0:
-			return val{x: undefinedT{}}
+			return val{x: Undefined{}}
 		case name == "find":
 			return val{x: m[0]}
 		}
@@ -353,7 +353,7 @@ func argNum(args []val, i int, d float64, at int) float64 {
 	if i >= len(args) {
 		return d
 	}
-	if _, undef := args[i].x.(undefinedT); undef && args[i].lit == 0 {
+	if _, undef := args[i].x.(Undefined); undef && args[i].lit == 0 {
 		return d
 	}
 	f, ok := args[i].check(at).num(at)
@@ -473,7 +473,7 @@ func jsTruthy(v val, at int) bool {
 		return f != 0 && !math.IsNaN(f)
 	}
 	switch x := v.x.(type) {
-	case nil, undefinedT:
+	case nil, Undefined:
 		return false
 	case nilLitT:
 		bail(at, "the nil literal as a filter argument, which liquidjs passes as a truthy Drop")
@@ -499,7 +499,7 @@ func truncate(v val, a []val, at int) val {
 
 // argOrDefault stringifies v, or returns d where JavaScript's default parameter applies.
 func argOrDefault(v val, d string, at int) string {
-	if _, undef := v.x.(undefinedT); undef && v.lit == 0 {
+	if _, undef := v.x.(Undefined); undef && v.lit == 0 {
 		return d
 	}
 	return toStr(v, at)
@@ -727,7 +727,7 @@ func toNumber(v val, at int) float64 {
 		return f
 	}
 	switch x := v.x.(type) {
-	case nil, undefinedT:
+	case nil, Undefined:
 		return 0
 	case bool:
 		if x {
@@ -948,7 +948,7 @@ func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any
 	}
 	var items []any
 	switch x := v.check(at).x.(type) {
-	case nil, undefinedT, nilLitT:
+	case nil, Undefined, nilLitT:
 		if !isNil(v) {
 			bail(at, "where on a scalar")
 		}
@@ -961,7 +961,7 @@ func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any
 	}
 	matchTruthy := len(a) == 1
 	if !matchTruthy {
-		_, undef := a[1].x.(undefinedT)
+		_, undef := a[1].x.(Undefined)
 		matchTruthy = undef && a[1].lit == 0 // liquidjs's expected === undefined
 	}
 	out, idx = []any{}, -1
@@ -993,7 +993,7 @@ func (r *renderer) itemPath(item any, path string, at int) any {
 		}
 		x = prop(x, key, at)
 	}
-	if _, undef := x.(undefinedT); undef && r.strict {
+	if _, undef := x.(Undefined); undef && r.strict {
 		bail(at, "where on an item missing %q under strict", path)
 	}
 	return x
@@ -1098,7 +1098,7 @@ func sortBy(v val, a []val, at int) []any {
 			k = lookupPath(it, path, at, "sort by")
 		}
 		switch x := k.(type) {
-		case nil, undefinedT:
+		case nil, Undefined:
 		case float64:
 			kind |= 1
 		case string:
@@ -1130,7 +1130,7 @@ func sortBy(v val, a []val, at int) []any {
 }
 
 func orderedCompare(a, b any) int {
-	an, bn := a == nil || a == (undefinedT{}), b == nil || b == (undefinedT{})
+	an, bn := a == nil || a == (Undefined{}), b == nil || b == (Undefined{})
 	switch {
 	case an && bn:
 		return 0
@@ -1157,7 +1157,7 @@ func validStr(s string, at int) string {
 // and arrays compare by reference in JavaScript, so they bail.
 func svzKey(x any, what string, at int) any {
 	switch x.(type) {
-	case nil, bool, string, undefinedT:
+	case nil, bool, string, Undefined:
 		return x
 	case map[string]any, []any:
 		bail(at, "%s of an object or array", what)
@@ -1386,7 +1386,7 @@ func jsString(v val, at int) string {
 	switch x := v.x.(type) {
 	case nil:
 		return "null"
-	case undefinedT:
+	case Undefined:
 		return "undefined"
 	case bool:
 		return strconv.FormatBool(x)
@@ -1510,7 +1510,7 @@ func jsNumberOf(v val, at int) float64 {
 	switch x := v.x.(type) {
 	case nil:
 		return 0
-	case undefinedT:
+	case Undefined:
 		return math.NaN()
 	case bool:
 		if x {
