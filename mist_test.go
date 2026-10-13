@@ -3,6 +3,7 @@ package mist
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -306,5 +307,32 @@ func TestUniqOfGoNumbers(t *testing.T) {
 	}
 	if _, err := Render(`{{ xs | uniq | size }}`, map[string]any{"xs": []any{json.Number("x")}}, false); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("got %v; want ErrUnsupported", err)
+	}
+}
+
+func TestDeepNesting(t *testing.T) {
+	// 20 nested loops, then ifs: loop variables, forloop and break past the inline frames.
+	var b strings.Builder
+	for i := range 20 {
+		b.WriteString("{% for v" + string(rune('a'+i)) + " in (1..1) %}")
+	}
+	b.WriteString("{% for x in (1..3) %}{% if x == 2 %}{% break %}{% endif %}{{ va }}{{ vt }}{{ forloop.index }}{% endfor %}")
+	for range 20 {
+		b.WriteString("{% endfor %}")
+	}
+	b.WriteString(strings.Repeat("{% if true %}", 40) + "deep" + strings.Repeat("{% endif %}", 40))
+	if out, err := Render(b.String(), nil, true); err != nil || out != "111deep" {
+		t.Fatalf("got %q, %v", out, err)
+	}
+	if _, err := Render(strings.Repeat("{% if true %}", maxDepth+1), nil, false); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("got %v; want ErrUnsupported", err)
+	}
+	e := Engine{Tags: map[string]TagFunc{"show": func(dst []byte, t Tag) ([]byte, error) {
+		v, _ := t.Lookup("x")
+		return fmt.Appendf(dst, "%v", v), nil
+	}}}
+	tpl := strings.Repeat("{% if true %}", 20) + "{% for x in (7..7) %}{% show %}{% endfor %}" + strings.Repeat("{% endif %}", 20)
+	if out, err := e.Render(tpl, nil, false); err != nil || out != "7" {
+		t.Fatalf("got %q, %v", out, err)
 	}
 }

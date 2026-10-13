@@ -84,7 +84,9 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 		}
 	}()
 	r := renderer{tpl: path, vars: t.Vars, assigns: t.assigns, env: t.env}
-	r.depth = copy(r.stack[:], t.frames)
+	for _, f := range t.frames {
+		r.push(f)
+	}
 	r.setSrc(0, len(path))
 	r.ws()
 	v = r.path(true, true)
