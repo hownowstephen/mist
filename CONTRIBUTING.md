@@ -20,7 +20,7 @@ node scripts/parity.mjs       # cases.json against liquidjs
 2. Update SPEC.md's grammar and semantics. A spec change bumps the minor version, and the SPEC title names that line (`v0.15.x`).
 3. If the grammar changed, extend `scripts/gen` so the generated differentials cover it.
 4. Run `go test ./...` (CI enforces a 99% coverage floor), a 100k generated differential and a few minutes of `go test -fuzz FuzzRender` ([SPEC.md § Verification](SPEC.md#verification) has the commands).
-5. If a new bail depends on data rather than syntax, add its message to `runtimeBail` in `mist_test.go`, or `FuzzRender` reports that `Check` accepted a template `Render` bailed on.
+5. Every bail takes a code (`Error.Code`), which callers rely on: reuse one that fits, or add a kebab-case one and record it with `go test -run TestCodes -update-codes .`. If a new bail depends on data rather than syntax, add its code to `runtimeCodes` in `mist_test.go`, or `FuzzRender` reports that `Check` accepted a template `Render` bailed on.
 
 Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, so the code diff stays reviewable.
 

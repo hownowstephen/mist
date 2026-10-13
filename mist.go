@@ -30,8 +30,16 @@ var (
 
 // Error is the error Render, Append and Check return. errors.Is matches its Kind.
 type Error struct {
-	Kind  error // ErrUnsupported, ErrUndefined or ErrInternal
-	Pos   int   // byte offset into the template
+	// Kind is ErrUnsupported, ErrUndefined, ErrInternal, or the error a registered tag,
+	// filter or dialect hook returned.
+	Kind error
+	// Code names the reason in a form that stays the same across releases, for metrics
+	// and grouping: "undefined", "internal", "tag:NAME" or "filter:NAME" for a tag or
+	// filter mist doesn't support, "hook:tag:NAME", "hook:filter:NAME" or
+	// "hook:dialect:output" for a hook's error, and otherwise a kebab-case reason such as
+	// "nesting-too-deep" (testdata/codes.txt lists them all). Msg is for people and may change.
+	Code  string
+	Pos   int // byte offset into the template
 	Msg   string
 	Stack []byte // ErrInternal: the stack where the panic happened
 }

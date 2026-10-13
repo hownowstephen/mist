@@ -2,7 +2,7 @@
 
 _Last updated 2026-10-12. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
-**Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails. A panic in mist or in a registered tag, filter or dialect hook is recovered as `ErrInternal`, which wraps `ErrUnsupported` so the caller falls back; it means a bug, and `Error.Stack` says where.
+**Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails. Every error is an `*Error` whose `Code` names the reason and stays the same across releases (`testdata/codes.txt` lists them), so callers can count bails by reason without parsing `Msg`. A panic in mist or in a registered tag, filter or dialect hook is recovered as `ErrInternal`, which wraps `ErrUnsupported` so the caller falls back; it means a bug, and `Error.Stack` says where.
 
 **Checking a template:** `go run ./cmd/mistcheck FILE...` or `mist.Check(tpl)`. The checker is the renderer with evaluation switched off, so it cannot drift from this document's grammar. A template that passes can still bail at render time on the [runtime bails](#runtime-bails) below.
 

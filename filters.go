@@ -36,7 +36,7 @@ func (r *renderer) filters(v val, eval bool) val {
 		at := r.pos()
 		name := r.ident()
 		if name == "" {
-			bail(at, "expected filter name")
+			bail(at, "expected-filter-name", "expected filter name")
 		}
 		if first && name == "default" && r.undef.set && (r.dialect == nil || !r.dialect.NoDefaultLeniency) {
 			// liquidjs makes the input lenient when default is the first filter (lenientIf).
@@ -56,16 +56,16 @@ func (r *renderer) filters(v val, eval bool) val {
 				r.ws()
 				w := r.ident()
 				if key != "allow_false" || name != "default" || (w != "true" && w != "false") {
-					bail(at, "named filter arguments other than default's allow_false: true/false are not supported")
+					bail(at, "named-filter-arguments", "named filter arguments other than default's allow_false: true/false are not supported")
 				}
 				allowFalse = w == "true"
 			} else {
 				if len(args) == maxFilterArgs {
-					bail(at, "more than %d filter arguments", maxFilterArgs)
+					bail(at, "too-many-filter-arguments", "more than %d filter arguments", maxFilterArgs)
 				}
 				arg := r.expr(eval, false)
 				if k := arg.keyword(); k != "" {
-					bail(at, "%s is only supported with == and !=", k)
+					bail(at, "keyword-outside-equality", "%s is only supported with == and !=", k)
 				}
 				args = append(args, arg)
 			}
@@ -133,7 +133,7 @@ func (r *renderer) spend(name string, v val, args []val, at int) {
 
 func (r *renderer) charge(cost, at int) {
 	if r.spent += cost; r.spent > r.limits.Memory {
-		bail(at, "filters over the memory limit of %d", r.limits.Memory)
+		bail(at, "memory-limit", "filters over the memory limit of %d", r.limits.Memory)
 	}
 }
 
@@ -182,15 +182,15 @@ func (r *renderer) namedArg() (string, bool) {
 // callFilter applies a registered filter, or reports that it asked for the built-in.
 func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at int) (out val, builtin bool) {
 	if fn == nil {
-		bail(at, "filter %q is registered without a function", name) // e.g. for Check only
+		bail(at, "nil-filter-func", "filter %q is registered without a function", name) // e.g. for Check only
 	}
 	f := Filter{Name: name, Input: v.data(), Args: make([]any, len(args)), Strict: r.strict}
 	if v.lit == 0 && v.x == nilLit {
-		bail(at, "the nil literal into a registered filter, which liquidjs passes as a Drop")
+		bail(at, "nil-literal-registered-filter", "the nil literal into a registered filter, which liquidjs passes as a Drop")
 	}
 	for i, a := range args {
 		if a.lit == 0 && a.x == nilLit {
-			bail(at, "the nil literal into a registered filter, which liquidjs passes as a Drop")
+			bail(at, "nil-literal-registered-filter", "the nil literal into a registered filter, which liquidjs passes as a Drop")
 		}
 		f.Args[i] = a.data()
 	}
@@ -202,7 +202,7 @@ func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at 
 		return v, false
 	}
 	if err != nil {
-		panic(bailout{wrapErr("filter", name, at, err)})
+		panic(bailout{hookErr("filter", name, at, err)})
 	}
 	return val{x: x}, false
 }
@@ -268,7 +268,7 @@ func stringify(dst []byte, v val, at int) []byte {
 		}
 		return dst
 	case map[string]any:
-		bail(at, "stringify of an object")
+		bail(at, "stringify-object", "stringify of an object")
 	}
 	f, _ := v.num(at)
 	return appendJSNumber(dst, f)
@@ -285,14 +285,14 @@ func capitalize(s string, at int) string {
 	up := first
 	if first <= 0xFFFF { // above, charAt(0) is half a surrogate pair, which has no case
 		if jsUpperDiffers(first) {
-			bail(at, "capitalize of %q, whose JavaScript upper case differs", first)
+			bail(at, "case-mapping", "capitalize of %q, whose JavaScript upper case differs", first)
 		}
 		up = unicode.ToUpper(first)
 	}
 	same := up == first
 	for _, c := range s[n:] {
 		if jsLowerDiffers(c) {
-			bail(at, "capitalize of %q, whose JavaScript lower case differs", c)
+			bail(at, "case-mapping", "capitalize of %q, whose JavaScript lower case differs", c)
 		}
 		same = same && unicode.ToLower(c) == c
 	}

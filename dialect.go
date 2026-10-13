@@ -74,7 +74,7 @@ func (v val) hookValue() any {
 func (r *renderer) dialectOutput(v val) {
 	out, err := r.dialect.Output(r.out, v.hookValue())
 	if err != nil {
-		panic(bailout{wrapErr("dialect", "output", r.base, err)})
+		panic(bailout{hookErr("dialect", "output", r.base, err)})
 	}
 	r.out = out
 }
@@ -82,7 +82,7 @@ func (r *renderer) dialectOutput(v val) {
 func (r *renderer) dialectCompare(op string, a, b val, at int) bool {
 	ok, err := r.dialect.Compare(op, a.hookValue(), b.hookValue())
 	if err != nil {
-		panic(bailout{wrapErr("dialect", "compare", at, err)})
+		panic(bailout{hookErr("dialect", "compare", at, err)})
 	}
 	return ok
 }

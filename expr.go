@@ -102,10 +102,10 @@ func (r *renderer) ws() {
 func (r *renderer) end() {
 	r.ws()
 	if r.p < len(r.src) {
-		bail(r.pos(), "unexpected %q", r.src[r.p:])
+		bail(r.pos(), "unexpected-token", "unexpected %q", r.src[r.p:])
 	}
 	if r.undef.set {
-		panic(bailout{&Error{Kind: ErrUndefined, Pos: r.undef.pos, Msg: r.undef.path}})
+		panic(bailout{&Error{Kind: ErrUndefined, Code: "undefined", Pos: r.undef.pos, Msg: r.undef.path}})
 	}
 }
 
@@ -169,7 +169,7 @@ func (r *renderer) chain(eval bool) (res bool, first val, lone bool) {
 	at := r.pos()
 	w := r.ident()
 	if w != "and" && w != "or" {
-		bail(at, "expected and/or, got %q", r.src[at-r.base:])
+		bail(at, "expected-and-or", "expected and/or, got %q", r.src[at-r.base:])
 	}
 	rest, _, _ := r.chain(eval)
 	if w == "and" {
@@ -187,11 +187,11 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 	spaced := r.p > before
 	op := r.op()
 	if op != "" && !spaced && r.rejects(UnspacedOperators) {
-		bail(r.pos(), "operators without whitespace before them are rejected by the dialect")
+		bail(r.pos(), "dialect-unspaced-operator", "operators without whitespace before them are rejected by the dialect")
 	}
 	if op == "" {
 		if k := a.keyword(); k != "" {
-			bail(start, "%s is only supported with == and !=", k)
+			bail(start, "keyword-outside-equality", "%s is only supported with == and !=", k)
 		}
 		return eval && truthy(a, r.pos()), a, true
 	}
@@ -203,17 +203,17 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 		}
 		switch {
 		case op != "==" && op != "!=":
-			bail(start, "%s is only supported with == and !=", k)
+			bail(start, "keyword-outside-equality", "%s is only supported with == and !=", k)
 		case other.keyword() != "" || (other.lit == 0 && other.x == nilLit):
-			bail(start, "%s compared with blank, empty or nil", k) // liquidjs is asymmetric here
+			bail(start, "keyword-against-keyword", "%s compared with blank, empty or nil", k) // liquidjs is asymmetric here
 		}
 	}
 	if op == "contains" {
 		if b.lit == 0 && b.x == nilLit {
-			bail(at, "contains nil") // liquidjs searches for "null"
+			bail(at, "contains-nil", "contains nil") // liquidjs searches for "null"
 		}
 		if r.dialect != nil && r.dialect.Compare != nil {
-			bail(at, "contains with a dialect Compare hook")
+			bail(at, "dialect-contains", "contains with a dialect Compare hook")
 		}
 		return eval && contains(a, b, at), a, false
 	}
@@ -228,7 +228,7 @@ func (r *renderer) op() string {
 	for _, op := range [...]string{"==", "!=", "<=", ">=", "<", ">", "contains"} {
 		if strings.HasPrefix(rest, op) {
 			if op == "contains" && len(rest) > len(op) && isIdentChar(rest[len(op)]) {
-				bail(r.pos(), "contains followed by an identifier character") // liquidjs splits containsx into contains x
+				bail(r.pos(), "contains-glued", "contains followed by an identifier character") // liquidjs splits containsx into contains x
 			}
 			r.p += len(op)
 			return op
@@ -260,12 +260,12 @@ func (r *renderer) expr(eval, lenient bool) val {
 			v = nilLit
 		case "blank":
 			if r.rejects(BlankKeyword) {
-				bail(at, "blank is rejected by the dialect")
+				bail(at, "dialect-blank", "blank is rejected by the dialect")
 			}
 			v = blankLit
 		case "empty":
 			if r.rejects(EmptyKeyword) {
-				bail(at, "empty is rejected by the dialect")
+				bail(at, "dialect-empty", "empty is rejected by the dialect")
 			}
 			v = emptyLit
 		default:
@@ -273,11 +273,11 @@ func (r *renderer) expr(eval, lenient bool) val {
 			return val{x: r.path(eval, lenient)}
 		}
 		if c := r.peek(); c == '.' || c == '[' {
-			bail(at, "property access on a literal")
+			bail(at, "literal-property", "property access on a literal")
 		}
 		return val{x: v}
 	}
-	bail(at, "expected expression")
+	bail(at, "expected-expression", "expected expression")
 	return val{}
 }
 
@@ -285,7 +285,7 @@ func (r *renderer) str() string {
 	at := r.pos()
 	end := quotedEnd(r.src, r.p)
 	if end < 0 {
-		bail(at, "unterminated string")
+		bail(at, "unterminated-string", "unterminated string")
 	}
 	s := r.src[r.p+1 : end-1]
 	r.p = end
@@ -349,7 +349,7 @@ func unescape(s string, at int) string {
 			c = c*rune(base) + rune(d)
 		}
 		if utf16.IsSurrogate(c) {
-			bail(at, "string escape of half a surrogate pair")
+			bail(at, "string-escape-surrogate", "string escape of half a surrogate pair")
 		}
 		b.WriteRune(c)
 		i = k - 1
@@ -362,7 +362,7 @@ func (r *renderer) number() float64 {
 	at, i := r.p, r.p
 	if c := r.src[i]; c == '-' || c == '+' {
 		if c == '-' && r.rejects(NegativeLiterals) {
-			bail(r.base+at, "negative literals are rejected by the dialect")
+			bail(r.base+at, "dialect-negative-literal", "negative literals are rejected by the dialect")
 		}
 		i++
 	}
@@ -378,11 +378,11 @@ func (r *renderer) number() float64 {
 	}
 	rangeDots := strings.HasPrefix(r.src[j:], "..")
 	if j == i || j < len(r.src) && !rangeDots && (r.src[j] == '.' || isIdentChar(r.src[j]) || r.src[j] >= utf8.RuneSelf && !r.blankAt(j)) {
-		bail(r.base+at, "malformed number literal")
+		bail(r.base+at, "malformed-number", "malformed number literal")
 	}
 	f, err := strconv.ParseFloat(r.src[at:j], 64)
 	if err != nil {
-		bail(r.base+at, "malformed number literal")
+		bail(r.base+at, "malformed-number", "malformed number literal")
 	}
 	r.p = j
 	return f
@@ -401,7 +401,7 @@ func (r *renderer) path(eval, lenient bool) any {
 	case name == "forloop":
 		v = r.forloop(eval, start)
 	case reserved(name):
-		bail(r.base+start, "%q is not supported as a variable", name)
+		bail(r.base+start, "reserved-word-variable", "%q is not supported as a variable", name)
 	case eval:
 		v = r.root(name, start)
 	}
@@ -430,7 +430,7 @@ func (r *renderer) path(eval, lenient bool) any {
 			r.p = j
 			seg := src[i:j]
 			if seg == "" || j < len(src) && src[j] >= utf8.RuneSelf && !r.blankAt(j) {
-				bail(at, "expected property name")
+				bail(at, "expected-property-name", "expected property name")
 			}
 			if eval {
 				v = key(v, val{s: seg, lit: litStr}, at)
@@ -441,15 +441,15 @@ func (r *renderer) path(eval, lenient bool) any {
 			at := r.pos()
 			k := r.expr(eval, false)
 			if k.keyword() != "" {
-				bail(at, "%s as an index", k.keyword())
+				bail(at, "keyword-index", "%s as an index", k.keyword())
 			}
 			if _, undef := k.x.(Undefined); eval && r.strict && undef && k.lit == 0 {
 				// liquidjs evaluates index keys strictly, even where the path itself is lenient.
-				panic(bailout{&Error{Kind: ErrUndefined, Pos: at, Msg: r.src[at-r.base : r.p]}})
+				panic(bailout{&Error{Kind: ErrUndefined, Code: "undefined", Pos: at, Msg: r.src[at-r.base : r.p]}})
 			}
 			r.ws()
 			if r.peek() != ']' {
-				bail(r.pos(), "expected ]")
+				bail(r.pos(), "expected-bracket", "expected ]")
 			}
 			if eval {
 				v = key(v, k, at)
@@ -485,7 +485,7 @@ func (r *renderer) root(name string, at int) any {
 		return v
 	}
 	if magic(name) {
-		bail(r.base+at, "%q resolves to a liquidjs built-in", name)
+		bail(r.base+at, "builtin-variable-name", "%q resolves to a liquidjs built-in", name)
 	}
 	return Undefined{}
 }
@@ -518,7 +518,7 @@ func (r *renderer) expValue(eval bool, exp, name string, item any, at int) val {
 	}
 	r.end()
 	if r.lenientUndef && !lenient {
-		panic(bailout{&Error{Kind: ErrUndefined, Pos: at, Msg: exp}})
+		panic(bailout{&Error{Kind: ErrUndefined, Code: "undefined", Pos: at, Msg: exp}})
 	}
 	r.binds = r.binds[:len(r.binds)-1]
 	r.src, r.base, r.p, r.undef, r.lenientUndef = src, base, p, undef, hit
@@ -576,22 +576,22 @@ func prop(v any, key string, at int) any {
 			}
 			return m[len(m)-1]
 		case "length":
-			bail(at, "length of an array, an own JavaScript property")
+			bail(at, "array-length-property", "length of an array, an own JavaScript property")
 		}
 		return Undefined{}
 	case string:
 		switch {
 		case key == "size":
 			if !utf8.ValidString(m) {
-				bail(at, "size of invalid UTF-8")
+				bail(at, "invalid-utf8", "size of invalid UTF-8")
 			}
 			return boxInt(len16(m))
 		case key == "length" || strings.Trim(key, "0123456789") == "":
-			bail(at, "property %q of a string, an own JavaScript property", key)
+			bail(at, "string-own-property", "property %q of a string, an own JavaScript property", key)
 		}
 		return Undefined{}
 	}
-	bail(at, "property %q on %T", key, v)
+	bail(at, "property-on-scalar", "property %q on %T", key, v)
 	return nil
 }
 
@@ -624,7 +624,7 @@ func key(v any, k val, at int) any {
 		}
 		return Undefined{}
 	}
-	bail(at, "index of %T", k.any())
+	bail(at, "index-type", "index of %T", k.any())
 	return nil
 }
 
@@ -653,7 +653,7 @@ func index(v any, n int, at int) any {
 		}
 		return a[n]
 	}
-	bail(at, "index on %T", v)
+	bail(at, "index-on-scalar", "index on %T", v)
 	return nil
 }
 
@@ -669,7 +669,7 @@ func num(v any, at int) (float64, bool) {
 	case json.Number:
 		f, err := strconv.ParseFloat(string(n), 64)
 		if err != nil {
-			bail(at, "bad json.Number %q", n)
+			bail(at, "bad-json-number", "bad json.Number %q", n)
 		}
 		return f, true
 	}
@@ -704,7 +704,7 @@ func (v val) check(at int) val {
 		return v
 	}
 	if _, ok := num(v.x, at); !ok {
-		bail(at, "unsupported value type %T", v.x)
+		bail(at, "value-type", "unsupported value type %T", v.x)
 	}
 	return v
 }
@@ -726,7 +726,7 @@ func objEq(a, b val, at int) bool {
 		}
 		return true
 	case isObj(a) && isObj(b) && !xArr && !yArr:
-		bail(at, "== between two objects") // JavaScript compares references
+		bail(at, "object-equality", "== between two objects") // JavaScript compares references
 	}
 	return false
 }
@@ -797,7 +797,7 @@ func (r *renderer) write(v val) {
 	if v.lit == 0 && v.x == nilLit {
 		// liquidjs's nil literal is a Drop: "" by default, but "[object Object]" under
 		// an outputEscape that String()s objects, so the output depends on configuration.
-		bail(r.base, "cannot output the nil literal") // e.g. from default: nil
+		bail(r.base, "output-nil-literal-result", "cannot output the nil literal") // e.g. from default: nil
 	}
 	if isNil(v) {
 		return
@@ -814,7 +814,7 @@ func (r *renderer) write(v val) {
 		r.out = appendJSNumber(r.out, f)
 		return
 	}
-	bail(r.base, "cannot output %T %v", v.any(), v.any())
+	bail(r.base, "output-type", "cannot output %T %v", v.any(), v.any())
 }
 
 // appendJSNumber formats f as JavaScript's Number.prototype.toString does.
@@ -907,11 +907,11 @@ func compare(op string, a, b val, at int) bool {
 		}
 		c = cmpFloat(x, y)
 	case xNum:
-		bail(at, "%s between number and %T", op, b.any())
+		bail(at, "ordering-types", "%s between number and %T", op, b.any())
 	case xStr && yStr && ascii(xs) && ascii(ys):
 		c = strings.Compare(xs, ys)
 	default:
-		bail(at, "%s needs two numbers, two ASCII strings, or a number and a string", op)
+		bail(at, "ordering-types", "%s needs two numbers, two ASCII strings, or a number and a string", op)
 	}
 	switch op {
 	case "<":
@@ -998,7 +998,7 @@ func emptyValue(v val) bool {
 func contains(a, b val, at int) bool {
 	a, b = a.check(at), b.check(at)
 	if isObj(b) {
-		bail(at, "contains with an object or array on the right")
+		bail(at, "contains-object", "contains with an object or array on the right")
 	}
 	if arr, ok := a.x.([]any); ok {
 		for _, e := range arr {
@@ -1029,13 +1029,13 @@ func (r *renderer) rangeLit(eval bool) any {
 	lo := r.expr(eval, false)
 	r.ws()
 	if !strings.HasPrefix(r.src[r.p:], "..") {
-		bail(r.pos(), "expected .. in range")
+		bail(r.pos(), "range-syntax", "expected .. in range")
 	}
 	r.p += 2
 	hi := r.expr(eval, false)
 	r.ws()
 	if r.peek() != ')' {
-		bail(r.pos(), "expected ) after range")
+		bail(r.pos(), "range-syntax", "expected ) after range")
 	}
 	r.p++
 	if !eval {
@@ -1043,7 +1043,7 @@ func (r *renderer) rangeLit(eval bool) any {
 	}
 	a, b := rangeBound(lo, at), rangeBound(hi, at)
 	if b-a >= maxRange {
-		bail(at, "range of more than %d items", maxRange)
+		bail(at, "range-too-long", "range of more than %d items", maxRange)
 	}
 	out := make([]any, 0, max(0, b-a+1))
 	for i := a; i <= b; i++ {
@@ -1058,7 +1058,7 @@ const maxRange = 100000
 func rangeBound(v val, at int) int {
 	f, ok := v.check(at).num(at)
 	if !ok || f != math.Trunc(f) || math.Abs(f) >= maxSafeInt {
-		bail(at, "range bound that isn't an integer")
+		bail(at, "range-bound", "range bound that isn't an integer")
 	}
 	return int(f)
 }
@@ -1074,11 +1074,14 @@ func (f *frame) item() any {
 func (r *renderer) forloop(eval bool, start int) any {
 	f := r.loop()
 	if f == nil || r.peek() != '.' {
-		bail(r.base+start, "forloop outside a for loop or without a property")
+		bail(r.base+start, "forloop-outside-for", "forloop outside a for loop or without a property")
 	}
 	r.p++
 	at := r.pos()
 	p := r.ident()
+	if p == "" {
+		bail(at, "expected-property-name", "expected property name")
+	}
 	if !eval {
 		return nil
 	}
@@ -1101,8 +1104,6 @@ func (r *renderer) forloop(eval bool, start int) any {
 		v = boxInt(n)
 	case "name":
 		v = f.name + "-" + r.tpl[f.collStart:f.collEnd]
-	case "":
-		bail(at, "expected property name")
 	default:
 		v = Undefined{} // liquidjs 10.26 has no parentloop or other properties
 	}

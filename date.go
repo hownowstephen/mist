@@ -52,7 +52,7 @@ func (r *renderer) dateInput(v val, at int) (int64, bool) {
 	case !isStr:
 		f, ok := v.check(at).num(at)
 		if !ok {
-			bail(at, "date of %T", v.any())
+			bail(at, "date-input-type", "date of %T", v.any())
 		}
 		return clipMs(f * 1000)
 	case s == "now" || s == "today":
@@ -75,7 +75,7 @@ func (r *renderer) dateInput(v val, at int) (int64, bool) {
 	}
 	// ponytail: V8's fallback parser accepts still more (two-digit years, day rollover, any
 	// month prefix); widen this if real inputs need it.
-	bail(at, "date of a string in none of the supported formats")
+	bail(at, "date-string-format", "date of a string in none of the supported formats")
 	return 0, false
 }
 
@@ -168,25 +168,25 @@ type zone struct {
 func tzArg(v val, ms int64, at int) zone {
 	if s, ok := v.str(); ok {
 		if !ianaName(s) {
-			bail(at, "date timezone %q", s)
+			bail(at, "date-timezone-name", "date timezone %q", s)
 		}
 		loc, ok := zones.Load(s)
 		if !ok {
 			l, err := time.LoadLocation(s)
 			if err != nil {
-				bail(at, "date timezone %q: %v", s, err) // Intl may still know it; liquidjs throws if not
+				bail(at, "date-timezone-unknown", "date timezone %q: %v", s, err) // Intl may still know it; liquidjs throws if not
 			}
 			loc, _ = zones.LoadOrStore(s, l)
 		}
 		_, secs := time.UnixMilli(ms).In(loc.(*time.Location)).Zone()
 		if secs%60 != 0 {
-			bail(at, "date timezone %q with a sub-minute offset", s)
+			bail(at, "date-timezone-sub-minute", "date timezone %q with a sub-minute offset", s)
 		}
 		return zone{east: secs / 60, name: s, fixed: true}
 	}
 	f, ok := v.check(at).num(at)
 	if !ok || f != math.Trunc(f) || math.Abs(f) > 1e6 {
-		bail(at, "date timezone argument %v", v.any())
+		bail(at, "date-timezone-argument", "date timezone argument %v", v.any())
 	}
 	return zone{east: -int(f), fixed: true} // minutes west, as in getTimezoneOffset
 }
@@ -215,7 +215,7 @@ func strftime(dst []byte, ms int64, z zone, format string, limit, at int) []byte
 	disp := ms + int64(z.east)*60000
 	d := time.UnixMilli(disp).UTC()
 	if y := d.Year(); y < 1000 || y > 9999 {
-		bail(at, "date outside years 1000–9999") // liquidjs's %y and %C assume four digits
+		bail(at, "date-year-range", "date outside years 1000–9999") // liquidjs's %y and %C assume four digits
 	}
 	for i := 0; i < len(format); {
 		j := strings.IndexByte(format[i:], '%')
@@ -287,7 +287,7 @@ func strftime(dst []byte, ms int64, z zone, format string, limit, at int) []byte
 			padWidth = 0
 		}
 		if len(dst)+max(padWidth, len(ret)) > limit {
-			bail(at, "filters over the memory limit")
+			bail(at, "memory-limit", "filters over the memory limit")
 		}
 		for range padWidth - len(ret) {
 			dst = append(dst, pad)
@@ -300,7 +300,7 @@ func strftime(dst []byte, ms int64, z zone, format string, limit, at int) []byte
 func strWidth(w string, at int) int {
 	n, err := strconv.Atoi(w)
 	if err != nil || n > 1024 {
-		bail(at, "date format width %s", w)
+		bail(at, "date-width", "date format width %s", w)
 	}
 	return n
 }
@@ -322,7 +322,7 @@ func strftimeConv(b []byte, d time.Time, disp int64, z zone, conv, flags, width 
 	case "B":
 		return append(b, monthNames[d.Month()-1]...), true
 	case "c", "x", "X":
-		bail(at, "date %%%s, which prints with the ICU locale", conv)
+		bail(at, "date-locale-format", "date %%%s, which prints with the ICU locale", conv)
 	case "C":
 		return itoa(d.Year() / 100), true
 	case "d", "e":
@@ -397,7 +397,7 @@ func strftimeConv(b []byte, d time.Time, disp int64, z zone, conv, flags, width 
 		return tzOffset(b, z.east, strings.Contains(flags, ":")), true
 	case "Z":
 		if !z.fixed {
-			bail(at, "date %%Z without a timezone, which prints the process's zone name")
+			bail(at, "date-zone-name", "date %%Z without a timezone, which prints the process's zone name")
 		}
 		if z.name != "" {
 			return append(b, z.name...), true

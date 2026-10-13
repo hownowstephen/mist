@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -34,8 +33,6 @@ type oracle struct {
 // as oracle.mjs's liquidjs does by default.
 var corpusEngine = Engine{Now: func() time.Time { return time.UnixMilli(1700000000123) }, PassUnknownFilters: true}
 
-var bailNoise = regexp.MustCompile(`"[^"]*"|\d+`)
-
 func TestCorpus(t *testing.T) {
 	path := "testdata/corpus.json"
 	if p := os.Getenv("MIST_CORPUS"); p != "" {
@@ -62,7 +59,7 @@ func TestCorpus(t *testing.T) {
 			var e *Error
 			if errors.As(err, &e) && errors.Is(err, ErrUnsupported) {
 				bailed++
-				reasons[bailNoise.ReplaceAllString(e.Msg, "…")]++
+				reasons[e.Code]++
 				continue
 			}
 			if strings.Contains(want.Err, "limit") {
