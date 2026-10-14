@@ -101,7 +101,7 @@ func (l Limits) orDefaults() Limits {
 // ErrUnsupported hands the template to the full engine; any other error stops rendering.
 type TagFunc func(dst []byte, t Tag) ([]byte, error)
 
-// Tag is one use of a custom tag.
+// Tag is one use of a custom tag, valid only while its TagFunc runs.
 type Tag struct {
 	Name   string
 	Args   string         // raw text after the name, trimmed
