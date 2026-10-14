@@ -195,7 +195,7 @@ var runtimeCodes = map[string]bool{
 	"same-value-object": true, "same-value-type": true, "sentence-type": true, "size-length-key": true,
 	"slice-begin": true, "slugify-mode": true, "sort-astral": true, "sort-mixed": true, "sort-type": true,
 	"split-surrogate-pair": true, "string-own-property": true, "string-type": true, "stringify-object": true,
-	"strip-html-unclosed": true, "sum-non-finite": true, "sum-type": true, "to-integer-large": true,
+	"strip-html-unclosed": true, "sum-non-finite": true, "sum-type": true,
 	"to-integer-type": true, "unicode-version": true, "url-decode-malformed": true, "value-type": true,
 	"where-computed-key": true, "where-input": true, "where-strict-missing": true,
 }
