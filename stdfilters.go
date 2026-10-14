@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"html"
 	"math"
 	"slices"
@@ -725,7 +724,14 @@ func endOf(v val, first bool, at int) val {
 // toNumber is liquidjs's +value || 0.
 func toNumber(v val, at int) float64 {
 	if s, ok := v.str(); ok {
-		return strNumber(strings.TrimFunc(s, jsSpace), at)
+		f := jsNumberOf(v, at)
+		switch {
+		case math.IsNaN(f):
+			return 0
+		case math.IsInf(f, 0):
+			bail(at, "number-from-string", "number from string %q", s)
+		}
+		return f
 	}
 	if f, ok := v.check(at).num(at); ok {
 		return f
@@ -740,43 +746,6 @@ func toNumber(v val, at int) float64 {
 		return 0
 	}
 	bail(at, "number-from-type", "number from %T", v.any())
-	return 0
-}
-
-// strNumber is JavaScript's Number(t) || 0 for a trimmed string: decimals, and unsigned
-// 0x, 0o and 0b integers. Everything else is NaN, so 0.
-func strNumber(t string, at int) float64 {
-	if t == "" {
-		return 0
-	}
-	if decimal(t) {
-		f, _ := strconv.ParseFloat(t, 64)
-		return f
-	}
-	switch t {
-	case "Infinity", "+Infinity", "-Infinity":
-		bail(at, "number-from-string", "number from string %q", t)
-	}
-	if len(t) > 2 && t[0] == '0' {
-		base := 0
-		switch t[1] {
-		case 'x', 'X':
-			base = 16
-		case 'o', 'O':
-			base = 8
-		case 'b', 'B':
-			base = 2
-		}
-		if base != 0 && !strings.ContainsAny(t[2:], "_+-") {
-			n, err := strconv.ParseUint(t[2:], base, 64)
-			if errors.Is(err, strconv.ErrRange) {
-				bail(at, "number-from-string", "number from string %q", t)
-			}
-			if err == nil {
-				return float64(n)
-			}
-		}
-	}
 	return 0
 }
 
@@ -1538,7 +1507,7 @@ func radixValue(s string, base int, at int) float64 {
 			return math.NaN()
 		}
 		if n = n*float64(base) + float64(d); n >= maxSafeInt {
-			bail(at, "to-integer-large", "to_integer of a %d-digit base-%d integer", len(s), base)
+			bail(at, "number-from-string", "number from a %d-digit base-%d integer", len(s), base)
 		}
 	}
 	return n

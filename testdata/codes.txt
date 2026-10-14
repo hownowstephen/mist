@@ -114,7 +114,6 @@ sum-non-finite
 sum-type
 tag:NAME
 template-too-large
-to-integer-large
 to-integer-type
 too-many-filter-arguments
 unclosed-block
