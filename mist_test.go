@@ -395,12 +395,13 @@ func TestLimits(t *testing.T) {
 	for i := range xs {
 		xs[i] = "a"
 	}
-	vars := map[string]any{"big": big, "xs": xs, "sep": strings.Repeat("-", 20_000), "f": strings.Repeat("%1000Y", 20_000)}
+	vars := map[string]any{"big": big, "xs": xs, "sep": strings.Repeat("-", 20_000), "f": strings.Repeat("%1000Y", 20_000), "n": 1e8}
 	for _, c := range []struct {
 		e   Engine
 		tpl string
 	}{
 		{Engine{}, `{{ 'abc' | slice: 0, 100000000 }}`}, // liquidjs with render's memoryLimit throws
+		{Engine{}, `{{ 'abc' | slice: 0, n }}`},
 		{Engine{}, `{% assign s = big %}{% for i in (1..12) %}{% assign s = s | append: s %}{% endfor %}`},
 		{Engine{}, `{{ xs | join: sep }}`},
 		{Engine{}, `{{ big | replace: '', big }}`},
