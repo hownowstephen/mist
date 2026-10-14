@@ -124,13 +124,13 @@ func key(v any, k val, at int) any {
 	case nil, Undefined:
 		return v
 	}
-	_, isArr := v.([]any)
+	arr, isArr := v.([]any)
 	if s, ok := k.str(); ok {
 		if !isArr {
 			return prop(v, s, at)
 		}
 		if n, ok := canonicalInt(s); ok {
-			return index(v, n, at)
+			return index(arr, n)
 		}
 		if strings.TrimLeft(strings.TrimPrefix(s, "-"), "0123456789") == "" && s != "-" && s != "" {
 			return Undefined{} // a digit string JavaScript doesn't print, such as "01"
@@ -142,7 +142,7 @@ func key(v any, k val, at int) any {
 		case !isArr:
 			return prop(v, string(appendJSNumber(nil, f)), at) // JavaScript keys objects by String(f)
 		case f == math.Trunc(f) && math.Abs(f) < maxSafeInt:
-			return index(v, int(f), at)
+			return index(arr, int(f))
 		}
 		return Undefined{}
 	}
@@ -165,18 +165,14 @@ func canonicalInt(s string) (int, bool) {
 	return n, true
 }
 
-func index(v any, n int, at int) any {
-	if a, ok := v.([]any); ok {
-		if n < 0 {
-			n += len(a)
-		}
-		if n < 0 || n >= len(a) {
-			return Undefined{}
-		}
-		return a[n]
+func index(a []any, n int) any {
+	if n < 0 {
+		n += len(a)
 	}
-	bail(at, "index-on-scalar", "index on %T", v)
-	return nil
+	if n < 0 || n >= len(a) {
+		return Undefined{}
+	}
+	return a[n]
 }
 
 // num reports v as a float64, the only number type liquidjs sees after JSON.

@@ -65,6 +65,12 @@ func TestDialectOutput(t *testing.T) {
 	if _, err := e.Render("{{ odd }}", vars, false); !errors.Is(err, errToy) {
 		t.Errorf("odd type: got %v; want the dialect's error", err)
 	}
+	// echo and raw skip liquidjs's outputEscape, which the Output hook stands in for.
+	for _, tpl := range []string{"{% echo t %}", "{{ t | raw }}"} {
+		if _, err := e.Render(tpl, vars, false); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
+		}
+	}
 }
 
 func TestDialectCompare(t *testing.T) {

@@ -52,7 +52,6 @@ for-syntax
 forloop-outside-for
 group-by-object
 hook:KIND:NAME
-index-on-scalar
 index-type
 inline-comment-line
 internal
