@@ -40,12 +40,13 @@ jobs:
       - name: liquidjs, and the comparison
         run: node scripts/bench.mjs -go "$RUNNER_TEMP/go.txt"
 
+  # A PR against its base; otherwise against the previous release, which catches slowdowns
+  # that add up across PRs too small to notice one at a time.
   compare:
     name: benchstat vs base
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
-      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,10 +56,12 @@ jobs:
         with:
           go-version: stable
           cache: false # runs on release tags; nothing restored from cache
+      - name: pick the base
+        run: echo "BASE=${PR_BASE:-$(git describe --tags --abbrev=0 --match 'v*' HEAD^)}" >> "$GITHUB_ENV"
       # Alternating base and head runs spreads machine noise across both sides.
       - name: benchmark base and head
         run: |
-          git worktree add -q "$RUNNER_TEMP/base" "$BASE_SHA"
+          git worktree add -q "$RUNNER_TEMP/base" "$BASE"
           for _ in 1 2 3 4 5 6; do
             (cd "$RUNNER_TEMP/base" && go test -run '^$' -bench . -benchmem -count 1 .) >> "$RUNNER_TEMP/base.txt"
             go test -run '^$' -bench . -benchmem -count 1 . >> "$RUNNER_TEMP/head.txt"
@@ -66,7 +69,7 @@ jobs:
       - name: benchstat
         run: |
           {
-            echo '## Benchmarks vs base'
+            echo "## Benchmarks vs $BASE"
             echo
             echo 'Informational; shared runners are noisy, so read small differences with care.'
             echo
