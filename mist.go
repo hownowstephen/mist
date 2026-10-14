@@ -58,6 +58,35 @@ type Engine struct {
 	// strictFilters off (its default). Leave it false, so such templates bail, unless
 	// Filters already covers every filter the full engine defines.
 	PassUnknownFilters bool
+	// Limits bound each render; zero fields take the defaults.
+	Limits Limits
+}
+
+// Limits bound one render. Going over one bails with ErrUnsupported, so the full engine,
+// with its own limits, decides.
+type Limits struct {
+	// Memory is a budget in liquidjs's memoryLimit units. Each filter spends at least what
+	// liquidjs charges it (the lengths of its input and arguments, and join's and slice's
+	// sizes), so with Memory at or below the full engine's memoryLimit, mist never renders a
+	// template that engine rejects. Default 10,000,000.
+	Memory int
+	// Output is the most bytes one render writes, captures included. Default 4 MiB.
+	Output int
+	// Iterations is the most for-loop iterations in one render. Default 1,000,000.
+	Iterations int
+}
+
+func (l Limits) orDefaults() Limits {
+	if l.Memory <= 0 {
+		l.Memory = 10_000_000
+	}
+	if l.Output <= 0 {
+		l.Output = 4 << 20
+	}
+	if l.Iterations <= 0 {
+		l.Iterations = 1_000_000
+	}
+	return l
 }
 
 // TagFunc appends a custom tag's output to dst. Returning an error that wraps
@@ -138,7 +167,7 @@ func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool)
 // append is Append that also returns the increment and decrement counters, which
 // liquidjs writes into the data a chain's later steps share.
 func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
-	r := renderer{tpl: tpl, out: dst, vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, now: e.Now, passUnknown: e.PassUnknownFilters}
+	r := renderer{tpl: tpl, out: dst, outBase: len(dst), vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, now: e.Now, passUnknown: e.PassUnknownFilters, limits: e.Limits.orDefaults()}
 	defer func() { env = r.env }()
 	defer r.recoverBail(&err)
 	r.run()
@@ -147,7 +176,7 @@ func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool)
 
 // Check is the package-level Check, also accepting e's custom tags.
 func (e Engine) Check(tpl string) (err error) {
-	r := renderer{tpl: tpl, check: true, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, passUnknown: e.PassUnknownFilters}
+	r := renderer{tpl: tpl, check: true, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, passUnknown: e.PassUnknownFilters, limits: e.Limits.orDefaults()}
 	defer r.recoverBail(&err)
 	r.run()
 	return nil

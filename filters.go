@@ -2,6 +2,7 @@ package mist
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -71,6 +72,9 @@ func (r *renderer) filters(v val, eval bool) val {
 			r.ws()
 		}
 
+		if eval {
+			r.spend(name, v, args, at)
+		}
 		fn, registered := r.filterFns[name]
 		if registered {
 			if !eval {
@@ -91,6 +95,75 @@ func (r *renderer) filters(v val, eval bool) val {
 			v = r.builtinFilter(name, v, args, eval, at)
 		}
 	}
+}
+
+// spend charges a filter at least what liquidjs's memoryLimit does, before it runs.
+// ponytail: charges inputs, as liquidjs does, plus the output of replace and date, the
+// filters whose output can dwarf their input; other results aren't charged.
+func (r *renderer) spend(name string, v val, args []val, at int) {
+	cost := memSize(v)
+	for _, a := range args {
+		cost += memSize(a)
+	}
+	switch name {
+	case "escape_once": // escape(unescape(s)) charges s twice
+		cost += memSize(v)
+	case "join":
+		sep := 1
+		if len(args) > 0 {
+			sep = memSize(args[0])
+		}
+		if a, ok := v.x.([]any); ok && v.lit == 0 {
+			cost += len(a) * (1 + sep)
+		}
+	case "slice", "sample":
+		if i := len(args) - 1; i >= 0 && args[i].lit == litNum {
+			cost += int(min(math.Abs(args[i].n), maxSafeInt))
+		}
+	case "replace":
+		if s, ok := v.str(); ok && len(args) == 2 {
+			p, _ := args[0].str()
+			if growth := memSize(args[1]) - len(p); growth > 0 {
+				cost += (strings.Count(s, p) + 1) * growth
+			}
+		}
+	}
+	r.charge(cost, at)
+}
+
+func (r *renderer) charge(cost, at int) {
+	if r.spent += cost; r.spent > r.limits.Memory {
+		bail(at, "filters over the memory limit of %d", r.limits.Memory)
+	}
+}
+
+// memSize is at least the length liquidjs charges for a value: a string's UTF-16 length
+// (no more than its bytes), an array's length plus its items', and a bound on the length
+// a number, boolean or object prints as.
+func memSize(v val) int {
+	switch v.lit {
+	case litStr:
+		return len(v.s)
+	case litNum:
+		return 24
+	}
+	return dataSize(v.x)
+}
+
+func dataSize(x any) int {
+	switch x := x.(type) {
+	case string:
+		return len(x)
+	case []any:
+		n := len(x)
+		for _, e := range x {
+			n += dataSize(e)
+		}
+		return n
+	case nil, undefinedT, nilLitT:
+		return 0
+	}
+	return 24
 }
 
 // namedArg consumes `key:` if the next argument is named.

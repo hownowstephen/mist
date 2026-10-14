@@ -15,9 +15,6 @@ const (
 	maxDepth    = 1024 // liquidjs has no limit; this bounds pathological templates
 )
 
-// ponytail: a flat budget per render; make it an Engine option if callers need more.
-const maxIterations = 1_000_000
-
 type frameKind uint8
 
 const (
@@ -71,7 +68,10 @@ type renderer struct {
 	stack        [inlineDepth]frame
 	deep         []frame // frames from inlineDepth on
 	depth        int
-	iters        int            // loop iterations so far, against maxIterations
+	limits       Limits
+	outBase      int            // len(out) before the render, which Limits.Output doesn't count
+	spent        int            // memory units filters have charged, against limits.Memory
+	iters        int            // loop iterations so far, against limits.Iterations
 	halt         int            // 1 + the stack index of the for a break or continue is unwinding to, or 0
 	haltBreak    bool           // the halt is a break, not a continue
 	cycles       map[string]int // cycle positions by liquidjs's fingerprint
@@ -178,9 +178,16 @@ func (r *renderer) run() {
 			r.output(b, e)
 			pos, trimNext = next, rt
 		}
+		r.checkOutput(start)
 	}
 	if r.depth > 0 {
 		bail(len(s), "unclosed block")
+	}
+}
+
+func (r *renderer) checkOutput(at int) {
+	if len(r.out)-r.outBase > r.limits.Output {
+		bail(at, "output over %d bytes", r.limits.Output)
 	}
 }
 
@@ -785,8 +792,8 @@ func (r *renderer) endIteration(at int) bool {
 		}
 	}
 	if f.active && !r.check && int(f.idx)+1 < len(f.coll) {
-		if r.iters++; r.iters > maxIterations {
-			bail(at, "more than %d loop iterations", maxIterations) // ranges make loop counts template-controlled
+		if r.iters++; r.iters > r.limits.Iterations {
+			bail(at, "more than %d loop iterations", r.limits.Iterations) // ranges make loop counts template-controlled
 		}
 		f.idx++
 		return true
@@ -862,6 +869,7 @@ func (r *renderer) liquid(start, end int) {
 			}
 		}
 		pos, _ = r.tag(b, e, next, false, false)
+		r.checkOutput(b)
 	}
 	if r.depth != depth {
 		bail(end, "a block left open in a liquid tag")

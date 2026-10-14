@@ -40,7 +40,9 @@ func (r *renderer) dateFilter(v val, args []val, at int) val {
 		z = tzArg(args[1], ms, at)
 	}
 	var buf [64]byte
-	return val{s: string(strftime(buf[:0], ms, z, format, at)), lit: litStr}
+	out := strftime(buf[:0], ms, z, format, r.limits.Memory-r.spent, at)
+	r.charge(len(out), at)
+	return val{s: string(out), lit: litStr}
 }
 
 // dateInput returns v as epoch milliseconds, or false where liquidjs's parseDate fails.
@@ -206,8 +208,10 @@ func ianaName(s string) bool {
 	return true
 }
 
-// strftime appends liquidjs's strftime of the instant ms displayed in z.
-func strftime(dst []byte, ms int64, z zone, format string, at int) []byte {
+// strftime appends liquidjs's strftime of the instant ms displayed in z, bailing once it
+// has appended more than limit bytes (padding widths can make it far longer than format).
+func strftime(dst []byte, ms int64, z zone, format string, limit, at int) []byte {
+	limit += len(dst)
 	disp := ms + int64(z.east)*60000
 	d := time.UnixMilli(disp).UTC()
 	if y := d.Year(); y < 1000 || y > 9999 {
@@ -281,6 +285,9 @@ func strftime(dst []byte, ms int64, z zone, format string, at int) []byte {
 		}
 		if strings.Contains(flags, "-") {
 			padWidth = 0
+		}
+		if len(dst)+max(padWidth, len(ret)) > limit {
+			bail(at, "filters over the memory limit")
 		}
 		for range padWidth - len(ret) {
 			dst = append(dst, pad)

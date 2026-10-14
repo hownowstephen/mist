@@ -175,7 +175,7 @@ func FuzzRender(f *testing.F) {
 
 // runtimeBail reports data-dependent bails, which Check can't see.
 func runtimeBail(err error) bool {
-	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== between two objects", "unsupported value", "stringify of an object", "capitalize of", "date ", "math filter", "filter argument", "slice without", "first or last", "last of", "first of", "number from", "json of", "case mapping", "string filter", "url_encode of", "nil literal as a filter", "contains with an object", "round to", "strip_html of", "join of", "size of", "where ", "index of", "for offset", "for limit", "range ", "map of", "sum of", "sort of", "sort by", "find on", "push of", "reverse of", "array filter on", "loop iterations", "sort_natural", "base64_decode", "url_decode", "uniq of", "invalid UTF-8", "slugify", "array_to_sentence_string of", "unshift of", "group_by of", "string of", "to_integer of"} {
+	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== between two objects", "unsupported value", "stringify of an object", "capitalize of", "date ", "math filter", "filter argument", "slice without", "first or last", "last of", "first of", "number from", "json of", "case mapping", "string filter", "url_encode of", "nil literal as a filter", "contains with an object", "round to", "strip_html of", "join of", "size of", "where ", "index of", "for offset", "for limit", "range ", "map of", "sum of", "sort of", "sort by", "find on", "push of", "reverse of", "array filter on", "loop iterations", "sort_natural", "base64_decode", "url_decode", "uniq of", "invalid UTF-8", "slugify", "array_to_sentence_string of", "unshift of", "group_by of", "string of", "to_integer of", "memory limit", "output over"} {
 		if strings.Contains(err.Error(), s) {
 			return true
 		}
@@ -369,5 +369,42 @@ func failInternal(t *testing.T, err error) {
 	t.Helper()
 	if e := (*Error)(nil); errors.Is(err, ErrInternal) && errors.As(err, &e) {
 		t.Fatalf("%v\n%s", err, e.Stack)
+	}
+}
+
+func TestLimits(t *testing.T) {
+	big := strings.Repeat("x", 10_000)
+	xs := make([]any, 1000)
+	for i := range xs {
+		xs[i] = "a"
+	}
+	vars := map[string]any{"big": big, "xs": xs, "sep": strings.Repeat("-", 20_000), "f": strings.Repeat("%1000Y", 20_000)}
+	for _, c := range []struct {
+		e   Engine
+		tpl string
+	}{
+		{Engine{}, `{{ 'abc' | slice: 0, 100000000 }}`}, // liquidjs with render's memoryLimit throws
+		{Engine{}, `{% assign s = big %}{% for i in (1..12) %}{% assign s = s | append: s %}{% endfor %}`},
+		{Engine{}, `{{ xs | join: sep }}`},
+		{Engine{}, `{{ big | replace: '', big }}`},
+		{Engine{}, `{{ 0 | date: f }}`},
+		{Engine{Limits: Limits{Output: 100}}, `{% for i in (1..50) %}xxx{% endfor %}`},
+		{Engine{Limits: Limits{Output: 100}}, `{% capture c %}{% for i in (1..50) %}xxx{% endfor %}{% endcapture %}`},
+		{Engine{Limits: Limits{Output: 100}}, `{% liquid for i in (1..50)
+echo 'xxx'
+endfor %}`},
+		{Engine{Limits: Limits{Iterations: 10}}, `{% for i in (1..12) %}{% endfor %}`},
+	} {
+		if _, err := c.e.Render(c.tpl, vars, false); !errors.Is(err, ErrUnsupported) || errors.Is(err, ErrInternal) {
+			t.Errorf("%s: got %v; want ErrUnsupported", c.tpl, err)
+		}
+	}
+	e := Engine{Limits: Limits{Memory: 200_000_000, Output: 150, Iterations: 59}}
+	if out, err := e.Render(`{{ 'abc' | slice: 0, 100000000 }}{% for i in (1..12) %}{% endfor %}{% for i in (1..49) %}xxx{% endfor %}`, nil, false); err != nil || len(out) != 150 {
+		t.Fatalf("raised limits: got %d bytes, %v", len(out), err)
+	}
+	// Output counts what this render writes, not what Append's dst already holds.
+	if _, err := e.Append(make([]byte, 1000), `x`, nil, false); err != nil {
+		t.Fatal(err)
 	}
 }
