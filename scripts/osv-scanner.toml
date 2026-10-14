@@ -14,3 +14,7 @@ reason = "liquidjs pop memoryLimit bypass; oracle only, never sees untrusted tem
 [[IgnoredVulns]]
 id = "GHSA-m7fp-h3p4-hr49"
 reason = "liquidjs strip_html infinite loop; oracle.mjs guards it, and the oracle never sees untrusted templates."
+
+[[IgnoredVulns]]
+id = "GHSA-fwxr-j5w2-587m"
+reason = "liquidjs ownPropertyOnly bypass for inherited array indices; oracle only, never sees untrusted templates."
