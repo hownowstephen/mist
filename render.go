@@ -97,11 +97,12 @@ func (r *renderer) recoverBail(err *error) {
 		*err = b.err
 		return
 	}
-	*err = &Error{Kind: ErrInternal, Pos: r.pos(), Msg: fmt.Sprint("panic: ", e), Stack: debug.Stack()}
+	*err = &Error{Kind: ErrInternal, Code: "internal", Pos: r.pos(), Msg: fmt.Sprint("panic: ", e), Stack: debug.Stack()}
 }
 
-func bail(pos int, format string, args ...any) {
-	panic(bailout{&Error{Kind: ErrUnsupported, Pos: pos, Msg: fmt.Sprintf(format, args...)}})
+// bail stops the render with ErrUnsupported. code is the Error.Code, stable across releases.
+func bail(pos int, code, format string, args ...any) {
+	panic(bailout{&Error{Kind: ErrUnsupported, Code: code, Pos: pos, Msg: fmt.Sprintf(format, args...)}})
 }
 
 func (r *renderer) live() bool {
@@ -132,7 +133,7 @@ func (r *renderer) frame(i int) *frame {
 func (r *renderer) push(f frame) {
 	switch {
 	case r.depth == maxDepth:
-		bail(r.base, "nesting deeper than %d", maxDepth)
+		bail(r.base, "nesting-too-deep", "nesting deeper than %d", maxDepth)
 	case r.depth < inlineDepth:
 		r.stack[r.depth] = f
 	case r.depth-inlineDepth < len(r.deep):
@@ -151,7 +152,7 @@ func (r *renderer) frames() []frame {
 func (r *renderer) run() {
 	s := r.tpl
 	if len(s) > math.MaxInt32 {
-		bail(0, "template over 2 GiB") // frames keep int32 offsets
+		bail(0, "template-too-large", "template over 2 GiB") // frames keep int32 offsets
 	}
 	pos, trimNext := 0, false
 	for pos < len(s) {
@@ -166,7 +167,7 @@ func (r *renderer) run() {
 		}
 		b, e, next, lt, rt := delimBounds(s, start, isTag)
 		if (lt || rt) && r.rejects(TrimMarkers) {
-			bail(start, "trim markers are rejected by the dialect")
+			bail(start, "dialect-trim-markers", "trim markers are rejected by the dialect")
 		}
 		if lt {
 			text = trimRightBlank(text)
@@ -181,13 +182,13 @@ func (r *renderer) run() {
 		r.checkOutput(start)
 	}
 	if r.depth > 0 {
-		bail(len(s), "unclosed block")
+		bail(len(s), "unclosed-block", "unclosed block")
 	}
 }
 
 func (r *renderer) checkOutput(at int) {
 	if len(r.out)-r.outBase > r.limits.Output {
-		bail(at, "output over %d bytes", r.limits.Output)
+		bail(at, "output-limit", "output over %d bytes", r.limits.Output)
 	}
 }
 
@@ -229,7 +230,7 @@ func delimBounds(s string, start int, isTag bool) (b, e, next int, lt, rt bool) 
 		// liquidjs ends tags at the first %}, quotes or not
 		k := strings.Index(s[b:], "%}")
 		if k < 0 {
-			bail(start, "unclosed tag")
+			bail(start, "unclosed-tag", "unclosed tag")
 		}
 		e = b + k
 	} else {
@@ -249,7 +250,7 @@ func closeOutput(s string, i, start int) int {
 		switch c := s[i]; c {
 		case '"', '\'':
 			if i = quotedEnd(s, i); i < 0 {
-				bail(start, "unterminated string")
+				bail(start, "unterminated-string", "unterminated string")
 			}
 		case '}':
 			if i+1 < len(s) && s[i+1] == '}' {
@@ -260,19 +261,22 @@ func closeOutput(s string, i, start int) int {
 			i++
 		}
 	}
-	bail(start, "unclosed output")
+	bail(start, "unclosed-output", "unclosed output")
 	return 0
 }
 
 func (r *renderer) output(b, e int) {
 	r.setSrc(b, e)
 	live := r.live()
+	r.ws()
+	start := r.p
 	v := r.expr(live, false)
+	text := r.src[start:r.p]
 	if k := v.keyword(); k != "" {
-		bail(b, "%s is only supported with == and !=", k)
+		bail(b, "keyword-outside-equality", "%s is only supported with == and !=", k)
 	}
-	if r.ws(); v.lit == 0 && v.x == nilLit && r.peek() != '|' {
-		bail(b, "output of the nil literal") // see write
+	if r.ws(); v.lit == 0 && v.x == nilLit && r.peek() != '|' && literal(text) {
+		bail(b, "output-nil-literal", "output of the nil literal") // see write; an assigned nil bails there
 	}
 	v = r.filters(v, live)
 	r.end()
@@ -304,7 +308,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "elsif":
 		f := r.top()
 		if f == nil || f.kind >= kFor || f.sawElse {
-			bail(b, "unexpected elsif")
+			bail(b, "unexpected-block-tag", "unexpected elsif")
 		}
 		eval := f.parentLive && !f.taken && !r.check && r.halt == 0
 		f.active = r.cond(eval)
@@ -313,7 +317,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		r.end()
 		f := r.top()
 		if f == nil || f.kind == kCapture || f.sawElse {
-			bail(b, "unexpected else")
+			bail(b, "unexpected-block-tag", "unexpected else")
 		}
 		if f.kind == kFor {
 			// The else ends the loop body: iterate again, or move to the else part, which
@@ -327,11 +331,11 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		f.sawElse, f.active, f.taken = true, !f.taken, true
 	case "case":
 		if r.dialect != nil && r.dialect.Compare != nil {
-			bail(b, "case with a dialect Compare hook")
+			bail(b, "dialect-case", "case with a dialect Compare hook")
 		}
 		v := r.expr(live, true) // lenientIf, as for conditions
 		if k := v.keyword(); k != "" {
-			bail(b, "%s is only supported with == and !=", k)
+			bail(b, "keyword-outside-equality", "%s is only supported with == and !=", k)
 		}
 		v = r.filters(v, live)
 		r.end()
@@ -343,7 +347,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "when":
 		f := r.top()
 		if f == nil || f.kind != kCase || f.sawElse {
-			bail(b, "unexpected when") // liquidjs ignores a when after else
+			bail(b, "unexpected-block-tag", "unexpected when") // liquidjs ignores a when after else
 		}
 		// Every matching when renders, but each stops evaluating at its first matching value.
 		eval, match := f.parentLive && !r.check && r.halt == 0, false
@@ -358,7 +362,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			if r.peek() == ',' {
 				r.p++
 			} else if w := r.ident(); w != "or" {
-				bail(r.pos(), "expected , or or between when values") // liquidjs skips to the next "or"
+				bail(r.pos(), "when-separator", "expected , or or between when values") // liquidjs skips to the next "or"
 			}
 		}
 		r.end()
@@ -367,7 +371,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "endcase":
 		r.end()
 		if f := r.top(); f == nil || f.kind != kCase {
-			bail(b, "unexpected endcase")
+			bail(b, "unexpected-block-tag", "unexpected endcase")
 		}
 		r.depth--
 	case "endif", "endunless":
@@ -377,7 +381,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			want = kUnless
 		}
 		if f := r.top(); f == nil || f.kind != want {
-			bail(b, "unexpected %s", name)
+			bail(b, "unexpected-block-tag", "unexpected %s", name)
 		}
 		r.depth--
 	case "for":
@@ -385,11 +389,11 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		v := r.ident()
 		r.ws()
 		if v == "" || r.ident() != "in" {
-			bail(b, "expected: for <ident> in <path>")
+			bail(b, "for-syntax", "expected: for <ident> in <path>")
 		}
 		r.ws()
 		if c := r.peek(); !isIdentStart(c) && c != '(' {
-			bail(r.base+r.p, "for collection must be a variable path or a range")
+			bail(r.base+r.p, "for-collection", "for collection must be a variable path or a range")
 		}
 		cs := r.p
 		coll := r.expr(live, false).x
@@ -404,7 +408,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			case nil, Undefined:
 				f.taken = true
 			default:
-				bail(b, "for over non-array %T", coll)
+				bail(b, "for-over-non-array", "for over non-array %T", coll)
 			}
 		}
 		f.rev = mods.rev
@@ -417,7 +421,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			i--
 		}
 		if i < 0 {
-			bail(b, "%s outside a for loop", name) // liquidjs stops rendering the template
+			bail(b, "break-outside-for", "%s outside a for loop", name) // liquidjs stops rendering the template
 		}
 		if r.live() {
 			// Everything up to the loop's endfor is dead; a capture still assigns what it has, as in liquidjs.
@@ -427,7 +431,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		r.end()
 		f := r.top()
 		if f == nil || f.kind != kFor {
-			bail(b, "unexpected endfor")
+			bail(b, "unexpected-block-tag", "unexpected endfor")
 		}
 		if !f.sawElse && r.endIteration(b) {
 			return f.body, f.rtrim
@@ -439,7 +443,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		if c := r.peek(); c == '"' || c == '\'' {
 			v = r.str()
 		} else if v = r.ident(); v == "" || reserved(v) {
-			bail(b, "expected: capture <ident>")
+			bail(b, "capture-syntax", "expected: capture <ident>")
 		}
 		r.end()
 		r.push(frame{kind: kCapture, parentLive: live, active: true, body: len(r.out), name: v})
@@ -447,7 +451,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		r.end()
 		f := r.top()
 		if f == nil || f.kind != kCapture {
-			bail(b, "unexpected endcapture")
+			bail(b, "unexpected-block-tag", "unexpected endcapture")
 		}
 		r.depth--
 		if f.parentLive {
@@ -459,12 +463,12 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		v := r.ident()
 		r.ws()
 		if v == "" || reserved(v) || r.peek() != '=' {
-			bail(b, "expected: assign <ident> = <expr>")
+			bail(b, "assign-syntax", "expected: assign <ident> = <expr>")
 		}
 		r.p++
 		val := r.expr(live, true)
 		if k := val.keyword(); k != "" {
-			bail(b, "%s is only supported with == and !=", k)
+			bail(b, "keyword-outside-equality", "%s is only supported with == and !=", k)
 		}
 		val = r.filters(val, live)
 		r.end()
@@ -477,10 +481,10 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "raw":
 		r.end()
 		if r.rejects(RawBlocks) {
-			bail(b, "raw blocks are rejected by the dialect")
+			bail(b, "dialect-raw", "raw blocks are rejected by the dialect")
 		}
 		if lt || rt {
-			bail(b, "trim markers on raw")
+			bail(b, "raw-trim-markers", "trim markers on raw")
 		}
 		return r.raw(next, live), false
 	case "cycle":
@@ -492,13 +496,13 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		v := r.expr(live, false)
 		if k := v.keyword(); k != "" {
-			bail(b, "%s is only supported with == and !=", k)
+			bail(b, "keyword-outside-equality", "%s is only supported with == and !=", k)
 		}
 		v = r.filters(v, live)
 		r.end()
 		if live {
 			if _, isStr := v.str(); !isStr && !isNil(v) && r.dialect != nil && r.dialect.Output != nil {
-				bail(b, "echo of a non-string with a dialect Output hook") // liquidjs's echo skips outputEscape
+				bail(b, "dialect-echo", "echo of a non-string with a dialect Output hook") // liquidjs's echo skips outputEscape
 			}
 			r.write(v)
 		}
@@ -507,7 +511,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		v := r.ident()
 		r.end()
 		if v == "" {
-			bail(b, "expected: %s <ident>", name)
+			bail(b, "counter-syntax", "expected: %s <ident>", name)
 		}
 		if live {
 			r.counter(v, name == "increment")
@@ -517,7 +521,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	default:
 		fn, ok := r.tags[name]
 		if !ok {
-			bail(b, "unsupported tag %q", name)
+			bail(b, "tag:"+name, "unsupported tag %q", name)
 		}
 		if live {
 			r.ws()
@@ -557,7 +561,7 @@ func (r *renderer) cycle(live bool, at int) {
 			break
 		}
 		if r.peek() != ',' {
-			bail(r.pos(), "expected , between cycle values")
+			bail(r.pos(), "cycle-syntax", "expected , between cycle values")
 		}
 		r.p++
 	}
@@ -591,7 +595,7 @@ func (r *renderer) cycleValue(eval bool) val {
 	at := r.pos()
 	v := r.expr(eval, false)
 	if v.keyword() != "" || v.lit == 0 && v.x == nilLit {
-		bail(at, "cycle value %s", r.src[at-r.base:r.p])
+		bail(at, "cycle-value", "cycle value %s", r.src[at-r.base:r.p])
 	}
 	return v
 }
@@ -613,13 +617,13 @@ func (r *renderer) forParams(eval bool) (p forMods) {
 		r.ws()
 		if name == "reversed" && !p.rev {
 			if r.peek() == ':' {
-				bail(at, "reversed with a value") // liquidjs reverses whatever the value
+				bail(at, "for-parameters", "reversed with a value") // liquidjs reverses whatever the value
 			}
 			p.rev = true
 			continue
 		}
 		if name != "offset" && name != "limit" || r.peek() != ':' || name == "offset" && p.hasOffset || name == "limit" && p.hasLimit {
-			bail(at, "for parameters other than one each of limit, offset and reversed")
+			bail(at, "for-parameters", "for parameters other than one each of limit, offset and reversed")
 		}
 		r.p++
 		v := r.expr(eval, false)
@@ -627,7 +631,7 @@ func (r *renderer) forParams(eval bool) (p forMods) {
 		if eval {
 			f, ok := v.check(at).num(at)
 			if !ok || f != math.Trunc(f) || math.Abs(f) >= maxSafeInt {
-				bail(at, "for %s that isn't an integer", name)
+				bail(at, "for-parameter-value", "for %s that isn't an integer", name)
 			}
 			n = int(f)
 		}
@@ -673,18 +677,19 @@ func (r *renderer) setAssign(name string, x any) {
 
 func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
 	if fn == nil {
-		bail(pos, "tag %q is registered without a function", name) // e.g. for Check only
+		bail(pos, "nil-tag-func", "tag %q is registered without a function", name) // e.g. for Check only
 	}
 	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, assigns: r.assigns, env: r.env, frames: r.frames()}
 	out, err := fn(r.out, t)
 	if err != nil {
-		panic(bailout{wrapErr("tag", name, pos, err)})
+		panic(bailout{hookErr("tag", name, pos, err)})
 	}
 	r.out = out
 }
 
-func wrapErr(kind, name string, pos int, err error) error {
-	return fmt.Errorf("mist: %s %q at offset %d: %w", kind, name, pos, err)
+// hookErr is the error a registered tag, filter or dialect hook returned, as an *Error.
+func hookErr(kind, name string, pos int, err error) error {
+	return &Error{Kind: err, Code: "hook:" + kind + ":" + name, Pos: pos, Msg: fmt.Sprintf("%s %q", kind, name)}
 }
 
 // skipComment tokenizes (but ignores) everything up to endcomment, as liquidjs does.
@@ -693,11 +698,11 @@ func (r *renderer) skipComment(pos int) (int, bool) {
 	for {
 		start, isTag := nextDelim(s, pos)
 		if start == len(s) {
-			bail(pos, "unclosed comment")
+			bail(pos, "unclosed-comment", "unclosed comment")
 		}
 		b, e, next, lt, rt := delimBounds(s, start, isTag)
 		if (lt || rt) && r.rejects(TrimMarkers) {
-			bail(start, "trim markers are rejected by the dialect")
+			bail(start, "dialect-trim-markers", "trim markers are rejected by the dialect")
 		}
 		pos = next
 		if !isTag {
@@ -707,12 +712,12 @@ func (r *renderer) skipComment(pos int) (int, bool) {
 		r.ws()
 		switch r.ident() {
 		case "":
-			bail(b, "tag without a name inside comment")
+			bail(b, "comment-syntax", "tag without a name inside comment")
 		case "endcomment":
 			r.end()
 			return next, rt
 		case "comment", "raw":
-			bail(b, "comment or raw inside comment")
+			bail(b, "comment-syntax", "comment or raw inside comment")
 		}
 	}
 }
@@ -722,14 +727,14 @@ func (r *renderer) raw(pos int, live bool) int {
 	for i := pos; ; {
 		k := strings.Index(s[i:], "{%")
 		if k < 0 {
-			bail(pos, "unclosed raw")
+			bail(pos, "unclosed-raw", "unclosed raw")
 		}
 		k += i
 		j := skipBlank(s, k+2)
 		if strings.HasPrefix(s[j:], "endraw") {
 			j = skipBlank(s, j+6)
 			if !strings.HasPrefix(s[j:], "%}") || s[k+2] == '-' {
-				bail(k, "malformed endraw")
+				bail(k, "raw-syntax", "malformed endraw")
 			}
 			if live {
 				r.out = append(r.out, s[pos:k]...)
@@ -793,7 +798,7 @@ func (r *renderer) endIteration(at int) bool {
 	}
 	if f.active && !r.check && int(f.idx)+1 < len(f.coll) {
 		if r.iters++; r.iters > r.limits.Iterations {
-			bail(at, "more than %d loop iterations", r.limits.Iterations) // ranges make loop counts template-controlled
+			bail(at, "iteration-limit", "more than %d loop iterations", r.limits.Iterations) // ranges make loop counts template-controlled
 		}
 		f.idx++
 		return true
@@ -807,7 +812,7 @@ func (r *renderer) inlineComment(at int) {
 	for i := strings.IndexByte(rest, '\n'); i >= 0; i = strings.IndexByte(rest, '\n') {
 		rest = strings.TrimLeftFunc(rest[i+1:], func(c rune) bool { return c != '\n' && jsSpace(c) })
 		if rest != "" && rest[0] != '#' && rest[0] != '\n' {
-			bail(at, "an inline comment line that doesn't start with #") // liquidjs errors
+			bail(at, "inline-comment-line", "an inline comment line that doesn't start with #") // liquidjs errors
 		}
 	}
 }
@@ -865,13 +870,13 @@ func (r *renderer) liquid(start, end int) {
 		if r.peek() != '#' {
 			switch name := r.ident(); name {
 			case "comment", "raw", "liquid":
-				bail(b, "%s inside a liquid tag", name)
+				bail(b, "liquid-tag-block", "%s inside a liquid tag", name)
 			}
 		}
 		pos, _ = r.tag(b, e, next, false, false)
 		r.checkOutput(b)
 	}
 	if r.depth != depth {
-		bail(end, "a block left open in a liquid tag")
+		bail(end, "liquid-tag-unclosed", "a block left open in a liquid tag")
 	}
 }

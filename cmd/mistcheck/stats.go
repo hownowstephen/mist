@@ -12,11 +12,7 @@ import (
 	"github.com/hownowstephen/mist"
 )
 
-var (
-	filterName = regexp.MustCompile(`^\s*([\w-]+)`)
-	digits     = regexp.MustCompile(`\d+`)
-	quoted     = regexp.MustCompile(`"[^"]*"`)
-)
+var filterName = regexp.MustCompile(`^\s*([\w-]+)`)
 
 // blockers lists every unsupported construct in tpl, deduplicated. It repeatedly
 // checks tpl and replaces the token each error points at with a supported token of
@@ -42,7 +38,7 @@ func blockers(eng mist.Engine, tpl string) []string {
 			}
 			break
 		}
-		repl, ks := classify(eng, tpl[start:end], isTag, e.Msg, unknown)
+		repl, ks := classify(eng, tpl[start:end], isTag, e.Code, unknown)
 		if len(ks) == 0 && len(kinds) == 0 {
 			ks = []string{"structure"}
 		}
@@ -76,7 +72,7 @@ func token(tpl string, pos int) (start, end int, isTag bool) {
 }
 
 // classify names what makes a token unsupported and returns a supported stand-in.
-func classify(eng mist.Engine, tok string, isTag bool, msg string, unknown map[string]bool) (string, []string) {
+func classify(eng mist.Engine, tok string, isTag bool, code string, unknown map[string]bool) (string, []string) {
 	inner := strings.Trim(tok[2:len(tok)-2], "-")
 	fields := strings.Fields(inner)
 	name := ""
@@ -85,20 +81,19 @@ func classify(eng mist.Engine, tok string, isTag bool, msg string, unknown map[s
 	}
 
 	switch {
-	case strings.HasPrefix(msg, "unsupported tag"):
+	case strings.HasPrefix(code, "tag:"):
 		if strings.HasPrefix(name, "end") && unknown[name[3:]] {
 			return "", nil
 		}
 		unknown[name] = true
-		return "", []string{"tag:" + name}
-	case strings.HasPrefix(msg, "unexpected else"), strings.HasPrefix(msg, "unexpected elsif"),
-		strings.HasPrefix(msg, "unexpected end"), msg == "unclosed block":
+		return "", []string{code}
+	case code == "unexpected-block-tag", code == "unclosed-block":
 		return "", nil // left behind by a replaced tag, or counted as structure by blockers
 	}
 
 	var kinds []string
-	code := blankStrings(inner)
-	if segs := strings.Split(code, "|"); len(segs) > 1 {
+	bare := blankStrings(inner)
+	if segs := strings.Split(bare, "|"); len(segs) > 1 {
 		for _, s := range segs[1:] {
 			if m := filterName.FindStringSubmatch(s); m != nil && !supportedFilter(eng, m[1]) {
 				kinds = append(kinds, "filter:"+m[1])
@@ -106,7 +101,7 @@ func classify(eng mist.Engine, tok string, isTag bool, msg string, unknown map[s
 		}
 	}
 	if len(kinds) == 0 {
-		kinds = append(kinds, msgKind(msg))
+		kinds = append(kinds, code)
 	}
 
 	switch name {
@@ -141,28 +136,6 @@ func blankStrings(s string) string {
 // supportedFilter reports whether eng renders the named filter, built in or registered.
 func supportedFilter(eng mist.Engine, name string) bool {
 	return eng.Check("{{ x | "+name+" }}") == nil || eng.Check("{{ x | "+name+": x }}") == nil
-}
-
-func msgKind(msg string) string {
-	switch {
-	case strings.Contains(msg, "escape"):
-		return "string escapes"
-	case strings.HasPrefix(msg, "malformed number"):
-		return "malformed number"
-	case strings.HasPrefix(msg, "blank"), strings.HasPrefix(msg, "empty"):
-		return msg[:strings.IndexByte(msg, ' ')] + " outside ==/!="
-	case strings.Contains(msg, "is not supported as a variable"):
-		return "reserved word as variable"
-	case strings.HasPrefix(msg, "trim markers on raw"):
-		return "raw with trim markers"
-	case strings.HasPrefix(msg, "named filter arguments"):
-		return "named filter arguments"
-	case strings.HasPrefix(msg, "more than") && strings.HasSuffix(msg, "filter arguments"):
-		return "too many filter arguments"
-	case strings.Contains(msg, "unsupported filter"):
-		return "filter arguments"
-	}
-	return "other: " + digits.ReplaceAllString(quoted.ReplaceAllString(msg, `"…"`), "N")
 }
 
 type tally struct{ in, sole int }

@@ -20,7 +20,7 @@ import (
 func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int) val {
 	n := len(a)
 	arity := func(lo, hi int) bool { return n >= lo && n <= hi }
-	var ok bool
+	ok, known := false, true
 	switch name {
 	case "capitalize", "downcase", "upcase", "escape", "escape_once", "url_encode", "json", "jsonify", "inspect", "first", "last",
 		"strip_newlines", "newline_to_br", "strip_html", "size", "abs", "ceil", "floor", "reverse":
@@ -68,9 +68,13 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		if r.passUnknown && !liquidjsFilters[name] {
 			return v // liquidjs's strictFilters: false; the arguments were evaluated above
 		}
+		known = false
 	}
-	if !ok {
-		bail(at, "unsupported filter %q", name)
+	switch {
+	case !known:
+		bail(at, "filter:"+name, "unsupported filter %q", name)
+	case !ok:
+		bail(at, "filter-arguments:"+name, "%d arguments to filter %q", n, name)
 	}
 	if !eval {
 		return v
@@ -157,7 +161,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		return val{x: arr[min(1, len(arr)):]}
 	case "unshift":
 		if isNil(a[0]) {
-			bail(at, "unshift of nil or undefined") // liquidjs keeps distinct null-ish values
+			bail(at, "push-nil", "unshift of nil or undefined") // liquidjs keeps distinct null-ish values
 		}
 		return val{x: append([]any{a[0].any()}, toArray(v, at)...)}
 	case "where_exp", "reject_exp":
@@ -196,7 +200,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		return val{n: jsNumberOf(v, at), lit: litNum}
 	case "raw":
 		if r.dialect != nil && r.dialect.Output != nil {
-			bail(at, "raw with a dialect Output hook") // it makes liquidjs skip outputEscape
+			bail(at, "dialect-raw-filter", "raw with a dialect Output hook") // it makes liquidjs skip outputEscape
 		}
 		return v
 	case "group_by", "group_by_exp":
@@ -282,7 +286,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		return val{x: sortBy(v, a, at)}
 	case "push":
 		if isNil(a[0]) {
-			bail(at, "push of nil or undefined") // liquidjs keeps distinct null-ish values
+			bail(at, "push-nil", "push of nil or undefined") // liquidjs keeps distinct null-ish values
 		}
 		return val{x: append(slices.Clone(toArray(v, at)), a[0].any())}
 	case "reverse":
@@ -322,7 +326,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		}
 	}
 	if math.IsInf(f, 0) || math.IsNaN(f) {
-		bail(at, "math filter result %v", f)
+		bail(at, "math-non-finite", "math filter result %v", f)
 	}
 	return val{n: f, lit: litNum}
 }
@@ -358,7 +362,7 @@ func argNum(args []val, i int, d float64, at int) float64 {
 	}
 	f, ok := args[i].check(at).num(at)
 	if !ok {
-		bail(at, "non-numeric filter argument")
+		bail(at, "numeric-argument", "non-numeric filter argument")
 	}
 	return f
 }
@@ -366,12 +370,12 @@ func argNum(args []val, i int, d float64, at int) float64 {
 // units splits s into UTF-16 code units, bailing where one would be half a surrogate pair.
 func units(s string, at int) []rune {
 	if !utf8.ValidString(s) {
-		bail(at, "string filter on invalid UTF-8")
+		bail(at, "invalid-utf8", "string filter on invalid UTF-8")
 	}
 	rs := []rune(s)
 	for _, c := range rs {
 		if c > 0xFFFF {
-			bail(at, "string filter splitting a character outside the BMP")
+			bail(at, "split-surrogate-pair", "string filter splitting a character outside the BMP")
 		}
 	}
 	return rs
@@ -380,7 +384,7 @@ func units(s string, at int) []rune {
 // sub16 is s.slice(i, j) in UTF-16 code units, bailing where that would split a surrogate pair.
 func sub16(s string, i, j, at int) string {
 	if !utf8.ValidString(s) {
-		bail(at, "string filter on invalid UTF-8")
+		bail(at, "invalid-utf8", "string filter on invalid UTF-8")
 	}
 	if i >= j {
 		return ""
@@ -398,7 +402,7 @@ func off16(s string, i, at int) int {
 		n++
 		if c > 0xFFFF {
 			if n == i {
-				bail(at, "string filter splitting a character outside the BMP")
+				bail(at, "split-surrogate-pair", "string filter splitting a character outside the BMP")
 			}
 			n++
 		}
@@ -422,7 +426,7 @@ func len16(s string) int {
 func caseMap(s string, upper bool, at int) string {
 	for _, c := range s {
 		if upper && jsUpperDiffers(c) || !upper && jsLowerDiffers(c) {
-			bail(at, "case mapping of %q, whose JavaScript mapping differs", c)
+			bail(at, "case-mapping", "case mapping of %q, whose JavaScript mapping differs", c)
 		}
 	}
 	if upper {
@@ -476,7 +480,7 @@ func jsTruthy(v val, at int) bool {
 	case nil, Undefined:
 		return false
 	case nilLitT:
-		bail(at, "the nil literal as a filter argument, which liquidjs passes as a truthy Drop")
+		bail(at, "nil-literal-argument", "the nil literal as a filter argument, which liquidjs passes as a truthy Drop")
 	case bool:
 		return x
 	}
@@ -548,7 +552,7 @@ func truncatewords(v val, a []val, at int) string {
 // alphanumerics, the safe punctuation and, with plus, spaces as +.
 func percentEncode(s, safe string, plus bool, at int) string {
 	if !utf8.ValidString(s) {
-		bail(at, "url_encode of invalid UTF-8")
+		bail(at, "invalid-utf8", "url_encode of invalid UTF-8")
 	}
 	const hex = "0123456789ABCDEF"
 	var b strings.Builder
@@ -599,7 +603,7 @@ func appendJSON(dst []byte, v val, at int) []byte {
 		}
 		return append(dst, ']')
 	}
-	bail(at, "json of %T", v.any())
+	bail(at, "json-type", "json of %T", v.any())
 	return nil
 }
 
@@ -656,7 +660,7 @@ func split(v val, a []val, at int) val {
 func slice(v val, a []val, at int) val {
 	begin, length := argNum(a, 0, math.NaN(), at), argNum(a, 1, 1, at)
 	if math.IsNaN(begin) {
-		bail(at, "slice without a begin")
+		bail(at, "slice-begin", "slice without a begin")
 	}
 	if isNil(v) {
 		return val{x: []any{}}
@@ -694,7 +698,7 @@ func jsRel(x float64, n int) int {
 func endOf(v val, first bool, at int) val {
 	if arr, ok := v.check(at).x.([]any); ok {
 		if len(arr) == 0 {
-			bail(at, "first or last of an empty array, which is undefined")
+			bail(at, "first-last-empty", "first or last of an empty array, which is undefined")
 		}
 		if first {
 			return val{x: arr[0]}
@@ -710,11 +714,11 @@ func endOf(v val, first bool, at int) val {
 	}
 	if first {
 		if isObj(v) {
-			bail(at, "first of an object")
+			bail(at, "first-last-type", "first of an object")
 		}
 		return strVal("")
 	}
-	bail(at, "last of %T", v.any())
+	bail(at, "first-last-type", "last of %T", v.any())
 	return val{}
 }
 
@@ -735,7 +739,7 @@ func toNumber(v val, at int) float64 {
 		}
 		return 0
 	}
-	bail(at, "number from %T", v.any())
+	bail(at, "number-from-type", "number from %T", v.any())
 	return 0
 }
 
@@ -751,7 +755,7 @@ func strNumber(t string, at int) float64 {
 	}
 	switch t {
 	case "Infinity", "+Infinity", "-Infinity":
-		bail(at, "number from string %q", t)
+		bail(at, "number-from-string", "number from string %q", t)
 	}
 	if len(t) > 2 && t[0] == '0' {
 		base := 0
@@ -766,7 +770,7 @@ func strNumber(t string, at int) float64 {
 		if base != 0 && !strings.ContainsAny(t[2:], "_+-") {
 			n, err := strconv.ParseUint(t[2:], base, 64)
 			if errors.Is(err, strconv.ErrRange) {
-				bail(at, "number from string %q", t)
+				bail(at, "number-from-string", "number from string %q", t)
 			}
 			if err == nil {
 				return float64(n)
@@ -867,7 +871,7 @@ func stripHTML(s string, at int) string {
 			b.WriteString(s[lt:])
 			return b.String()
 		default:
-			bail(at, "strip_html of an unclosed '<' after text, which loops forever in liquidjs")
+			bail(at, "strip-html-unclosed", "strip_html of an unclosed '<' after text, which loops forever in liquidjs")
 		}
 	}
 	return b.String()
@@ -893,7 +897,7 @@ func join(v val, a []val, at int) string {
 			dst = append(dst, sep...)
 		}
 		if _, nested := e.([]any); nested {
-			bail(at, "join of a nested array, which JavaScript joins with commas")
+			bail(at, "join-nested-array", "join of a nested array, which JavaScript joins with commas")
 		}
 		dst = stringify(dst, val{x: e}, at)
 	}
@@ -904,7 +908,7 @@ func join(v val, a []val, at int) string {
 func size(v val, at int) val {
 	if s, ok := v.str(); ok {
 		if !utf8.ValidString(s) {
-			bail(at, "size of invalid UTF-8")
+			bail(at, "invalid-utf8", "size of invalid UTF-8")
 		}
 		return val{n: float64(len16(s)), lit: litNum}
 	}
@@ -913,7 +917,7 @@ func size(v val, at int) val {
 		return val{n: float64(len(x)), lit: litNum}
 	case map[string]any:
 		if _, ok := x["length"]; ok {
-			bail(at, "size of an object with a length key")
+			bail(at, "size-length-key", "size of an object with a length key")
 		}
 	}
 	return val{n: 0, lit: litNum}
@@ -927,7 +931,7 @@ func round(x float64, a []val, at int) float64 {
 	}
 	// ponytail: 10^d is exact in both engines only for small non-negative d; widen if real templates need it.
 	if digits != math.Trunc(digits) || digits < 0 || digits > 15 {
-		bail(at, "round to %v digits", digits)
+		bail(at, "round-digits", "round to %v digits", digits)
 	}
 	amp := math.Pow(10, digits)
 	sign := x
@@ -944,20 +948,20 @@ func round(x float64, a []val, at int) float64 {
 func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any, idx int) {
 	path, ok := a[0].str()
 	if !ok || !propPath(path) {
-		bail(at, "where property that isn't a plain path")
+		bail(at, "property-path", "where property that isn't a plain path")
 	}
 	var items []any
 	switch x := v.check(at).x.(type) {
 	case nil, Undefined, nilLitT:
 		if !isNil(v) {
-			bail(at, "where on a scalar")
+			bail(at, "where-input", "where on a scalar")
 		}
 	case []any:
 		items = x
 	case map[string]any:
 		items = []any{x}
 	default:
-		bail(at, "where on %T", v.any())
+		bail(at, "where-input", "where on %T", v.any())
 	}
 	matchTruthy := len(a) == 1
 	if !matchTruthy {
@@ -983,18 +987,18 @@ func (r *renderer) itemPath(item any, path string, at int) any {
 		if first, _, _ := strings.Cut(path, "."); magic(first) {
 			// liquidjs scopes the lookup to the item, where a string's or array's size, first
 			// and last aren't computed.
-			bail(at, "where by %s on an item that isn't an object", first)
+			bail(at, "where-computed-key", "where by %s on an item that isn't an object", first)
 		}
 	}
 	x, strict := item, r.strict // a range-over-func body capturing r moves the renderer to the heap before Go 1.25
 	for key := range strings.SplitSeq(path, ".") {
 		if strict && isNil(val{x: x}) {
-			bail(at, "where on an item missing %q under strict", path) // liquidjs throws
+			bail(at, "where-strict-missing", "where on an item missing %q under strict", path) // liquidjs throws
 		}
 		x = prop(x, key, at)
 	}
 	if _, undef := x.(Undefined); undef && r.strict {
-		bail(at, "where on an item missing %q under strict", path)
+		bail(at, "where-strict-missing", "where on an item missing %q under strict", path)
 	}
 	return x
 }
@@ -1023,7 +1027,7 @@ func toArray(v val, at int) []any {
 		return a
 	}
 	if _, isObj := v.x.(map[string]any); isObj {
-		bail(at, "array filter on an object")
+		bail(at, "array-filter-object", "array filter on an object")
 	}
 	return []any{v.any()}
 }
@@ -1032,7 +1036,7 @@ func toArray(v val, at int) []any {
 func argPath(a []val, at int) string {
 	s, ok := a[0].str()
 	if !ok || !propPath(s) {
-		bail(at, "property argument that isn't a plain path")
+		bail(at, "property-path", "property argument that isn't a plain path")
 	}
 	return s
 }
@@ -1041,7 +1045,7 @@ func argPath(a []val, at int) string {
 func lookupPath(item any, path string, at int, what string) any {
 	for k := range strings.SplitSeq(path, ".") {
 		if _, isObj := item.(map[string]any); !isObj {
-			bail(at, "%s of an item that isn't an object", what)
+			bail(at, "item-not-object", "%s of an item that isn't an object", what)
 		}
 		item = prop(item, k, at)
 	}
@@ -1071,12 +1075,12 @@ func sum(v val, a []val, at int) val {
 		}
 		switch it.(type) {
 		case map[string]any, []any:
-			bail(at, "sum of an object or array")
+			bail(at, "sum-type", "sum of an object or array")
 		}
 		total += toNumber(val{x: it}, at)
 	}
 	if math.IsInf(total, 0) {
-		bail(at, "sum of %v", total)
+		bail(at, "sum-non-finite", "sum of %v", total)
 	}
 	return val{n: total, lit: litNum}
 }
@@ -1105,13 +1109,13 @@ func sortBy(v val, a []val, at int) []any {
 			kind |= 2
 			for _, c := range x {
 				if c > 0xFFFF {
-					bail(at, "sort of a string outside the BMP")
+					bail(at, "sort-astral", "sort of a string outside the BMP")
 				}
 			}
 		default:
 			f, ok := num(x, at)
 			if !ok {
-				bail(at, "sort of %T", k)
+				bail(at, "sort-type", "sort of %T", k)
 			}
 			kind |= 1
 			k = f
@@ -1119,7 +1123,7 @@ func sortBy(v val, a []val, at int) []any {
 		pairs[i] = pair{it, k}
 	}
 	if kind == 3 {
-		bail(at, "sort of mixed numbers and strings")
+		bail(at, "sort-mixed", "sort of mixed numbers and strings")
 	}
 	slices.SortStableFunc(pairs, func(a, b pair) int { return orderedCompare(a.key, b.key) })
 	out := make([]any, len(pairs))
@@ -1148,7 +1152,7 @@ func orderedCompare(a, b any) int {
 // validStr bails on strings JavaScript couldn't hold, as the UTF-8 encoders would differ.
 func validStr(s string, at int) string {
 	if !utf8.ValidString(s) {
-		bail(at, "invalid UTF-8")
+		bail(at, "invalid-utf8", "invalid UTF-8")
 	}
 	return s
 }
@@ -1160,11 +1164,11 @@ func svzKey(x any, what string, at int) any {
 	case nil, bool, string, Undefined:
 		return x
 	case map[string]any, []any:
-		bail(at, "%s of an object or array", what)
+		bail(at, "same-value-object", "%s of an object or array", what)
 	}
 	f, ok := num(x, at)
 	if !ok || math.IsNaN(f) {
-		bail(at, "%s of %T", what, x)
+		bail(at, "same-value-type", "%s of %T", what, x)
 	}
 	return f
 }
@@ -1206,12 +1210,12 @@ func (r *renderer) sortNatural(v val, a []val, at int) []any {
 		if !p.nil {
 			switch k.(type) {
 			case map[string]any, []any:
-				bail(at, "sort_natural of an object or array")
+				bail(at, "sort-type", "sort_natural of an object or array")
 			}
 			p.key = caseMap(toStr(val{x: k}, at), false, at)
 			for _, c := range p.key {
 				if c > 0xFFFF {
-					bail(at, "sort_natural of a string outside the BMP")
+					bail(at, "sort-astral", "sort_natural of a string outside the BMP")
 				}
 			}
 		}
@@ -1248,14 +1252,14 @@ func urlDecode(s string, at int) string {
 			continue
 		}
 		if i+2 >= len(s) || !isHex(s[i+1]) || !isHex(s[i+2]) {
-			bail(at, "url_decode of a malformed escape")
+			bail(at, "url-decode-malformed", "url_decode of a malformed escape")
 		}
 		hi, lo := strings.IndexByte("0123456789abcdef", s[i+1]|0x20), strings.IndexByte("0123456789abcdef", s[i+2]|0x20)
 		b = append(b, byte(hi<<4|lo))
 		i += 2
 	}
 	if !utf8.Valid(b) {
-		bail(at, "url_decode to invalid UTF-8")
+		bail(at, "invalid-utf8", "url_decode to invalid UTF-8")
 	}
 	return strings.ReplaceAll(string(b), "+", " ")
 }
@@ -1282,7 +1286,7 @@ func base64Decode(s string, at int) string {
 	}
 	out, err := base64.RawStdEncoding.DecodeString(string(clean))
 	if err != nil || !utf8.Valid(out) {
-		bail(at, "base64_decode to bytes that aren't UTF-8")
+		bail(at, "invalid-utf8", "base64_decode to bytes that aren't UTF-8")
 	}
 	return string(out)
 }
@@ -1351,7 +1355,7 @@ func slugify(s string, a []val, at int) string {
 		pretty := mode == "pretty"
 		keep = func(c rune) bool {
 			if !unicode.In(c, unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.Z, unicode.Cc, unicode.Cf, unicode.Co) {
-				bail(at, "slugify of %q, unassigned in Go's Unicode version", c)
+				bail(at, "unicode-version", "slugify of %q, unassigned in Go's Unicode version", c)
 			}
 			return unicode.In(c, unicode.L, unicode.M, unicode.Nd) || pretty && strings.ContainsRune("._~!$&'()+,;=@", c)
 		}
@@ -1362,7 +1366,7 @@ func slugify(s string, a []val, at int) string {
 		keep = func(c rune) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' }
 	case "none":
 	default:
-		bail(at, "slugify mode %q", mode)
+		bail(at, "slugify-mode", "slugify mode %q", mode)
 	}
 	if keep != nil {
 		s = replaceRuns(s, '-', func(c rune) bool { return !keep(c) })
@@ -1391,7 +1395,7 @@ func jsString(v val, at int) string {
 	case bool:
 		return strconv.FormatBool(x)
 	}
-	bail(at, "string of %T", v.any())
+	bail(at, "string-type", "string of %T", v.any())
 	return ""
 }
 
@@ -1399,7 +1403,7 @@ func jsString(v val, at int) string {
 func sentence(v val, a []val, at int) val {
 	arr, ok := v.check(at).x.([]any)
 	if !ok || v.lit != 0 {
-		bail(at, "array_to_sentence_string of %T", v.any()) // liquidjs indexes strings, or throws
+		bail(at, "sentence-type", "array_to_sentence_string of %T", v.any()) // liquidjs indexes strings, or throws
 	}
 	conn := "and"
 	if len(a) > 0 {
@@ -1431,11 +1435,11 @@ func sentence(v val, a []val, at int) val {
 func (r *renderer) checkExp(a []val, at int) {
 	name := a[0].s
 	if a[0].lit != litStr || a[1].lit != litStr || name == "" || !isIdentStart(name[0]) || literal(name) || reserved(name) || name == "forloop" {
-		bail(at, "expression filter arguments other than an item name and an expression as string literals")
+		bail(at, "expression-filter-arguments", "expression filter arguments other than an item name and an expression as string literals")
 	}
 	for i := range len(name) {
 		if !isIdentChar(name[i]) {
-			bail(at, "expression filter item name %q", name)
+			bail(at, "expression-filter-arguments", "expression filter item name %q", name)
 		}
 	}
 	r.expValue(false, a[1].s, name, nil, at)
@@ -1449,7 +1453,7 @@ func (r *renderer) groupBy(v val, a []val, exp bool, at int) []any {
 	case []any:
 		items = x
 	case map[string]any:
-		bail(at, "group_by of an object") // liquidjs groups its entries
+		bail(at, "group-by-object", "group_by of an object") // liquidjs groups its entries
 	}
 	if s, ok := v.str(); ok && s != "" {
 		items = []any{s}
@@ -1520,7 +1524,7 @@ func jsNumberOf(v val, at int) float64 {
 	case map[string]any:
 		return math.NaN()
 	}
-	bail(at, "to_integer of %T", v.any()) // arrays convert through their joined string
+	bail(at, "to-integer-type", "to_integer of %T", v.any()) // arrays convert through their joined string
 	return 0
 }
 
@@ -1534,7 +1538,7 @@ func radixValue(s string, base int, at int) float64 {
 			return math.NaN()
 		}
 		if n = n*float64(base) + float64(d); n >= maxSafeInt {
-			bail(at, "to_integer of a %d-digit base-%d integer", len(s), base)
+			bail(at, "to-integer-large", "to_integer of a %d-digit base-%d integer", len(s), base)
 		}
 	}
 	return n

@@ -11,7 +11,7 @@ The package-level `Render`, `Append` and `Check` use an `Engine` with nothing re
 
 `Engine.Now` sets the clock for `'now'` and `'today'`. `Engine.Limits` bounds each render's filter memory, output and loop iterations; keep `Limits.Memory` at or below your full engine's `memoryLimit` so mist falls back wherever that engine would refuse (see [SPEC.md § Limits](../SPEC.md#limits)).
 
-Errors are `*mist.Error`s matching `ErrUnsupported` (render with the full engine) or `ErrUndefined` (strict mode). A panic in mist or in your tags, filters or dialect hooks comes back as `ErrInternal`, which also matches `ErrUnsupported`, so falling back is still right; log it with `Error.Stack`, since it's a bug.
+Errors are `*mist.Error`s matching `ErrUnsupported` (render with the full engine) or `ErrUndefined` (strict mode), or wrapping the error your tag, filter or dialect hook returned. `Error.Code` names the reason and stays stable across releases, so count fallbacks by it (`filter:NAME` and `tag:NAME` for ones mist doesn't support, `hook:filter:NAME` for your own filter's error, and reasons such as `nesting-too-deep`; [testdata/codes.txt](../testdata/codes.txt) lists them). `Msg` is for people and may change. A panic in mist or in your tags, filters or dialect hooks comes back as `ErrInternal`, which also matches `ErrUnsupported`, so falling back is still right; log it with `Error.Stack`, since it's a bug.
 
 ## Custom tags
 

@@ -66,7 +66,7 @@ func main() {
 			if errors.As(e.Check(t.body), &err) {
 				line := strings.Count(t.body[:err.Pos], "\n") + 1
 				col := err.Pos - strings.LastIndexByte(t.body[:err.Pos], '\n')
-				fmt.Printf("%s:%d:%d: %s\n", t.name, line, col, err.Msg)
+				fmt.Printf("%s:%d:%d: %s [%s]\n", t.name, line, col, err.Msg, err.Code)
 				status = 1
 			}
 		}

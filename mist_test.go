@@ -175,12 +175,29 @@ func FuzzRender(f *testing.F) {
 
 // runtimeBail reports data-dependent bails, which Check can't see.
 func runtimeBail(err error) bool {
-	for _, s := range []string{"cannot output", "property", "index on", "for over", "built-in", "needs two", "between number", "== between two objects", "unsupported value", "stringify of an object", "capitalize of", "date ", "math filter", "filter argument", "slice without", "first or last", "last of", "first of", "number from", "json of", "case mapping", "string filter", "url_encode of", "nil literal as a filter", "contains with an object", "round to", "strip_html of", "join of", "size of", "where ", "index of", "for offset", "for limit", "range ", "map of", "sum of", "sort of", "sort by", "find on", "push of", "reverse of", "array filter on", "loop iterations", "sort_natural", "base64_decode", "url_decode", "uniq of", "invalid UTF-8", "slugify", "array_to_sentence_string of", "unshift of", "group_by of", "string of", "to_integer of", "memory limit", "output over"} {
-		if strings.Contains(err.Error(), s) {
-			return true
-		}
-	}
-	return false
+	var e *Error
+	return errors.As(err, &e) && runtimeCodes[e.Code]
+}
+
+var runtimeCodes = map[string]bool{
+	"array-filter-object": true, "array-length-property": true, "bad-json-number": true,
+	"builtin-variable-name": true, "case-mapping": true, "contains-object": true, "date-input-type": true,
+	"date-locale-format": true, "date-string-format": true, "date-timezone-argument": true,
+	"date-timezone-name": true, "date-timezone-sub-minute": true, "date-timezone-unknown": true,
+	"date-width": true, "date-year-range": true, "date-zone-name": true, "first-last-empty": true,
+	"first-last-type": true, "for-over-non-array": true, "for-parameter-value": true, "group-by-object": true, "index-on-scalar": true,
+	"index-type": true, "invalid-utf8": true, "item-not-object": true, "iteration-limit": true,
+	"join-nested-array": true, "json-type": true, "math-non-finite": true, "memory-limit": true,
+	"nil-literal-argument": true, "number-from-string": true, "number-from-type": true,
+	"numeric-argument": true, "object-equality": true, "ordering-types": true, "output-limit": true,
+	"output-nil-literal-result": true, "output-type": true, "property-on-scalar": true, "property-path": true,
+	"push-nil": true, "range-bound": true, "range-too-long": true, "round-digits": true,
+	"same-value-object": true, "same-value-type": true, "sentence-type": true, "size-length-key": true,
+	"slice-begin": true, "slugify-mode": true, "sort-astral": true, "sort-mixed": true, "sort-type": true,
+	"split-surrogate-pair": true, "string-own-property": true, "string-type": true, "stringify-object": true,
+	"strip-html-unclosed": true, "sum-non-finite": true, "sum-type": true, "to-integer-large": true,
+	"to-integer-type": true, "unicode-version": true, "url-decode-malformed": true, "value-type": true,
+	"where-computed-key": true, "where-input": true, "where-strict-missing": true,
 }
 
 // benchFixture loads testdata/bench/NAME: the template, its data, and liquidjs's output.
