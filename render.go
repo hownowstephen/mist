@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 const (
@@ -743,47 +742,6 @@ func (r *renderer) raw(pos int, live bool) int {
 		}
 		i = k + 2
 	}
-}
-
-func skipBlank(s string, i int) int {
-	for i < len(s) && isBlank(s[i]) {
-		i++
-	}
-	return i
-}
-
-func isBlank(c byte) bool { return c == ' ' || (c >= '\t' && c <= '\r') }
-
-// isTrimBlank matches liquidjs's BLANK character class, which whitespace control trims greedily.
-func isTrimBlank(c rune) bool {
-	switch c {
-	case ' ', '\t', '\n', '\v', '\f', '\r',
-		0xA0, 0x1680, 0x180E, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000:
-		return true
-	}
-	return c >= 0x2000 && c <= 0x200A
-}
-
-func trimLeftBlank(s string) string {
-	for len(s) > 0 {
-		c, n := utf8.DecodeRuneInString(s)
-		if !isTrimBlank(c) {
-			break
-		}
-		s = s[n:]
-	}
-	return s
-}
-
-func trimRightBlank(s string) string {
-	for len(s) > 0 {
-		c, n := utf8.DecodeLastRuneInString(s)
-		if !isTrimBlank(c) {
-			break
-		}
-		s = s[:len(s)-n]
-	}
-	return s
 }
 
 // endIteration ends one pass over a for loop's body at an else or endfor, reporting
