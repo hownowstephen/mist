@@ -18,124 +18,152 @@ import (
 // A switch rather than a table of funcs, so calls stay direct and nothing escapes.
 func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int) val {
 	n := len(a)
-	arity := func(lo, hi int) bool { return n >= lo && n <= hi }
-	ok, known := false, true
-	switch name {
-	case "capitalize", "downcase", "upcase", "escape", "escape_once", "url_encode", "json", "jsonify", "inspect", "first", "last",
-		"strip_newlines", "newline_to_br", "strip_html", "size", "abs", "ceil", "floor", "reverse":
-		ok = arity(0, 0)
-	case "map", "push":
-		ok = arity(1, 1)
-	case "sum", "sort":
-		ok = arity(0, 1)
-	case "find", "find_index", "has", "reject":
-		ok = arity(1, 2)
-	case "compact", "uniq", "url_decode", "base64_encode", "base64_decode":
-		ok = arity(0, 0)
-	case "concat", "sort_natural", "hmac_sha256", "remove_last":
-		ok = arity(0, 1)
-	case "replace_last":
-		ok = arity(0, 2)
-	case "xml_escape", "cgi_escape", "uri_escape", "normalize_whitespace", "date_to_xmlschema", "date_to_rfc822", "pop", "shift":
-		ok = arity(0, 0)
-	case "unshift", "group_by":
-		ok = arity(1, 1)
-	case "number_of_words", "array_to_sentence_string":
-		ok = arity(0, 1)
-	case "slugify", "date_to_string", "date_to_long_string":
-		ok = arity(0, 2)
-	case "sha256", "to_integer", "raw":
-		ok = arity(0, 0)
-	case "where_exp", "find_exp", "group_by_exp", "reject_exp", "find_index_exp", "has_exp":
-		if ok = arity(2, 2); ok {
-			r.checkExp(a, at)
+	// takes bails unless the filter got lo to hi arguments, and reports whether to apply it.
+	takes := func(lo, hi int) bool {
+		if n < lo || n > hi {
+			bail(at, "filter-arguments:"+name, "%d arguments to filter %q", n, name)
 		}
-	case "date", "replace", "replace_first", "truncate", "truncatewords":
-		ok = arity(0, 2)
-	case "remove", "remove_first", "strip", "lstrip", "rstrip", "split":
-		ok = arity(0, 1)
-	case "append", "prepend", "plus", "minus", "times", "divided_by", "modulo", "at_least", "at_most":
-		ok = arity(1, 1)
-	case "join", "round":
-		ok = arity(0, 1)
-	case "where":
-		ok = arity(1, 2)
-	case "slice":
-		ok = arity(1, 2)
-	case "default": // only reaches here with more arguments than it takes
-	default:
-		if r.passUnknown && !liquidjsFilters[name] {
-			return v // liquidjs's strictFilters: false; the arguments were evaluated above
-		}
-		known = false
-	}
-	switch {
-	case !known:
-		bail(at, "filter:"+name, "unsupported filter %q", name)
-	case !ok:
-		bail(at, "filter-arguments:"+name, "%d arguments to filter %q", n, name)
-	}
-	if !eval {
-		return v
+		return eval
 	}
 	switch name {
 	case "capitalize":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(capitalize(toStr(v, at), at))
 	case "date":
+		if !takes(0, 2) {
+			return v
+		}
 		return r.dateFilter(v, a, at)
 	case "downcase":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(caseMap(toStr(v, at), false, at))
 	case "upcase":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(caseMap(toStr(v, at), true, at))
 	case "append":
+		if !takes(1, 1) {
+			return v
+		}
 		return strVal(toStr(v, at) + toStr(a[0], at))
 	case "prepend":
+		if !takes(1, 1) {
+			return v
+		}
 		return strVal(toStr(a[0], at) + toStr(v, at))
 	case "replace":
+		if !takes(0, 2) {
+			return v
+		}
 		return strVal(replace(toStr(v, at), argStr(a, 0, at), argStr(a, 1, at), at))
 	case "replace_first":
+		if !takes(0, 2) {
+			return v
+		}
 		return strVal(strings.Replace(toStr(v, at), argStr(a, 0, at), argStr(a, 1, at), 1))
 	case "remove":
+		if !takes(0, 1) {
+			return v
+		}
 		return strVal(strings.ReplaceAll(toStr(v, at), argStr(a, 0, at), ""))
 	case "remove_first":
+		if !takes(0, 1) {
+			return v
+		}
 		return strVal(strings.Replace(toStr(v, at), argStr(a, 0, at), "", 1))
 	case "strip":
+		if !takes(0, 1) {
+			return v
+		}
 		return strVal(strip(v, a, at, true, true))
 	case "lstrip":
+		if !takes(0, 1) {
+			return v
+		}
 		return strVal(strip(v, a, at, true, false))
 	case "rstrip":
+		if !takes(0, 1) {
+			return v
+		}
 		return strVal(strip(v, a, at, false, true))
 	case "truncate":
+		if !takes(0, 2) {
+			return v
+		}
 		return truncate(v, a, at)
 	case "truncatewords":
+		if !takes(0, 2) {
+			return v
+		}
 		return strVal(truncatewords(v, a, at))
 	case "escape", "xml_escape":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(html.EscapeString(toStr(v, at)))
 	case "escape_once":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(html.EscapeString(unescaper.Replace(toStr(v, at))))
 	case "url_encode":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(percentEncode(toStr(v, at), "-_.!~*'()", true, at))
 	case "cgi_escape":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(percentEncode(toStr(v, at), "-_.~", true, at))
 	case "uri_escape":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(percentEncode(toStr(v, at), "-_.!~*'();,/?:@&=+$#[]", false, at))
 	case "normalize_whitespace":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(replaceRuns(validStr(toStr(v, at), at), ' ', jsSpace))
 	case "number_of_words":
+		if !takes(0, 1) {
+			return v
+		}
 		var mode string
 		if len(a) > 0 {
 			mode, _ = a[0].str()
 		}
 		return val{n: float64(numberOfWords(validStr(toStr(v, at), at), mode)), lit: litNum}
 	case "slugify":
+		if !takes(0, 2) {
+			return v
+		}
 		return strVal(slugify(toStr(v, at), a, at))
 	case "array_to_sentence_string":
+		if !takes(0, 1) {
+			return v
+		}
 		return sentence(v, a, at)
 	case "date_to_xmlschema":
+		if !takes(0, 0) {
+			return v
+		}
 		return r.dateFilter(v, []val{strVal("%Y-%m-%dT%H:%M:%S%:z")}, at)
 	case "date_to_rfc822":
+		if !takes(0, 0) {
+			return v
+		}
 		return r.dateFilter(v, []val{strVal("%a, %d %b %Y %H:%M:%S %z")}, at)
 	case "date_to_string", "date_to_long_string":
+		if !takes(0, 2) {
+			return v
+		}
 		month := "%b"
 		if name == "date_to_long_string" {
 			month = "%B"
@@ -153,17 +181,31 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		}
 		return r.dateFilter(v, []val{strVal(format)}, at)
 	case "pop":
+		if !takes(0, 0) {
+			return v
+		}
 		arr := toArray(v, at)
 		return val{x: arr[:max(len(arr)-1, 0)]}
 	case "shift":
+		if !takes(0, 0) {
+			return v
+		}
 		arr := toArray(v, at)
 		return val{x: arr[min(1, len(arr)):]}
 	case "unshift":
+		if !takes(1, 1) {
+			return v
+		}
 		if isNil(a[0]) {
 			bail(at, "push-nil", "unshift of nil or undefined") // liquidjs keeps distinct null-ish values
 		}
 		return val{x: append([]any{a[0].any()}, toArray(v, at)...)}
 	case "where_exp", "reject_exp":
+		apply := takes(2, 2)
+		r.checkExp(a, at)
+		if !apply {
+			return v
+		}
 		// liquidjs keeps the items whose value is exactly true (where_exp) or false (reject_exp).
 		keep := name == "where_exp"
 		out := []any{}
@@ -175,6 +217,11 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		}
 		return val{x: out}
 	case "find_exp", "find_index_exp", "has_exp":
+		apply := takes(2, 2)
+		r.checkExp(a, at)
+		if !apply {
+			return v
+		}
 		// The first item whose value is truthy in JavaScript.
 		for i, it := range toArray(v, at) {
 			if !jsTruthy(r.expValue(true, a[1].s, a[0].s, it, at), at) {
@@ -193,42 +240,94 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		}
 		return val{x: Undefined{}}
 	case "sha256":
+		if !takes(0, 0) {
+			return v
+		}
 		sum := sha256.Sum256([]byte(validStr(toStr(v, at), at)))
 		return strVal(hex.EncodeToString(sum[:]))
 	case "to_integer":
+		if !takes(0, 0) {
+			return v
+		}
 		return val{n: jsNumberOf(v, at), lit: litNum}
 	case "raw":
+		if !takes(0, 0) {
+			return v
+		}
 		if r.dialect != nil && r.dialect.Output != nil {
 			bail(at, "dialect-raw-filter", "raw with a dialect Output hook") // it makes liquidjs skip outputEscape
 		}
 		return v
-	case "group_by", "group_by_exp":
-		return val{x: r.groupBy(v, a, name == "group_by_exp", at)}
+	case "group_by":
+		if !takes(1, 1) {
+			return v
+		}
+		return val{x: r.groupBy(v, a, false, at)}
+	case "group_by_exp":
+		apply := takes(2, 2)
+		r.checkExp(a, at)
+		if !apply {
+			return v
+		}
+		return val{x: r.groupBy(v, a, true, at)}
 	case "json", "jsonify", "inspect":
+		if !takes(0, 0) {
+			return v
+		}
 		if _, undef := v.x.(Undefined); undef && v.lit == 0 {
 			return v // JSON.stringify(undefined) is undefined
 		}
 		return strVal(string(appendJSON(nil, v, at)))
 	case "split":
+		if !takes(0, 1) {
+			return v
+		}
 		return split(v, a, at)
 	case "slice":
+		if !takes(1, 2) {
+			return v
+		}
 		return slice(v, a, at)
 	case "first", "last":
+		if !takes(0, 0) {
+			return v
+		}
 		return endOf(v, name == "first", at)
 	case "strip_newlines":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(replaceNewlines(toStr(v, at), ""))
 	case "newline_to_br":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(replaceNewlines(toStr(v, at), "<br />\n"))
 	case "strip_html":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(stripHTML(toStr(v, at), at))
 	case "join":
+		if !takes(0, 1) {
+			return v
+		}
 		return strVal(join(v, a, at))
 	case "size":
+		if !takes(0, 0) {
+			return v
+		}
 		return size(v, at)
 	case "where", "reject":
+		if !takes(1, 2) {
+			return v
+		}
 		m, _ := r.matching(v, a, at, false, name == "where")
 		return val{x: m}
 	case "find", "find_index", "has":
+		if !takes(1, 2) {
+			return v
+		}
 		m, i := r.matching(v, a, at, true, true)
 		switch {
 		case name == "has":
@@ -240,6 +339,9 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		}
 		return val{x: boxInt(i)}
 	case "compact":
+		if !takes(0, 0) {
+			return v
+		}
 		out := []any{}
 		for _, it := range toArray(v, at) {
 			if !isNil(val{x: it}) {
@@ -248,26 +350,54 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		}
 		return val{x: out}
 	case "uniq":
+		if !takes(0, 0) {
+			return v
+		}
 		return val{x: uniq(v, at)}
 	case "concat":
+		if !takes(0, 1) {
+			return v
+		}
 		var rest []any
 		if len(a) > 0 {
 			rest = toArray(a[0], at)
 		}
 		return val{x: append(slices.Clone(toArray(v, at)), rest...)}
 	case "sort_natural":
+		if !takes(0, 1) {
+			return v
+		}
 		return val{x: r.sortNatural(v, a, at)}
 	case "url_decode":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(urlDecode(toStr(v, at), at))
 	case "base64_encode":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(base64.StdEncoding.EncodeToString([]byte(validStr(toStr(v, at), at))))
 	case "base64_decode":
+		if !takes(0, 0) {
+			return v
+		}
 		return strVal(base64Decode(toStr(v, at), at))
 	case "hmac_sha256":
+		if !takes(0, 1) {
+			return v
+		}
 		m := hmac.New(sha256.New, []byte(validStr(argStr(a, 0, at), at)))
 		m.Write([]byte(validStr(toStr(v, at), at)))
 		return strVal(hex.EncodeToString(m.Sum(nil)))
 	case "replace_last", "remove_last":
+		hi := 1
+		if name == "replace_last" {
+			hi = 2
+		}
+		if !takes(0, hi) {
+			return v
+		}
 		s, pat, rep := toStr(v, at), argStr(a, 0, at), ""
 		if name == "replace_last" {
 			rep = argStr(a, 1, at)
@@ -278,20 +408,55 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		}
 		return strVal(s[:i] + rep + s[i+len(pat):])
 	case "map":
+		if !takes(1, 1) {
+			return v
+		}
 		return val{x: mapProp(v, argPath(a, at), at)}
 	case "sum":
+		if !takes(0, 1) {
+			return v
+		}
 		return sum(v, a, at)
 	case "sort":
+		if !takes(0, 1) {
+			return v
+		}
 		return val{x: sortBy(v, a, at)}
 	case "push":
+		if !takes(1, 1) {
+			return v
+		}
 		if isNil(a[0]) {
 			bail(at, "push-nil", "push of nil or undefined") // liquidjs keeps distinct null-ish values
 		}
 		return val{x: append(slices.Clone(toArray(v, at)), a[0].any())}
 	case "reverse":
+		if !takes(0, 0) {
+			return v
+		}
 		out := slices.Clone(toArray(v, at))
 		slices.Reverse(out)
 		return val{x: out}
+
+	case "abs", "ceil", "floor":
+		if !takes(0, 0) {
+			return v
+		}
+	case "round":
+		if !takes(0, 1) {
+			return v
+		}
+	case "plus", "minus", "times", "divided_by", "modulo", "at_least", "at_most":
+		if !takes(1, 1) {
+			return v
+		}
+	case "default": // only reaches here with more arguments than it takes
+		takes(0, 1)
+	default:
+		if r.passUnknown && !liquidjsFilters[name] {
+			return v // liquidjs's strictFilters: false; the arguments were evaluated above
+		}
+		bail(at, "filter:"+name, "unsupported filter %q", name)
 	}
 	x := toNumber(v, at)
 	var f float64
