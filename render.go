@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"runtime/debug"
-	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -67,6 +66,7 @@ type renderer struct {
 	now          func() time.Time
 	stack        [inlineDepth]frame
 	deep         []frame // frames from inlineDepth on
+	tagFrames    []frame // the open frames, reused for each custom tag call
 	depth        int
 	limits       Limits
 	outBase      int            // len(out) before the render, which Limits.Output doesn't count
@@ -144,9 +144,10 @@ func (r *renderer) push(f frame) {
 	r.depth++
 }
 
-// frames is a copy of the open frames, outermost first.
+// frames copies the open frames, outermost first, into a buffer each tag call reuses.
 func (r *renderer) frames() []frame {
-	return append(slices.Clone(r.stack[:min(r.depth, inlineDepth)]), r.deep[:max(r.depth-inlineDepth, 0)]...)
+	r.tagFrames = append(append(r.tagFrames[:0], r.stack[:min(r.depth, inlineDepth)]...), r.deep[:max(r.depth-inlineDepth, 0)]...)
+	return r.tagFrames
 }
 
 func (r *renderer) run() {
