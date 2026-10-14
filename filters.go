@@ -116,9 +116,11 @@ func (r *renderer) spend(name string, v val, args []val, at int) {
 		if a, ok := v.x.([]any); ok && v.lit == 0 {
 			cost += len(a) * (1 + sep)
 		}
-	case "slice", "sample":
-		if i := len(args) - 1; i >= 0 && args[i].lit == litNum {
-			cost += int(min(math.Abs(args[i].n), maxSafeInt))
+	case "slice", "sample": // liquidjs charges slice's length and sample's count
+		if i := len(args) - 1; i >= 0 && (name == "sample" || i == 1) {
+			if f, ok := args[i].check(at).num(at); ok {
+				cost += int(min(math.Abs(f), maxSafeInt))
+			}
 		}
 	case "replace":
 		if s, ok := v.str(); ok && len(args) == 2 {
