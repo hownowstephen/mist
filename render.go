@@ -3,6 +3,7 @@ package mist
 import (
 	"fmt"
 	"math"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -86,14 +87,17 @@ type renderer struct {
 
 type bailout struct{ err error }
 
-func recoverBail(err *error) {
-	if e := recover(); e != nil {
-		b, ok := e.(bailout)
-		if !ok {
-			panic(e)
-		}
-		*err = b.err
+// recoverBail turns a bail into its error, and any other panic into ErrInternal.
+func (r *renderer) recoverBail(err *error) {
+	e := recover()
+	if e == nil {
+		return
 	}
+	if b, ok := e.(bailout); ok {
+		*err = b.err
+		return
+	}
+	*err = &Error{Kind: ErrInternal, Pos: r.pos(), Msg: fmt.Sprint("panic: ", e), Stack: debug.Stack()}
 }
 
 func bail(pos int, format string, args ...any) {

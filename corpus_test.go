@@ -58,6 +58,7 @@ func TestCorpus(t *testing.T) {
 				want = *c.Strict
 			}
 			out, err := corpusEngine.Render(c.Tpl, c.Data, strict)
+			failInternal(t, err)
 			var e *Error
 			if errors.As(err, &e) && errors.Is(err, ErrUnsupported) {
 				bailed++
