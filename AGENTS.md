@@ -12,8 +12,13 @@ For every template mist accepts, its output must match liquidjs 10.26 (`new Liqu
 |---|---|
 | `mist.go` | Public API: `Engine`, `Render`, `Append`, `Check`, `RenderChain`, errors |
 | `render.go` | The single-pass scan, tags and block frames |
-| `expr.go` | Expressions, paths, comparisons, output of values |
-| `filters.go`, `stdfilters.go` | Filter dispatch and the built-in filters |
+| `expr.go` | Expressions, conditions and paths |
+| `value.go` | Values: undefined and nil, property and index lookup, numbers, output |
+| `compare.go` | `==`, `<` and friends, `contains`, `blank` and `empty` |
+| `space.go` | The three whitespace classes, and where each applies |
+| `filters.go` | Filter chains, registered filters, `default`, the memory budget |
+| `stdfilters.go` | Built-in filter dispatch (argument counts in each case) and shared conversions |
+| `stringfilters.go`, `arrayfilters.go` | String and array filter implementations |
 | `date.go` | `date` input parsing and strftime |
 | `dialect.go` | `Engine.Dialect` hooks |
 | `liquidjs_filters.go` | Every filter liquidjs defines (checked by `parity.mjs`) |
