@@ -17,7 +17,7 @@ type FilterFunc func(f Filter) (any, error)
 // Filter is one application of a registered filter.
 type Filter struct {
 	Name   string
-	Input  any   // nil for both nil and undefined
+	Input  any   // nil for both nil and undefined; inside arrays and objects, undefined is Undefined
 	Args   []any // positional arguments
 	Strict bool
 }
@@ -160,7 +160,7 @@ func dataSize(x any) int {
 			n += dataSize(e)
 		}
 		return n
-	case nil, undefinedT, nilLitT:
+	case nil, Undefined, nilLitT:
 		return 0
 	}
 	return 24
@@ -218,7 +218,7 @@ func (v val) data() any {
 // defaultFilter mirrors liquidjs: empty strings and arrays, nil, undefined and
 // false (unless allow_false) are replaced.
 func defaultFilter(v val, args []val, allowFalse bool, at int) val {
-	d := val{x: undefinedT{}} // the JavaScript default parameter
+	d := val{x: Undefined{}} // the JavaScript default parameter
 	if len(args) == 1 {
 		d = args[0]
 	}
@@ -232,7 +232,7 @@ func defaultFilter(v val, args []val, allowFalse bool, at int) val {
 		return v
 	}
 	switch x := v.check(at).x.(type) {
-	case nil, undefinedT, nilLitT:
+	case nil, Undefined, nilLitT:
 		return d
 	case bool:
 		if !x && !allowFalse {
@@ -255,7 +255,7 @@ func stringify(dst []byte, v val, at int) []byte {
 		return appendJSNumber(dst, v.n)
 	}
 	switch x := v.check(at).x.(type) {
-	case nil, undefinedT, nilLitT:
+	case nil, Undefined, nilLitT:
 		return dst
 	case bool:
 		if x {

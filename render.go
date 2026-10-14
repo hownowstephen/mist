@@ -401,7 +401,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			case []any:
 				f.coll = mods.apply(c)
 				f.taken = len(c) == 0 // for its else part
-			case nil, undefinedT:
+			case nil, Undefined:
 				f.taken = true
 			default:
 				bail(b, "for over non-array %T", coll)

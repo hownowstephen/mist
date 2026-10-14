@@ -48,7 +48,7 @@ e.Filters = map[string]mist.FilterFunc{
 - Registered filters override built-ins of the same name.
 - Return `mist.ErrBuiltin` to apply the built-in after all, for example to change only how nil input behaves.
 - Return `mist.ErrUnchanged` to leave the input as it was, keeping an undefined input undefined; returning `Filter.Input` would turn it into null, which compares differently.
-- `Filter.Input` is nil for both null and undefined, and `Filter.Strict` is the render's strict flag.
+- `Filter.Input` is nil for both null and undefined, and `Filter.Strict` is the render's strict flag. Inside arrays and objects, undefined is `mist.Undefined{}`, for example in `items | map: 'missing'`.
 - `Engine.PassUnknownFilters` passes filters liquidjs doesn't define through unchanged, as liquidjs does with `strictFilters` off. Turn it on only when `Filters` covers every filter your full engine has, or templates using a filter mist doesn't know would render without it.
 
 ## Dialects

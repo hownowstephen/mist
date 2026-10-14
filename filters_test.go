@@ -3,6 +3,7 @@ package mist
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"strconv"
@@ -207,5 +208,33 @@ func TestErrUnchangedKeepsUndefined(t *testing.T) {
 	out, err := e.Render(`{% case missing | keep %}{% when other %}undefined{% endcase %}{% case missing | input %}{% when other %} null{% endcase %}{{ 'a' | keep }}`, nil, false)
 	if want := "undefineda"; err != nil || out != want {
 		t.Fatalf("got %q, %v; want %q", out, err, want)
+	}
+}
+
+// Undefined items reach hooks as the exported Undefined, never an unexported type.
+func TestUndefinedInsideValues(t *testing.T) {
+	var seen []string
+	note := func(v any) { seen = append(seen, fmt.Sprintf("%#v", v)) }
+	e := Engine{
+		Filters: map[string]FilterFunc{"peek": func(f Filter) (any, error) { note(f.Input); return "", nil }},
+		Tags: map[string]TagFunc{"peek": func(dst []byte, t Tag) ([]byte, error) {
+			v, _ := t.Lookup("m")
+			note(v)
+			return dst, nil
+		}},
+		Dialect: &Dialect{Output: func(dst []byte, v any) ([]byte, error) { note(v); return dst, nil }},
+	}
+	data := map[string]any{"xs": []any{map[string]any{"k": 1.0}, map[string]any{}}}
+	if _, err := e.Render(`{{ xs | map: 'k' | peek }}{% assign m = xs | map: 'k' %}{% peek %}{{ m }}{{ xs | group_by: 'k' | map: 'name' | peek }}`, data, false); err != nil {
+		t.Fatal(err)
+	}
+	want := `[]interface {}{1, mist.Undefined{}}`
+	for _, s := range seen {
+		if s != want {
+			t.Errorf("got %s; want %s", s, want)
+		}
+	}
+	if len(seen) != 4 {
+		t.Errorf("got %d hook calls", len(seen))
 	}
 }
