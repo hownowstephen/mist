@@ -185,7 +185,7 @@ var runtimeCodes = map[string]bool{
 	"date-locale-format": true, "date-string-format": true, "date-timezone-argument": true,
 	"date-timezone-name": true, "date-timezone-sub-minute": true, "date-timezone-unknown": true,
 	"date-width": true, "date-year-range": true, "date-zone-name": true, "first-last-empty": true,
-	"first-last-type": true, "for-over-non-array": true, "for-parameter-value": true, "group-by-object": true, "index-on-scalar": true,
+	"first-last-type": true, "for-over-non-array": true, "for-parameter-value": true, "group-by-object": true,
 	"index-type": true, "invalid-utf8": true, "item-not-object": true, "iteration-limit": true,
 	"join-nested-array": true, "json-type": true, "math-non-finite": true, "memory-limit": true,
 	"nil-literal-argument": true, "number-from-string": true, "number-from-type": true,
@@ -424,5 +424,20 @@ endfor %}`},
 	// Output counts what this render writes, not what Append's dst already holds.
 	if _, err := e.Append(make([]byte, 1000), `x`, nil, false); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestErrorString(t *testing.T) {
+	_, err := Render("ab{{ x | nope }}", nil, false)
+	if want := `mist: unsupported at offset 9: unsupported filter "nope"`; err == nil || err.Error() != want {
+		t.Fatalf("got %v; want %s", err, want)
+	}
+}
+
+// Counters persist into the chain's vars even when the caller passed none.
+func TestRenderChainCountersWithNilVars(t *testing.T) {
+	res, n, vars := RenderChain([]Step{{Body: "{% increment c %}"}, {Body: "{{ c }}"}}, nil)
+	if n != 2 || res[1].Out != "1" || vars["c"] != 1.0 {
+		t.Fatalf("got %v, %d, %v", res, n, vars)
 	}
 }
