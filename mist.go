@@ -48,7 +48,8 @@ func (e *Error) Error() string { return fmt.Sprintf("%v at offset %d: %s", e.Kin
 func (e *Error) Unwrap() error { return e.Kind }
 
 // Engine renders templates with custom tags and filters. The zero value has none,
-// and the package-level functions use it.
+// and the package-level functions use it. An Engine is safe for concurrent use as long
+// as nothing modifies it or its maps while it renders.
 type Engine struct {
 	// Tags maps inline tag names, as in {% name args %}, to their implementations.
 	// Built-in tag names can't be overridden.
