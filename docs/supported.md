@@ -22,7 +22,7 @@ Not rendered: `tablerow`, `include`, `render`, `layout`.
 
 - Variables and paths: `a.b`, `a[0]`, `a[-1]`, `a['k']`, `a[key]`; `.size` of arrays, strings and objects, and `.first`/`.last` of arrays.
 - Literals: strings with escapes, numbers, `true`, `false`, `nil`, ranges.
-- Comparisons: `==`, `!=`, `<`, `>`, `<=`, `>=`, `contains`, `== blank`, `== empty`.
+- Comparisons: `==`, `!=`, `<`, `>`, `<=`, `>=`, `contains`, `== blank`, `== empty`; `blank` and `empty` alone in a condition, ordered (always false) or printed.
 - `and` / `or`, grouped right to left as in liquidjs.
 
 ## Filters

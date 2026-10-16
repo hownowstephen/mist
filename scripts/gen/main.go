@@ -151,12 +151,19 @@ func (g *gen) cond() string {
 }
 
 func (g *gen) cmp() string {
+	kw := g.pick([]string{"blank", "empty"})
 	if g.r.IntN(2) == 0 {
+		if g.r.IntN(10) == 0 {
+			return kw
+		}
 		return g.expr()
 	}
 	op := g.pick([]string{"==", "!=", "<", ">", "<=", ">=", "contains", "contains"})
-	if (op == "==" || op == "!=") && g.r.IntN(4) == 0 {
-		return g.expr() + g.ws() + op + g.ws() + g.pick([]string{"blank", "empty"})
+	if op != "contains" && g.r.IntN(4) == 0 {
+		if g.r.IntN(2) == 0 {
+			return kw + g.ws() + op + g.ws() + g.expr()
+		}
+		return g.expr() + g.ws() + op + g.ws() + kw
 	}
 	if op == "contains" {
 		return g.expr() + " " + g.ws() + op + " " + g.ws() + g.expr()
@@ -176,6 +183,10 @@ func (g *gen) block(depth int) {
 			g.b.WriteString(g.pick(words))
 		case k < 5:
 			l, r := g.pick([]string{"{{", "{{-"}), g.pick([]string{"}}", "-}}"})
+			if g.r.IntN(20) == 0 {
+				g.b.WriteString(l + g.ws() + g.pick([]string{"blank", "empty"}) + g.ws() + r)
+				break
+			}
 			g.b.WriteString(l + g.ws() + g.expr() + g.filters() + g.ws() + r)
 		case k == 5 && depth < 4:
 			tag := g.pick([]string{"if", "unless"})

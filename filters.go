@@ -65,7 +65,7 @@ func (r *renderer) filters(v val, eval bool) val {
 				}
 				arg := r.expr(eval, false)
 				if k := arg.keyword(); k != "" {
-					bail(at, "keyword-outside-equality", "%s is only supported with == and !=", k)
+					bail(at, "keyword-outside-equality", "%s is only supported in conditions and output", k)
 				}
 				args = append(args, arg)
 			}

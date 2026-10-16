@@ -6,8 +6,8 @@ import "math"
 // so an application can target a Liquid engine that differs from liquidjs. With a
 // dialect set, matching that engine is up to the dialect's author.
 type Dialect struct {
-	// Output appends a printed non-string value: a number, bool, array or object.
-	// Strings, nil and undefined never reach it.
+	// Output appends a printed non-string value: a number, bool, array, object, or
+	// the Blank or Empty keyword. Strings, nil and undefined never reach it.
 	Output func(dst []byte, v any) ([]byte, error)
 
 	// Compare evaluates ==, !=, <, >, <=, >= in conditions.
@@ -34,10 +34,10 @@ const (
 	EmptyKeyword                             // == empty, != empty
 )
 
-// Keyword is how a keyword literal reaches Dialect.Compare.
+// Keyword is how a keyword literal reaches Dialect.Compare and Dialect.Output.
 type Keyword string
 
-// Blank and Empty are the blank and empty keywords as Dialect.Compare sees them.
+// Blank and Empty are the blank and empty keywords as the hooks see them.
 const (
 	Blank Keyword = "blank"
 	Empty Keyword = "empty"

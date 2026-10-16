@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.21.x
+# mist Liquid subset — v0.23.x
 
-_Last updated 2026-10-12. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-16. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails. Every error is an `*Error` whose `Code` names the reason and stays the same across releases (`testdata/codes.txt` lists them), so callers can count bails by reason without parsing `Msg`. A panic in mist or in a registered tag, filter or dialect hook is recovered as `ErrInternal`, which wraps `ErrUnsupported` so the caller falls back; it means a bug, and `Error.Stack` says where.
 
@@ -38,7 +38,7 @@ fcond    = cond { filter } ;                            (* filters apply to the 
 cond     = cmp [ ( "and" | "or" ) cond ] ;               (* right to left: a and b or c is a and (b or c) *)
 cmp      = expr [ op expr ] ;
 op       = "==" | "!=" | "<=" | ">=" | "<" | ">" | "contains" ;   (* contains: not followed by an ident character *)
-expr     = path | string | number | range | "true" | "false" | "nil" | "null" | "blank" | "empty" ;   (* blank, empty: only as operands of == or != *)
+expr     = path | string | number | range | "true" | "false" | "nil" | "null" | "blank" | "empty" ;   (* blank, empty: only in conditions and output *)
 range    = "(" ws expr ws ".." ws expr ws ")" ;
 forparam = ( "limit" | "offset" ) ws ":" ws expr | "reversed" ;   (* each at most once *)
 path     = ident { "." ws word | "[" ws expr ws "]" } ;   (* ".." ends a path, for ranges; forloop must be followed by "." word *)
@@ -90,6 +90,7 @@ Structural rules the EBNF doesn't express:
 | `==` / `!=` | Same-type scalars compare by value (numbers numerically). Different types are never equal. `nil` matches both null and undefined, but a null variable ≠ an undefined variable. Two arrays are equal when they have the same length and their items are pairwise `==`; an array or object never equals a scalar, and an object never equals an array. |
 | `== blank` / `!= blank` | Blank means nil or undefined, `false`, `""` or a whitespace-only string (JavaScript's `\s`, so U+00A0 and U+FEFF count but U+0085 doesn't), `[]` or `{}`. `0` and `true` aren't blank. Works on either side. `blank` against `blank`, `empty` or `nil` bails, because liquidjs is asymmetric there. |
 | `== empty` / `!= empty` | Only `""`, `[]` and `{}` are empty; whitespace, nil, undefined, `0` and `false` aren't. Works on either side. `empty` against `blank`, `empty` or `nil` bails. |
+| `blank` / `empty` elsewhere | Alone in a condition they're truthy (they're objects in liquidjs). Any `<`, `>`, `<=` or `>=` with one on either side is false. `{{ blank }}` and `{{ empty }}` print nothing, or go to a dialect `Output` hook as `Blank` and `Empty`; `{% echo %}` of one prints nothing, and bails with an `Output` hook. Filtering one, assigning it, passing it as an argument, `contains`, `case` and a lone keyword in an expression filter (`where_exp: 'i', 'empty'`) bail. |
 | `contains` | Same precedence as `==`. An array contains an element equal by JavaScript's `===` (same type and value; arrays and objects are never equal to a scalar). A string contains the right side's string form, as `indexOf` coerces it: numbers as JavaScript prints them, booleans as `true`/`false`, nil as `null` and undefined (lax) as `undefined`; the empty string is always contained. Anything else contains nothing. |
 | Filters | Applied left to right in `{{ }}` and `assign`. Built in: `default`, `capitalize`, `date` and the string, array and math filters below. Registered filters (`Engine.Filters`) override built-ins of the same name. Any other filter name bails, even in a dead branch, unless `Engine.PassUnknownFilters` is set (below). Filter arguments are never lenient: under strict an undefined argument is `ErrUndefined`. |
 | Leading `default` | When `default` is the first filter, an undefined input is lenient under strict (liquidjs's `lenientIf`). Later in a chain it isn't: `{{ x \| capitalize \| default: 'd' }}` is `ErrUndefined` for an undefined `x`. |
@@ -185,7 +186,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 
 | Hook | Effect |
 |---|---|
-| `Output(dst, v)` | Prints non-string values: numbers, bools, arrays, objects. Strings, nil and undefined are printed by mist as usual. |
+| `Output(dst, v)` | Prints non-string values: numbers, bools, arrays, objects, and the `blank` and `empty` keywords. Strings, nil and undefined are printed by mist as usual. |
 | `Compare(op, a, b)` | Evaluates `==`, `!=`, `<`, `>`, `<=`, `>=` in conditions. Truthiness and `and`/`or` are unchanged. |
 | `Reject` | A set of constructs that bail in both `Render` and `Check`, including in dead branches: `TrimMarkers`, `NegativeLiterals` (including negative indexes), `UnspacedOperators` (a comparison operator with no whitespace before it, such as `x==2`), `RawBlocks`, `BlankKeyword`, `EmptyKeyword`. |
 | `NoDefaultLeniency` | Turns off the leading-`default` leniency rule. Combine with an overriding `default` in `Engine.Filters` to change `default` itself. |

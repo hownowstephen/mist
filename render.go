@@ -273,7 +273,14 @@ func (r *renderer) output(b, e int) {
 	v := r.expr(live, false)
 	text := r.src[start:r.p]
 	if k := v.keyword(); k != "" {
-		bail(b, "keyword-outside-equality", "%s is only supported with == and !=", k)
+		if r.ws(); r.peek() == '|' {
+			bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)
+		}
+		r.end()
+		if live && r.dialect != nil && r.dialect.Output != nil {
+			r.dialectOutput(v)
+		}
+		return // liquidjs prints EmptyDrop's valueOf, ""
 	}
 	if r.ws(); v.lit == 0 && v.x == nilLit && r.peek() != '|' && literal(text) {
 		bail(b, "output-nil-literal", "output of the nil literal") // see write; an assigned nil bails there
@@ -335,7 +342,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		v := r.expr(live, true) // lenientIf, as for conditions
 		if k := v.keyword(); k != "" {
-			bail(b, "keyword-outside-equality", "%s is only supported with == and !=", k)
+			bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)
 		}
 		v = r.filters(v, live)
 		r.end()
@@ -468,7 +475,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		r.p++
 		val := r.expr(live, true)
 		if k := val.keyword(); k != "" {
-			bail(b, "keyword-outside-equality", "%s is only supported with == and !=", k)
+			bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)
 		}
 		val = r.filters(val, live)
 		r.end()
@@ -496,7 +503,11 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		v := r.expr(live, false)
 		if k := v.keyword(); k != "" {
-			bail(b, "keyword-outside-equality", "%s is only supported with == and !=", k)
+			if r.ws(); r.peek() == '|' || r.dialect != nil && r.dialect.Output != nil {
+				bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)
+			}
+			r.end()
+			break // liquidjs prints EmptyDrop's valueOf, ""
 		}
 		v = r.filters(v, live)
 		r.end()
