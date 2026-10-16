@@ -275,14 +275,14 @@ func TestComparer(t *testing.T) {
 	if out, err := e.Render(tpl, nil, false); err != nil || out != "bdefg" {
 		t.Errorf("got %q, %v; want %q", out, err, "bdefg")
 	}
-	for tpl, want := range map[string]error{
-		"{% assign d = 2 | dec %}{% if d > 's' %}{% endif %}":      ErrUnsupported,
-		"{% assign d = 2 | dec %}{% if d >= 1 %}{% endif %}":       errToy,
-		"{% assign d = 2 | dec %}{% if d contains 1 %}{% endif %}": ErrUnsupported,
+	for tpl, want := range map[string]string{
+		"{% assign d = 2 | dec %}{% if d > 's' %}{% endif %}":      "hook:value:compare",
+		"{% assign d = 2 | dec %}{% if d >= 1 %}{% endif %}":       "hook:value:compare",
+		"{% assign d = 2 | dec %}{% if d contains 1 %}{% endif %}": "value-type",
 	} {
 		var me *Error
-		if _, err := e.Render(tpl, nil, false); !errors.Is(err, want) || errors.As(err, &me) && want == errToy && me.Code != "hook:value:compare" {
-			t.Errorf("%s: got %v; want %v", tpl, err, want)
+		if _, err := e.Render(tpl, nil, false); !errors.As(err, &me) || me.Code != want {
+			t.Errorf("%s: got %v; want code %s", tpl, err, want)
 		}
 	}
 }
