@@ -244,6 +244,9 @@ func isNil(v val) bool {
 }
 
 func truthy(v val, at int) bool {
+	if v.keyword() != "" {
+		return true // liquidjs's EmptyDrop is an object
+	}
 	switch x := v.check(at).x.(type) {
 	case nil, Undefined, nilLitT:
 		return v.lit != 0

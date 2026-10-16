@@ -36,6 +36,8 @@ func toyDialect(calls *[]call) *Dialect {
 				return fmt.Appendf(dst, "list:%d", len(x)), nil
 			case map[string]any:
 				return nil, ErrUnsupported
+			case Keyword:
+				return fmt.Appendf(dst, "kw:%s", x), nil
 			}
 			return nil, errToy
 		},
@@ -55,8 +57,8 @@ func toyDialect(calls *[]call) *Dialect {
 func TestDialectOutput(t *testing.T) {
 	e := Engine{Dialect: toyDialect(new([]call))}
 	vars := map[string]any{"t": true, "f": false, "n": 2.5, "j": json.Number("2.0"), "xs": []any{1, 2}, "s": "str", "m": map[string]any{}, "odd": int32(1)}
-	out, err := e.Render("{{ t }}{{ f }}{{ 3 }}{{ n }}{{ j }}{{ xs }}|{{ s }}{{ missing }}{{ 'lit' }}", vars, false)
-	if want := "yesnoint:3float:2.5num:2.0list:2|strlit"; err != nil || out != want {
+	out, err := e.Render("{{ t }}{{ f }}{{ 3 }}{{ n }}{{ j }}{{ xs }}{{ empty }}|{{ s }}{{ missing }}{{ 'lit' }}", vars, false)
+	if want := "yesnoint:3float:2.5num:2.0list:2kw:empty|strlit"; err != nil || out != want {
 		t.Fatalf("got %q, %v; want %q", out, err, want)
 	}
 	if _, err := e.Render("{{ m }}", vars, false); !errors.Is(err, ErrUnsupported) {
@@ -66,7 +68,7 @@ func TestDialectOutput(t *testing.T) {
 		t.Errorf("odd type: got %v; want the dialect's error", err)
 	}
 	// echo and raw skip liquidjs's outputEscape, which the Output hook stands in for.
-	for _, tpl := range []string{"{% echo t %}", "{{ t | raw }}"} {
+	for _, tpl := range []string{"{% echo t %}", "{% echo empty %}", "{{ t | raw }}"} {
 		if _, err := e.Render(tpl, vars, false); !errors.Is(err, ErrUnsupported) {
 			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
 		}
@@ -99,6 +101,11 @@ func TestDialectCompare(t *testing.T) {
 		if _, err := e.Render(tpl, vars, false); !errors.Is(err, ErrUnsupported) {
 			t.Errorf("%s: got %v; want ErrUnsupported", tpl, err)
 		}
+	}
+	// Ordering against a keyword goes to the hook too.
+	calls = nil
+	if _, err := e.Render("{% if s < blank %}{% endif %}", vars, false); !errors.Is(err, ErrUnsupported) || !reflect.DeepEqual(calls, []call{{"<", "", Blank}}) {
+		t.Errorf("s < blank: got %v, %#v; want ErrUnsupported from the hook", err, calls)
 	}
 }
 

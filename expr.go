@@ -86,6 +86,9 @@ func (r *renderer) cond(eval bool) bool {
 	if r.peek() != '|' {
 		return res
 	}
+	if k := v.keyword(); lone && k != "" {
+		bail(r.pos(), "keyword-outside-equality", "%s is only supported in conditions and output", k)
+	}
 	// liquidjs filters the whole condition's value: a lone operand's, else the boolean.
 	if !lone {
 		v = val{x: res}
@@ -128,9 +131,6 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 		bail(r.pos(), "dialect-unspaced-operator", "operators without whitespace before them are rejected by the dialect")
 	}
 	if op == "" {
-		if k := a.keyword(); k != "" {
-			bail(start, "keyword-outside-equality", "%s is only supported with == and !=", k)
-		}
 		return eval && truthy(a, r.pos()), a, true
 	}
 	at := r.pos()
@@ -140,8 +140,12 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 			k, other = b.keyword(), a
 		}
 		switch {
+		case op == "contains":
+			bail(start, "keyword-outside-equality", "%s is only supported with ==, !=, <, >, <= and >=", k)
 		case op != "==" && op != "!=":
-			bail(start, "keyword-outside-equality", "%s is only supported with == and !=", k)
+			if r.dialect == nil || r.dialect.Compare == nil {
+				return false, a, false // liquidjs's EmptyDrop orders before and after nothing
+			}
 		case other.keyword() != "" || (other.lit == 0 && other.x == nilLit):
 			bail(start, "keyword-against-keyword", "%s compared with blank, empty or nil", k) // liquidjs is asymmetric here
 		}
@@ -442,6 +446,9 @@ func (r *renderer) expValue(eval bool, exp, name string, item any, at int) val {
 	r.src, r.base, r.p, r.undef, r.lenientUndef = exp, at, 0, pendingUndef{}, false
 	r.binds = append(r.binds, binding{name, item})
 	res, v, lone := r.chain(eval)
+	if k := v.keyword(); lone && k != "" {
+		bail(at, "keyword-outside-equality", "%s is only supported in conditions and output", k)
+	}
 	if !lone {
 		v = val{x: res}
 	}
