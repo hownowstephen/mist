@@ -240,3 +240,49 @@ func TestUndefinedInsideValues(t *testing.T) {
 		t.Errorf("got %d hook calls", len(seen))
 	}
 }
+
+// toyDecimal compares like decimal.js's Decimal in liquidjs: never == anything else,
+// ordered against one-digit integers.
+type toyDecimal struct{ s string }
+
+func (d *toyDecimal) Compare(op string, other any) (bool, error) {
+	switch op {
+	case "==":
+		return other == d, nil
+	case "!=":
+		return other != d, nil
+	}
+	o, ok := other.(int64)
+	if !ok {
+		return false, ErrUnsupported
+	}
+	switch os := fmt.Sprint(o); op {
+	case "<":
+		return d.s < os, nil
+	case ">":
+		return d.s > os, nil
+	}
+	return false, errToy
+}
+
+func TestComparer(t *testing.T) {
+	e := Engine{Filters: map[string]FilterFunc{"dec": func(f Filter) (any, error) {
+		return &toyDecimal{fmt.Sprint(f.Input)}, nil
+	}}}
+	tpl := "{% assign d = 2 | dec %}{% assign o = 2 | dec %}" +
+		"{% if d == 2 %}a{% endif %}{% if d == d %}b{% endif %}{% if d == o %}c{% endif %}{% if d != 2 %}d{% endif %}" +
+		"{% if d > 1 %}e{% endif %}{% if 1 < d %}f{% endif %}{% if 3 > d %}g{% endif %}{% if d < 1 %}h{% endif %}"
+	if out, err := e.Render(tpl, nil, false); err != nil || out != "bdefg" {
+		t.Errorf("got %q, %v; want %q", out, err, "bdefg")
+	}
+	for tpl, want := range map[string]error{
+		"{% assign d = 2 | dec %}{% if d > 's' %}{% endif %}":      ErrUnsupported,
+		"{% assign d = 2 | dec %}{% if d >= 1 %}{% endif %}":       errToy,
+		"{% assign d = 2 | dec %}{% if d contains 1 %}{% endif %}": ErrUnsupported,
+	} {
+		var me *Error
+		if _, err := e.Render(tpl, nil, false); !errors.Is(err, want) || errors.As(err, &me) && want == errToy && me.Code != "hook:value:compare" {
+			t.Errorf("%s: got %v; want %v", tpl, err, want)
+		}
+	}
+}

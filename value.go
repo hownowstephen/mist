@@ -15,6 +15,16 @@ import (
 // level they get nil for it instead.
 type Undefined struct{}
 
+// Comparer is a value a registered filter or tag returns that compares itself in
+// conditions, as a JavaScript object with its own semantics does in liquidjs (a
+// decimal.js Decimal, say). Elsewhere mist treats it as any other unknown type.
+type Comparer interface {
+	// Compare evaluates v op other for ==, !=, <, >, <=, >=, with other as dialect
+	// hooks see values. When v is on the right, op is mirrored: a < v is v > a.
+	// Returning an error that wraps ErrUnsupported bails; any other stops rendering.
+	Compare(op string, other any) (bool, error)
+}
+
 // nilLitT is the nil/null literal, which == matches against both null and undefined.
 type nilLitT struct{}
 

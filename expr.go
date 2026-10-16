@@ -159,6 +159,12 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 		}
 		return eval && contains(a, b, at), a, false
 	}
+	if c, ok := a.x.(Comparer); eval && ok && a.lit == 0 {
+		return valueCompare(c, op, b, at), a, false
+	}
+	if c, ok := b.x.(Comparer); eval && ok && b.lit == 0 {
+		return valueCompare(c, mirror[op], a, at), a, false
+	}
 	if eval && r.dialect != nil && r.dialect.Compare != nil {
 		return r.dialectCompare(op, a, b, at), a, false
 	}
