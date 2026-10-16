@@ -198,3 +198,18 @@ func TestTagDepth(t *testing.T) {
 		t.Errorf("got %v, %v; want depths [0 1]", depths, err)
 	}
 }
+
+// Source is the tag as liquidjs's tagToken holds it, for tags that parse it themselves.
+func TestTagSource(t *testing.T) {
+	var got []string
+	e := Engine{Tags: map[string]TagFunc{"src": func(dst []byte, t Tag) ([]byte, error) {
+		got = append(got, t.Source)
+		return dst, nil
+	}}}
+	if _, err := e.Render("{% src a:1 %}{%- src b:2-%}{% liquid\nsrc c:3\n%}", nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"{% src a:1 %}", "{%- src b:2-%}", "src c:3"}; !slices.Equal(got, want) {
+		t.Errorf("got %q; want %q", got, want)
+	}
+}
