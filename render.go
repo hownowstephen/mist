@@ -703,7 +703,7 @@ func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
 		strict: r.strict, tags: r.tags, filterFns: r.filterFns, passUnknown: r.passUnknown, dialect: r.dialect, now: r.now,
 		limits: r.limits, outUsed: len(r.out) - r.outBase, spent: r.spent, iters: r.iters, nested: r.nested,
 	}
-	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, frames: r.frames(), scope: s}
+	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, Depth: r.nested, frames: r.frames(), scope: s}
 	out, err := fn(r.out, t)
 	r.assigns, r.env, r.cycles, r.spent, r.iters = s.assigns, s.env, s.cycles, s.spent, s.iters
 	if err != nil {

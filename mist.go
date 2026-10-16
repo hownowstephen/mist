@@ -108,6 +108,7 @@ type Tag struct {
 	Args   string         // raw text after the name, trimmed
 	Vars   map[string]any // the data passed to Render, without assigns or loop variables
 	Strict bool
+	Depth  int // how many Tag.Render calls the tag runs inside: 0 in the template itself
 
 	frames []frame
 	scope  *tagScope

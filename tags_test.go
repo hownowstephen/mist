@@ -3,6 +3,7 @@ package mist
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -181,5 +182,19 @@ func TestTagRender(t *testing.T) {
 		if !errors.Is(err, c.kind) || !errors.As(err, &me) || me.Code != c.code || me.Pos != strings.Index(c.tpl, "{% nest")+len("{%") {
 			t.Errorf("%s with %v: got %v; want %v %s at the tag", c.tpl, c.vars, err, c.kind, c.code)
 		}
+	}
+}
+
+// Depth lets a tag cap how deep its own Tag.Render calls nest.
+func TestTagDepth(t *testing.T) {
+	var depths []int
+	e := Engine{Tags: map[string]TagFunc{"nest": func(dst []byte, t Tag) ([]byte, error) {
+		depths = append(depths, t.Depth)
+		src, _ := t.Lookup(t.Args)
+		s, _ := src.(string)
+		return t.Render(dst, s)
+	}}}
+	if _, err := e.Render("{% nest a %}", map[string]any{"a": "{% nest b %}", "b": "x"}, false); err != nil || !slices.Equal(depths, []int{0, 1}) {
+		t.Errorf("got %v, %v; want depths [0 1]", depths, err)
 	}
 }
