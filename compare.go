@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+var mirror = map[string]string{"==": "==", "!=": "!=", "<": ">", ">": "<", "<=": ">=", ">=": "<="}
+
+func valueCompare(c Comparer, op string, other val, at int) bool {
+	ok, err := c.Compare(op, other.hookValue())
+	if err != nil {
+		panic(bailout{hookErr("value", "compare", at, err)})
+	}
+	return ok
+}
+
 func compare(op string, a, b val, at int) bool {
 	switch op {
 	case "==":
