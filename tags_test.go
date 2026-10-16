@@ -3,6 +3,7 @@ package mist
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -135,5 +136,50 @@ func TestTagLookupSeesCounters(t *testing.T) {
 	}}}
 	if out, err := e.Render("{% increment n %}|{% show %}", nil, false); err != nil || out != "0|1" {
 		t.Fatalf("got %q, %v", out, err)
+	}
+}
+
+// nest renders the variable its argument names, as the render service's render_liquid does.
+var nest = Engine{Tags: map[string]TagFunc{"nest": func(dst []byte, t Tag) ([]byte, error) {
+	src, _ := t.Lookup(t.Args)
+	s, _ := src.(string)
+	return t.Render(dst, s)
+}}}
+
+// Expected outputs are liquidjs's, with nest rendering through the caller's Context.
+func TestTagRender(t *testing.T) {
+	for _, c := range []struct {
+		tpl  string
+		vars map[string]any
+		want string
+	}{
+		{"{% assign x = 'a' %}{% for i in (1..2) %}{% nest t %}{% endfor %}|{{ y }}|{% increment c %}", map[string]any{"t": "{{ i }}{{ x }}{{ forloop.index }}{% assign y = i %}{% increment c %}"}, "1a102a21|2|2"},
+		{"{% capture z %}<{% nest u %}>{% endcapture %}[{{ z }}]{{ w }}", map[string]any{"u": "{% assign w = 'W' %}in"}, "[<in>]W"},
+	} {
+		if out, err := nest.Render(c.tpl, c.vars, false); err != nil || out != c.want {
+			t.Errorf("%s: got %q, %v; want %q", c.tpl, out, err, c.want)
+		}
+	}
+	for _, c := range []struct {
+		tpl    string
+		vars   map[string]any
+		strict bool
+		kind   error
+		code   string
+	}{
+		{"{% nest v %}", map[string]any{"v": "{{ missing }}"}, true, ErrUndefined, "undefined"},
+		{"{% nest v %}", map[string]any{"v": "{% if true %}"}, false, ErrUnsupported, "unclosed-block"},
+		{"{% for i in (1..3) %}{% nest v %}{% endfor %}", map[string]any{"v": "{% endfor %}"}, false, ErrUnsupported, "unexpected-block-tag"},
+		{"{% for i in (1..3) %}{% nest v %}{% endfor %}", map[string]any{"v": "{% break %}"}, false, ErrUnsupported, "break-outside-for"}, // liquidjs breaks the caller's loop
+		{"{% nest v %}", map[string]any{"v": "{% nest v %}"}, false, ErrUnsupported, "nested-render-depth"},
+		{"{% nest v %}", map[string]any{"v": "{% for i in (1..10) %}{% endfor %}{% for i in (1..10) %}{% endfor %}"}, false, ErrUnsupported, "iteration-limit"},
+	} {
+		e := nest
+		e.Limits.Iterations = 15 // shared with the nested render
+		var me *Error
+		_, err := e.Render(c.tpl, c.vars, c.strict)
+		if !errors.Is(err, c.kind) || !errors.As(err, &me) || me.Code != c.code || me.Pos != strings.Index(c.tpl, "{% nest")+len("{%") {
+			t.Errorf("%s with %v: got %v; want %v %s at the tag", c.tpl, c.vars, err, c.kind, c.code)
+		}
 	}
 }

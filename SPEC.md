@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.23.x
+# mist Liquid subset — v0.24.x
 
 _Last updated 2026-10-16. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -162,7 +162,8 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 `Engine.Tags` registers inline tags (`{% name args %}`). Block tags such as `{% x %}…{% endx %}` aren't supported.
 - A tag's function runs each time the tag is reached in a live branch. That includes every loop iteration but never a dead branch.
 - The function gets the raw, trimmed text after the name (`Args`), the data passed to `Render` (`Vars`), and the strict flag. `Lookup(path)` resolves a variable in the tag's scope: loop variables, then assigns, then data.
-- Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Any other error stops rendering and is returned wrapped, so `errors.Is` still matches it.
+- `Render(dst, src)` renders `src` as Liquid in the tag's scope, as liquidjs renders a template with the caller's `Context`: it sees the tag's loop variables (including `forloop`), assigns and data, and the assigns, counters and `cycle` positions it sets persist after it. It shares the render's limits and nests at most 100 deep (`nested-render-depth`). Blocks it opens must close in it, and `break`/`continue` can't reach the tag's loops (liquidjs would break them), so both bail.
+- Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Returning an `*Error`, such as one from `Render`, stops the render with its `Kind` and `Code` at the tag's position. Any other error stops rendering and is returned wrapped (`hook:tag:NAME`), so `errors.Is` still matches it.
 - Built-in tag names can't be overridden, and names that aren't registered bail as before. `Engine.Check` accepts registered names without calling them. Their arguments aren't checked.
 - The parity contract doesn't cover custom tags. Matching the full engine's output for them is up to whoever implements the tag.
 
