@@ -1,6 +1,7 @@
 package mist
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"runtime/debug"
@@ -77,6 +78,9 @@ type renderer struct {
 	binds        []binding      // expression filter items, innermost last
 	lenientUndef bool           // a lenient path met an undefined variable under strict
 	env          map[string]any // increment and decrement counters, which liquidjs keeps in the data scope
+	floor        int            // frames a Tag.Render inherited, which its tags can't close or break out of
+	nested       int            // Tag.Render depth
+	scope        *tagScope      // what custom tags see, allocated on the first call so the renderer stays on the stack
 
 	// expression cursor: src is tpl[base:base+len(src)]
 	src  string
@@ -116,7 +120,7 @@ func (r *renderer) live() bool {
 }
 
 func (r *renderer) top() *frame {
-	if r.depth == 0 {
+	if r.depth == r.floor {
 		return nil
 	}
 	return r.frame(r.depth - 1)
@@ -181,7 +185,7 @@ func (r *renderer) run() {
 		}
 		r.checkOutput(start)
 	}
-	if r.depth > 0 {
+	if r.depth > r.floor {
 		bail(len(s), "unclosed-block", "unclosed block")
 	}
 }
@@ -424,10 +428,10 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	case "break", "continue":
 		r.end()
 		i := r.depth - 1
-		for i >= 0 && !r.frame(i).looping() {
+		for i >= r.floor && !r.frame(i).looping() {
 			i--
 		}
-		if i < 0 {
+		if i < r.floor { // a Tag.Render can't break its caller's loop
 			bail(b, "break-outside-for", "%s outside a for loop", name) // liquidjs stops rendering the template
 		}
 		if r.live() {
@@ -690,9 +694,24 @@ func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
 	if fn == nil {
 		bail(pos, "nil-tag-func", "tag %q is registered without a function", name) // e.g. for Check only
 	}
-	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, assigns: r.assigns, env: r.env, frames: r.frames()}
+	if r.scope == nil {
+		r.scope = new(tagScope)
+	}
+	s := r.scope
+	*s = tagScope{
+		vars: r.vars, assigns: r.assigns, env: r.env, cycles: r.cycles,
+		strict: r.strict, tags: r.tags, filterFns: r.filterFns, passUnknown: r.passUnknown, dialect: r.dialect, now: r.now,
+		limits: r.limits, outUsed: len(r.out) - r.outBase, spent: r.spent, iters: r.iters, nested: r.nested,
+	}
+	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, frames: r.frames(), scope: s}
 	out, err := fn(r.out, t)
+	r.assigns, r.env, r.cycles, r.spent, r.iters = s.assigns, s.env, s.cycles, s.spent, s.iters
 	if err != nil {
+		if me := (*Error)(nil); errors.As(err, &me) {
+			e := *me // from Tag.Render, say: keep its kind and code, at the tag
+			e.Pos = pos
+			panic(bailout{&e})
+		}
 		panic(bailout{hookErr("tag", name, pos, err)})
 	}
 	r.out = out

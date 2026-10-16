@@ -70,6 +70,7 @@ malformed-number
 math-non-finite
 memory-limit
 named-filter-arguments
+nested-render-depth
 nesting-too-deep
 nil-filter-func
 nil-literal-argument

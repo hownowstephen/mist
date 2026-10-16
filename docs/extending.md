@@ -29,6 +29,8 @@ e := mist.Engine{Tags: map[string]mist.TagFunc{
 }}
 ```
 
+`Tag.Render` renders Liquid in the tag's scope, for tags that render a variable or an argument as a template; return its error as is.
+
 Built-in tag names can't be overridden. Returning `ErrUnsupported` hands the template to the full engine; any other error stops rendering.
 
 ## Custom filters

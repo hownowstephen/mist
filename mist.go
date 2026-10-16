@@ -109,9 +109,24 @@ type Tag struct {
 	Vars   map[string]any // the data passed to Render, without assigns or loop variables
 	Strict bool
 
-	assigns map[string]any
-	env     map[string]any
-	frames  []frame
+	frames []frame
+	scope  *tagScope
+}
+
+// tagScope is the render state a Tag reads and Tag.Render carries on, copied back after the call.
+type tagScope struct {
+	vars, assigns, env map[string]any
+	cycles             map[string]int
+	strict             bool
+	tags               map[string]TagFunc
+	filterFns          map[string]FilterFunc
+	passUnknown        bool
+	dialect            *Dialect
+	now                func() time.Time
+	limits             Limits
+	outUsed            int // output so far, against limits.Output
+	spent, iters       int
+	nested             int
 }
 
 // Lookup resolves a variable path such as `product.url` or `items[0]` in the tag's
@@ -126,7 +141,7 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 			v, ok = nil, false
 		}
 	}()
-	r := renderer{tpl: path, vars: t.Vars, assigns: t.assigns, env: t.env}
+	r := renderer{tpl: path, vars: t.Vars, assigns: t.scope.assigns, env: t.scope.env}
 	for _, f := range t.frames {
 		r.push(f)
 	}
@@ -141,6 +156,35 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 		return nil, true // an assigned nil literal
 	}
 	return v, true
+}
+
+// maxNested is how deep Tag.Render nests, as the render service limits nested renders.
+const maxNested = 100
+
+// Render appends src rendered as Liquid in the tag's scope, as liquidjs renders a
+// template with the caller's Context: src sees the tag's loop variables, assigns and
+// Vars, and its assigns, counters and cycles persist after it. It shares the render's
+// limits. Blocks src opens must close in it, and its break and continue can't reach
+// the tag's loops. A TagFunc can return its error as is: an *Error stops the outer
+// render with the same Kind and Code, at the tag. On error out is nil.
+func (t Tag) Render(dst []byte, src string) (out []byte, err error) {
+	p := t.scope
+	if p.nested == maxNested {
+		return nil, &Error{Kind: ErrUnsupported, Code: "nested-render-depth", Msg: fmt.Sprintf("Tag.Render nested %d deep", maxNested)}
+	}
+	c := &renderer{
+		tpl: src, out: dst, vars: p.vars, assigns: p.assigns, env: p.env, cycles: p.cycles,
+		strict: p.strict, tags: p.tags, filterFns: p.filterFns, passUnknown: p.passUnknown, dialect: p.dialect, now: p.now,
+		limits: p.limits, outBase: len(dst) - p.outUsed, spent: p.spent, iters: p.iters, nested: p.nested + 1,
+	}
+	for _, f := range t.frames {
+		c.push(f)
+	}
+	c.floor = c.depth
+	defer func() { p.assigns, p.env, p.cycles, p.spent, p.iters = c.assigns, c.env, c.cycles, c.spent, c.iters }()
+	defer c.recoverBail(&err)
+	c.run()
+	return c.out, nil
 }
 
 // Render renders tpl with vars. strict makes undefined variables in output an error.
