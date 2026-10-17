@@ -4,18 +4,17 @@
 //   node bench.mjs -w              write each fixture's liquidjs output to NAME.out
 //   node bench.mjs -check          check liquidjs still renders every NAME.out
 //   node bench.mjs [-go GO.txt]    time liquidjs; with `go test -bench Fixture` output, compare
-import { Liquid } from 'liquidjs';
 import { readFileSync, readdirSync, writeFileSync, appendFileSync } from 'node:fs';
+import { newEngine } from './config.mjs';
 
-// The SPEC parity config, with the clock BenchmarkFixture uses.
-process.env.TZ = 'UTC';
+// The clock BenchmarkFixture uses.
 Date.now = () => 1700000000123;
 
 // mist must stay at least this many times faster than liquidjs rendering a pre-parsed template.
 const minSpeedup = 4;
 
 const dir = new URL('../testdata/bench/', import.meta.url);
-const engine = new Liquid({ lenientIf: true });
+const engine = newEngine();
 const opts = { strictVariables: true };
 const fixtures = readdirSync(dir).filter((f) => f.endsWith('.liquid')).sort().map((f) => {
   const name = f.slice(0, -'.liquid'.length);

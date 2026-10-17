@@ -5,7 +5,9 @@ mist's contract is simple: for any template it accepts, its output matches [liqu
 ## Setup
 
 - Go 1.25 or newer (`go.mod`'s minimum; CI tests the last three releases).
-- Node 22, for the liquidjs oracle: `cd scripts && npm ci`.
+- Node at the exact version in `.node-version`, for the liquidjs oracle: `cd scripts && npm ci`. Another Node release can carry another ICU, which changes case mapping and date output.
+
+`scripts/config.mjs` is the parity config that `parity.mjs`, `oracle.mjs` and `bench.mjs` share. It refuses to run unless the process locale is en-US (liquidjs takes its `locale` default from it), and fails if liquidjs's resolved options differ from `scripts/liquidjs-options.json`. After a deliberate change to either, rewrite the snapshot with `node scripts/config.mjs -w`. CI also regenerates `testdata/jscase.json` and `testdata/corpus.json` and fails if either differs from the committed file.
 
 ```bash
 go test ./...                 # unit tests, cases.json, the committed corpus
