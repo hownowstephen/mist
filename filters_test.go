@@ -265,6 +265,30 @@ func (d *toyDecimal) Compare(op string, other any) (bool, error) {
 	return false, errToy
 }
 
+func (d *toyDecimal) String() string { return d.s }
+
+// toyObject is a Comparer with no String.
+type toyObject struct{}
+
+func (toyObject) Compare(string, any) (bool, error) { return false, nil }
+
+// A Comparer is a JavaScript object: truthy, never default's empty case, and a string
+// as its String() wherever liquidjs calls String() on it.
+func TestComparerAsObject(t *testing.T) {
+	e := Engine{Filters: map[string]FilterFunc{
+		"dec": func(f Filter) (any, error) { return &toyDecimal{fmt.Sprint(f.Input)}, nil },
+		"obj": func(Filter) (any, error) { return toyObject{}, nil },
+	}}
+	tpl := "{% assign d = 2 | dec %}{{ d | prepend: '$' }}|{{ d | append: ' pts' | upcase }}|{{ 'n' | append: d }}|{% if d %}t{% endif %}|{{ d | default: 'x' | append: '' }}|{% assign o = 1 | obj %}{% if o %}t{% endif %}"
+	if out, err := e.Render(tpl, nil, false); err != nil || out != "$2|2 PTS|n2|t|2|t" {
+		t.Errorf("got %q, %v", out, err)
+	}
+	var me *Error
+	if _, err := e.Render("{% assign o = 1 | obj %}{{ o | append: '' }}", nil, false); !errors.As(err, &me) || me.Code != "value-type" {
+		t.Errorf("a Comparer without String: got %v; want value-type", err)
+	}
+}
+
 func TestComparer(t *testing.T) {
 	e := Engine{Filters: map[string]FilterFunc{"dec": func(f Filter) (any, error) {
 		return &toyDecimal{fmt.Sprint(f.Input)}, nil

@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.25.x
+# mist Liquid subset — v0.26.x
 
 _Last updated 2026-10-16. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -177,7 +177,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 - A filter returning `ErrUnchanged` leaves its input as it was. Returning `Filter.Input` instead would turn an undefined input into null, which compares differently (in lax mode, null ≠ undefined).
 - A filter returning `ErrBuiltin` applies the built-in filter of the same name to the same input and arguments, as if it weren't registered; with no built-in of that name it bails (or, with `PassUnknownFilters`, passes through as an unknown filter would). This lets an application change a built-in for some inputs only, such as nil handling in lax mode. `Check` accepts a registered name without checking the built-in's arguments.
 - Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Other errors stop rendering and are returned wrapped.
-- A returned value implementing `mist.Comparer` compares itself: `==`, `!=`, `<`, `>`, `<=` and `>=` with it on either side call its `Compare` (with the operator mirrored when it's on the right), before any dialect `Compare` hook. An error from it wrapping `ErrUnsupported` bails with code `hook:value:compare`. Elsewhere (truthiness, `contains`, `case`, output) it's a value of an unknown type, as before.
+- A returned value implementing `mist.Comparer` compares itself: `==`, `!=`, `<`, `>`, `<=` and `>=` with it on either side call its `Compare` (with the operator mirrored when it's on the right), before any dialect `Compare` hook. An error from it wrapping `ErrUnsupported` bails with code `hook:value:compare`. It is a JavaScript object to liquidjs, so it's truthy and `default` keeps it; with a `String()` method (`fmt.Stringer`) it stringifies as that wherever liquidjs calls `String()` on it, as string filters and their arguments do. Elsewhere (`contains`, `case`, `size`, numeric filters, output) it's a value of an unknown type.
 - A `nil` `FilterFunc` is accepted by `Check` and bails at render time.
 - The parity contract doesn't cover registered filters.
 - `Engine.PassUnknownFilters` matches liquidjs's `strictFilters: false`, its default: a filter that liquidjs 10.26 doesn't define and that isn't registered returns its input unchanged. Its arguments are still evaluated, so under strict an undefined argument is `ErrUndefined`, and the leading-`default` leniency doesn't apply to it. Filters liquidjs does define but mist doesn't implement (`uniq`, `compact`, …) still bail. Off by default, because an unknown name usually means a filter the full engine has and mist doesn't; set it only when `Filters` covers every filter the full engine defines.

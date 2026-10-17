@@ -3,6 +3,7 @@ package mist
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -237,6 +238,23 @@ func (v val) check(at int) val {
 	return v
 }
 
+func isComparer(v val) bool {
+	_, ok := v.x.(Comparer)
+	return ok && v.lit == 0
+}
+
+// comparerString is a Comparer's String() when it has one: what JavaScript's String() gives an object.
+func comparerString(v val) (string, bool) {
+	if !isComparer(v) {
+		return "", false
+	}
+	s, ok := v.x.(fmt.Stringer)
+	if !ok {
+		return "", false
+	}
+	return s.String(), true
+}
+
 func isObj(v val) bool {
 	switch v.x.(type) {
 	case map[string]any, []any:
@@ -254,8 +272,8 @@ func isNil(v val) bool {
 }
 
 func truthy(v val, at int) bool {
-	if v.keyword() != "" {
-		return true // liquidjs's EmptyDrop is an object
+	if v.keyword() != "" || isComparer(v) {
+		return true // liquidjs's EmptyDrop, and a Comparer, are objects
 	}
 	switch x := v.check(at).x.(type) {
 	case nil, Undefined, nilLitT:

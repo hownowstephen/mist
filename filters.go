@@ -230,7 +230,7 @@ func defaultFilter(v val, args []val, allowFalse bool, at int) val {
 		}
 		return v
 	}
-	if v.lit == litNum {
+	if v.lit == litNum || isComparer(v) {
 		return v
 	}
 	switch x := v.check(at).x.(type) {
@@ -251,6 +251,9 @@ func defaultFilter(v val, args []val, allowFalse bool, at int) val {
 // stringify appends v as liquidjs's stringify would render it.
 func stringify(dst []byte, v val, at int) []byte {
 	if s, ok := v.str(); ok {
+		return append(dst, s...)
+	}
+	if s, ok := comparerString(v); ok {
 		return append(dst, s...)
 	}
 	if v.lit == litNum {
