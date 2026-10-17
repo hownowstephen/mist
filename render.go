@@ -6,6 +6,7 @@ import (
 	"math"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -687,11 +688,24 @@ func sliceIndex(i, n int) int {
 	return max(0, min(i, n))
 }
 
+// assignsPool recycles assigns maps; only the top-level render puts one back, once nothing can reach it.
+var assignsPool = sync.Pool{New: func() any { return map[string]any{} }}
+
+const maxPooledAssigns = 128 // bigger maps go to the GC rather than pin their memory
+
 func (r *renderer) setAssign(name string, x any) {
 	if r.assigns == nil {
-		r.assigns = map[string]any{}
+		r.assigns = assignsPool.Get().(map[string]any)
 	}
 	r.assigns[name] = x
+}
+
+func (r *renderer) releaseAssigns() {
+	if r.assigns != nil && len(r.assigns) <= maxPooledAssigns {
+		clear(r.assigns)
+		assignsPool.Put(r.assigns)
+	}
+	r.assigns = nil
 }
 
 func (r *renderer) callTag(fn TagFunc, name, args, src string, pos int) {
