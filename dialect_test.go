@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -151,5 +152,48 @@ func TestDialectSeesFractionalNumbers(t *testing.T) {
 	out, err := e.Render("{{ 1.5 }} {{ -2.5 | abs }} {{ 2 | times: 1 }} {{ 7 | divided_by: 2 }}", nil, false)
 	if want := "float:1.5 float:2.5 int:2 float:3.5"; err != nil || out != want {
 		t.Fatalf("got %q, %v; want %q", out, err, want)
+	}
+}
+
+// NumberText keeps a literal's text, so a dialect can tell 2.0 from 2.
+func TestDialectNumberText(t *testing.T) {
+	var seen []any
+	e := Engine{
+		Dialect: &Dialect{NumberText: true, Output: func(dst []byte, v any) ([]byte, error) {
+			seen = append(seen, v)
+			return fmt.Appendf(dst, "%v", v), nil
+		}},
+		Filters: map[string]FilterFunc{"arg": func(f Filter) (any, error) { seen = append(seen, f.Args[0]); return f.Input, nil }},
+	}
+	out, err := e.Render("{{ 2.0 }}|{{ -3 }}|{{ 'x' | arg: 1.50 }}|{% assign n = 2.0 %}{{ n }}|{{ 1 | plus: 1 }}", nil, false)
+	if want := "2.0|-3|x|2.0|2"; err != nil || out != want {
+		t.Fatalf("got %q, %v; want %q", out, err, want)
+	}
+	if want := []any{json.Number("2.0"), json.Number("-3"), json.Number("1.50"), json.Number("2.0"), int64(2)}; !reflect.DeepEqual(seen, want) {
+		t.Errorf("hooks saw %#v; want %#v", seen, want)
+	}
+}
+
+// NoBuiltinFilters leaves only registered filters.
+func TestDialectNoBuiltinFilters(t *testing.T) {
+	e := Engine{
+		Dialect: &Dialect{NoBuiltinFilters: true},
+		Filters: map[string]FilterFunc{
+			"mine": func(Filter) (any, error) { return "m", nil },
+			"back": func(Filter) (any, error) { return nil, ErrBuiltin },
+		},
+	}
+	if out, err := e.Render("{{ x | mine }}", nil, false); err != nil || out != "m" {
+		t.Errorf("registered: got %q, %v", out, err)
+	}
+	for _, tpl := range []string{"{{ x | upcase }}", "{{ x | default: 1 }}", "{{ x | back }}", "{% if x %}{{ y | size }}{% endif %}"} {
+		var me *Error
+		_, err := e.Render(tpl, nil, false)
+		if tpl[len(tpl)-1] == '}' && strings.Contains(tpl, "if x") {
+			err = e.Check(tpl) // dead at render time, so only Check sees it
+		}
+		if !errors.As(err, &me) || !strings.HasPrefix(me.Code, "filter:") {
+			t.Errorf("%s: got %v; want a filter: bail", tpl, err)
+		}
 	}
 }

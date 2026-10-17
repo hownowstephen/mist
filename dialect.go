@@ -1,6 +1,9 @@
 package mist
 
-import "math"
+import (
+	"encoding/json"
+	"math"
+)
 
 // Dialect changes how values print and compare, and which constructs mist accepts,
 // so an application can target a Liquid engine that differs from liquidjs. With a
@@ -19,6 +22,16 @@ type Dialect struct {
 	// NoDefaultLeniency turns off liquidjs's rule that a leading `| default`
 	// makes an undefined input lenient under strict.
 	NoDefaultLeniency bool
+
+	// NumberText hands number literals to hooks and registered filters as
+	// json.Number holding their text, so an engine that distinguishes 2.0 from 2
+	// (Ruby's Float and Integer) sees which was written.
+	NumberText bool
+
+	// NoBuiltinFilters makes every filter that isn't in Engine.Filters bail,
+	// built-ins included, for an engine whose filters all differ from liquidjs's.
+	// A registered filter returning ErrBuiltin bails too.
+	NoBuiltinFilters bool
 }
 
 // Constructs is a set of template constructs a Dialect can reject.
@@ -55,6 +68,9 @@ func (v val) hookValue() any {
 	case litStr:
 		return v.s
 	case litNum:
+		if v.s != "" {
+			return json.Number(v.s) // a literal under Dialect.NumberText
+		}
 		if v.n == math.Trunc(v.n) && math.Abs(v.n) < maxSafeInt {
 			return int64(v.n)
 		}
