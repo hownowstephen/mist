@@ -657,6 +657,9 @@ func jsString(v val, at int) string {
 	if s, ok := v.str(); ok {
 		return s
 	}
+	if s, ok := comparerString(v); ok {
+		return s
+	}
 	if f, ok := v.check(at).num(at); ok {
 		return string(appendJSNumber(nil, f))
 	}
