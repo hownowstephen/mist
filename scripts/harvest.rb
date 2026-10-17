@@ -1,13 +1,13 @@
-# Harvests (template, data) pairs from Shopify/liquid-spec and Shopify/liquid's
-# test suite into JSON on stdout. Expected outputs are not kept: liquidjs is the
+# Harvests (template, data) pairs from Shopify/liquid-spec, jg-rp/golden-liquid and
+# Shopify/liquid's test suite into JSON. Expected outputs are not kept: liquidjs is the
 # oracle (see oracle.mjs), since Ruby Liquid differs from it.
 #
-#   ruby harvest.rb LIQUID_SPEC_DIR SHOPIFY_LIQUID_DIR OUT.json
+#   ruby harvest.rb LIQUID_SPEC_DIR GOLDEN_LIQUID_DIR SHOPIFY_LIQUID_DIR OUT.json
 require "yaml"
 require "json"
 
-spec_dir, liquid_dir, out = ARGV
-abort "usage: ruby harvest.rb LIQUID_SPEC_DIR SHOPIFY_LIQUID_DIR OUT.json" unless out
+spec_dir, golden_dir, liquid_dir, out = ARGV
+abort "usage: ruby harvest.rb LIQUID_SPEC_DIR GOLDEN_LIQUID_DIR SHOPIFY_LIQUID_DIR OUT.json" unless out
 
 # Plain JSON data only; drops, symbols, ranges etc. can't cross to liquidjs.
 def jsonable(v, depth = 0)
@@ -46,6 +46,11 @@ Dir.chdir(File.join(spec_dir, "specs")) do
     env = File.exist?("#{dir}/environment.yml") ? YAML.unsafe_load_file("#{dir}/environment.yml") : {}
     add("liquid-spec/#{dir}", dir, File.read(f), env)
   end
+end
+
+# Tests with partials (`templates`) need a file system liquidjs's oracle doesn't have.
+JSON.parse(File.read(File.join(golden_dir, "golden_liquid.json"), encoding: "UTF-8"))["tests"].each do |t|
+  add("golden-liquid", t["name"], t["template"], t["data"]) unless t["templates"]
 end
 
 # Record every template the Ruby test suite renders, instead of asserting.
