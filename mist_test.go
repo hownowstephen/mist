@@ -441,3 +441,10 @@ func TestRenderChainCountersWithNilVars(t *testing.T) {
 		t.Fatalf("got %v, %d, %v", res, n, vars)
 	}
 }
+
+// Invalid UTF-8 ends an identifier, so the parse fails where it stops.
+func TestInvalidUTF8EndsIdentifier(t *testing.T) {
+	if _, err := Render("{{ a.b\xff }}", map[string]any{"a": map[string]any{"b": 1}}, false); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("got %v; want ErrUnsupported", err)
+	}
+}

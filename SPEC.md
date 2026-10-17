@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.27.x
+# mist Liquid subset — v0.28.x
 
 _Last updated 2026-10-16. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -42,8 +42,9 @@ expr     = path | string | number | range | "true" | "false" | "nil" | "null" | 
 range    = "(" ws expr ws ".." ws expr ws ")" ;
 forparam = ( "limit" | "offset" ) ws ":" ws expr | "reversed" ;   (* each at most once *)
 path     = ident { "." ws word | "[" ws expr ws "]" } ;   (* ".." ends a path, for ranges; forloop must be followed by "." word *)
-ident    = ( letter | "_" ) { letter | digit | "_" | "-" | "?" } ;  (* ASCII only *)
-word     = ( letter | digit | "_" | "-" | "?" ) { letter | digit | "_" | "-" | "?" } ;
+ident    = ( letter | "_" | uword ) { letter | digit | "_" | "-" | "?" | uword } ;
+uword    = ? any non-ASCII character but U+00A0, U+1680, U+180E, U+2000–200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+201C and U+201D ? ;   (* liquidjs's word characters *)
+word     = ( letter | digit | "_" | "-" | "?" | uword ) { letter | digit | "_" | "-" | "?" | uword } ;
 string   = "'" { char | escape } "'" | '"' { char | escape } '"' ;  (* char: any but the quote or \ *)
 escape   = "\" ( "b" | "f" | "n" | "r" | "t" | "v" | "u" hex{0..4} | oct{1..3} | ? any other ? ) ;
 number   = [ "-" | "+" ] digit { digit } [ "." { digit } ] ;
