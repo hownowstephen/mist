@@ -76,6 +76,9 @@ func (r *renderer) filters(v val, eval bool) val {
 			r.spend(name, v, args, at)
 		}
 		fn, registered := r.filterFns[name]
+		if !registered && r.dialect != nil && r.dialect.NoBuiltinFilters {
+			bail(at, "filter:"+name, "filter %q isn't registered, and the dialect has no built-ins", name)
+		}
 		if registered {
 			if !eval {
 				continue
@@ -199,6 +202,9 @@ func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at 
 	x, err := fn(f)
 	switch {
 	case errors.Is(err, ErrBuiltin):
+		if r.dialect != nil && r.dialect.NoBuiltinFilters {
+			bail(at, "filter:"+name, "filter %q fell back to a built-in, and the dialect has none", name)
+		}
 		return val{}, true
 	case errors.Is(err, ErrUnchanged):
 		return v, false
