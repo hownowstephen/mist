@@ -222,7 +222,12 @@ func (r *renderer) expr(eval, lenient bool) val {
 	case c == '"' || c == '\'':
 		return val{s: r.str(), lit: litStr}
 	case c == '-' || c == '+' || isDigit(c):
-		return val{n: r.number(), lit: litNum}
+		start := r.p
+		n := r.number()
+		if r.dialect != nil && r.dialect.NumberText {
+			return val{n: n, s: r.src[start:r.p], lit: litNum}
+		}
+		return val{n: n, lit: litNum}
 	case c == '(':
 		return val{x: r.rangeLit(eval)}
 	case isIdentStart(c) || wordRune(r.src, r.p) > 0:

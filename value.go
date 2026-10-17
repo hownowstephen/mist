@@ -72,6 +72,9 @@ func (v val) any() any {
 	case litStr:
 		return v.s
 	case litNum:
+		if v.s != "" {
+			return json.Number(v.s) // a literal under Dialect.NumberText
+		}
 		if v.n == math.Trunc(v.n) && v.n >= 0 && !math.Signbit(v.n) && v.n < float64(len(boxed)) {
 			return boxed[int(v.n)]
 		}
