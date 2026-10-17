@@ -218,11 +218,11 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | `testdata/jscase.json` | JavaScript's `toUpperCase`/`toLowerCase` for every code point (`node scripts/jscase.mjs`). `TestCaseMapping` requires `capitalize`, `downcase` and `upcase` to match or bail for each one. |
 | `FuzzRender` | No panics. `Check` rejects ⇒ `Render` fails, and `Check` accepts ⇒ `Render` never bails on syntax. |
 
-Regenerate the corpus (needs Ruby, Node, and clones of both Shopify repos):
+Regenerate the corpus (needs Ruby, Node, and clones of Shopify/liquid-spec, [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) and Shopify/liquid):
 
 ```bash
 cd scripts && npm ci
-ruby harvest.rb ../../liquid-spec ../../liquid /tmp/harvest.json
+ruby harvest.rb ../../liquid-spec ../../golden-liquid ../../liquid /tmp/harvest.json
 go run ./gen -n 5000 -seed 1 > /tmp/gen.json
 node oracle.mjs /tmp/harvest.json /tmp/gen.json
 ```
