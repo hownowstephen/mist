@@ -65,12 +65,12 @@ jobs:
           name: fuzz-crashers
           path: testdata/fuzz
 
-  # liquidjs moves on; this shows what would change if the parity target did. Informational.
-  # scripts/latest pins the newest liquidjs, which Dependabot keeps current.
+  # liquidjs moves on; this shows what would change if the parity target did.
+  # scripts/latest pins the newest liquidjs, which Dependabot keeps current, and drift.txt
+  # lists the renders known to differ under it. A change to that list fails the job.
   liquidjs-latest:
     name: differential vs latest liquidjs
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,12 +86,16 @@ jobs:
         working-directory: scripts
       - run: node -p "'liquidjs ' + require('liquidjs/package.json').version" | tee -a "$GITHUB_STEP_SUMMARY"
         working-directory: scripts
-      # Known drift fails this step; the differential still runs.
-      - run: node parity.mjs | tee -a "$GITHUB_STEP_SUMMARY"
-        working-directory: scripts
-        shell: bash -o pipefail {0}
+      - name: cases.json and corpus.json drift against scripts/latest/drift.txt
+        run: |
+          scripts/latest/drift.sh > "$RUNNER_TEMP/drift.txt"
+          { echo '```diff'; diff -u scripts/latest/drift.txt "$RUNNER_TEMP/drift.txt" && echo 'no change'; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          cmp -s scripts/latest/drift.txt "$RUNNER_TEMP/drift.txt"
+      # New templates every night, so no baseline; read alongside drift.txt.
+      - name: generated templates (informational)
+        if: always()
         continue-on-error: true
-      - run: |
+        run: |
           go run ./scripts/gen -n 20000 -seed "$GITHUB_RUN_ID" > "$RUNNER_TEMP/gen.json"
           node scripts/oracle.mjs -o "$RUNNER_TEMP/oracle.json" "$RUNNER_TEMP/gen.json"
           MIST_CORPUS="$RUNNER_TEMP/oracle.json" go test -run TestCorpus -v . > "$RUNNER_TEMP/diff.txt"
@@ -105,12 +109,13 @@ jobs:
         with:
           name: liquidjs-latest-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/drift.txt
             ${{ runner.temp }}/diff.txt
             ${{ runner.temp }}/oracle.json
 
   report:
     name: open an issue on failure
-    needs: [differential, fuzz]
+    needs: [differential, fuzz, liquidjs-latest]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:

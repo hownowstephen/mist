@@ -9,6 +9,14 @@ mist's contract is simple: for any template it accepts, its output matches [liqu
 
 `scripts/config.mjs` is the parity config that `parity.mjs`, `oracle.mjs` and `bench.mjs` share. It refuses to run unless the process locale is en-US (liquidjs takes its `locale` default from it), and fails if liquidjs's resolved options differ from `scripts/liquidjs-options.json`. After a deliberate change to either, rewrite the snapshot with `node scripts/config.mjs -w`. CI also regenerates `testdata/jscase.json` and `testdata/corpus.json` and fails if either differs from the committed file.
 
+`scripts/latest` pins the newest liquidjs, which Dependabot keeps current, with its own options snapshot. `scripts/latest/drift.txt` lists the `cases.json` and `corpus.json` renders that differ under it, and the nightly fails, opening an issue, when that list changes. After reviewing a change, rewrite it with the newest liquidjs installed in `scripts/`:
+
+```bash
+cd scripts && cp latest/package.json latest/package-lock.json latest/liquidjs-options.json . && npm ci && cd ..
+scripts/latest/drift.sh > scripts/latest/drift.txt
+git checkout scripts/package.json scripts/package-lock.json scripts/liquidjs-options.json && (cd scripts && npm ci)
+```
+
 ```bash
 go test ./...                 # unit tests, cases.json, the committed corpus
 node scripts/parity.mjs       # cases.json against liquidjs
