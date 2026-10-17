@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"time"
+	"unsafe"
 )
 
 var (
@@ -210,7 +211,7 @@ func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, er
 		return tpl, nil
 	}
 	out, err := e.Append(make([]byte, 0, len(tpl)+len(tpl)/2), tpl, vars, strict)
-	return string(out), err
+	return unsafe.String(unsafe.SliceData(out), len(out)), err // out is ours alone
 }
 
 // Append is the package-level Append with e's custom tags.
