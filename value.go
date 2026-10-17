@@ -136,6 +136,9 @@ func key(v any, k val, at int) any {
 		return v
 	}
 	arr, isArr := v.([]any)
+	if s, ok := comparerString(k); ok {
+		k = strVal(s) // JavaScript keys by String(k)
+	}
 	if s, ok := k.str(); ok {
 		if !isArr {
 			return prop(v, s, at)
