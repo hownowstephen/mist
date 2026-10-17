@@ -540,7 +540,11 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		if live {
 			r.ws()
-			r.callTag(fn, name, strings.TrimSpace(r.src[r.p:]), b)
+			src := r.tpl[b:e] // a {% liquid %} line has no delimiters
+			if start := b - 2 - btoi(lt); start >= 0 && strings.HasPrefix(r.tpl[start:], "{%") && strings.HasSuffix(r.tpl[:next], "%}") {
+				src = r.tpl[start:next]
+			}
+			r.callTag(fn, name, strings.TrimSpace(r.src[r.p:]), src, b)
 		}
 	}
 	return next, rt
@@ -690,7 +694,7 @@ func (r *renderer) setAssign(name string, x any) {
 	r.assigns[name] = x
 }
 
-func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
+func (r *renderer) callTag(fn TagFunc, name, args, src string, pos int) {
 	if fn == nil {
 		bail(pos, "nil-tag-func", "tag %q is registered without a function", name) // e.g. for Check only
 	}
@@ -703,7 +707,7 @@ func (r *renderer) callTag(fn TagFunc, name, args string, pos int) {
 		strict: r.strict, tags: r.tags, filterFns: r.filterFns, passUnknown: r.passUnknown, dialect: r.dialect, now: r.now,
 		limits: r.limits, outUsed: len(r.out) - r.outBase, spent: r.spent, iters: r.iters, nested: r.nested,
 	}
-	t := Tag{Name: name, Args: args, Vars: r.vars, Strict: r.strict, frames: r.frames(), scope: s}
+	t := Tag{Name: name, Args: args, Source: src, Vars: r.vars, Strict: r.strict, Depth: r.nested, frames: r.frames(), scope: s}
 	out, err := fn(r.out, t)
 	r.assigns, r.env, r.cycles, r.spent, r.iters = s.assigns, s.env, s.cycles, s.spent, s.iters
 	if err != nil {
@@ -868,4 +872,11 @@ func (r *renderer) liquid(start, end int) {
 	if r.depth != depth {
 		bail(end, "liquid-tag-unclosed", "a block left open in a liquid tag")
 	}
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

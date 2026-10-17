@@ -106,8 +106,10 @@ type TagFunc func(dst []byte, t Tag) ([]byte, error)
 type Tag struct {
 	Name   string
 	Args   string         // raw text after the name, trimmed
+	Source string         // the tag as written, {% to %}; a {% liquid %} line has no delimiters
 	Vars   map[string]any // the data passed to Render, without assigns or loop variables
 	Strict bool
+	Depth  int // how many Tag.Render calls the tag runs inside: 0 in the template itself
 
 	frames []frame
 	scope  *tagScope
