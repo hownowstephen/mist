@@ -1,0 +1,24 @@
+cases.json date %N is milliseconds right-padded
+cases.json date %s shifts with a timezone
+cases.json liquidjs_filters.go lists 87 filters; liquidjs defines 88
+cases.json math filters
+cases.json numeric property names
+cases.json round
+cases.json truncatewords
+cases.json url_decode
+corpus.json generated "gen-1-3183" strict=false
+corpus.json generated "gen-1-3183" strict=true
+corpus.json generated "gen-1-4172" strict=false
+corpus.json generated "gen-1-4172" strict=true
+corpus.json generated "gen-1-4346" strict=false
+corpus.json generated "gen-1-4346" strict=true
+corpus.json generated "gen-1-4369" strict=false
+corpus.json generated "gen-1-4369" strict=true
+corpus.json liquid-spec/basics/filter-edge-cases.yml "slice_with_negative_length" strict=false
+corpus.json liquid-spec/basics/filter-edge-cases.yml "slice_with_negative_length" strict=true
+corpus.json liquid-spec/liquid_ruby/manual.yml "Truncatewords replaces UTF-8 ASCII whitespaces to a space character" strict=false
+corpus.json liquid-spec/liquid_ruby/manual.yml "Truncatewords replaces UTF-8 ASCII whitespaces to a space character" strict=true
+corpus.json liquid-spec/liquid_ruby/standard_filters.yml "StandardFilterTest#test_url_decode_db5f2730" strict=false
+corpus.json liquid-spec/liquid_ruby/standard_filters.yml "StandardFilterTest#test_url_decode_db5f2730" strict=true
+corpus.json liquid-spec/shopify_production_recordings/recorded_specs.yml "RecordedTest#test_truncatewords_with_newlines_c34fe3398" strict=false
+corpus.json liquid-spec/shopify_production_recordings/recorded_specs.yml "RecordedTest#test_truncatewords_with_newlines_c34fe3398" strict=true
