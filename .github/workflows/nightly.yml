@@ -27,7 +27,7 @@ jobs:
           go-version: stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version-file: .node-version
       - run: npm ci --no-audit --no-fund
         working-directory: scripts
       - name: generate 100k templates (seed ${{ env.SEED }})
@@ -80,9 +80,9 @@ jobs:
           go-version: stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version-file: .node-version
       - name: install the newest liquidjs in place of the parity target
-        run: cp latest/package.json latest/package-lock.json . && npm ci --no-audit --no-fund
+        run: cp latest/package.json latest/package-lock.json latest/liquidjs-options.json . && npm ci --no-audit --no-fund
         working-directory: scripts
       - run: node -p "'liquidjs ' + require('liquidjs/package.json').version" | tee -a "$GITHUB_STEP_SUMMARY"
         working-directory: scripts

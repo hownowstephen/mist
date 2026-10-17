@@ -24,7 +24,7 @@ For every template mist accepts, its output must match liquidjs 10.26 (`new Liqu
 | `liquidjs_filters.go` | Every filter liquidjs defines (checked by `parity.mjs`) |
 | `testdata/cases.json` | Hand-written cases, each checked against liquidjs |
 | `testdata/corpus.json` | Harvested and generated templates with liquidjs's results |
-| `scripts/` | `parity.mjs`, `oracle.mjs` (liquidjs as oracle), `gen/` (template generator), `bench.mjs` |
+| `scripts/` | `config.mjs` (the shared liquidjs config and environment checks), `parity.mjs`, `oracle.mjs` (liquidjs as oracle), `gen/` (template generator), `bench.mjs` |
 | `cmd/mistcheck` | The template checker |
 
 ## Commands

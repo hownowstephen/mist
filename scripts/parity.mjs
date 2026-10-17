@@ -1,10 +1,9 @@
 // Asserts testdata/cases.json against liquidjs as configured in SPEC.md.
 // Cases marked "unsupported" are only printed: mist bails, so liquidjs decides.
-import { Liquid } from 'liquidjs';
 import { readFileSync } from 'node:fs';
+import { newEngine } from './config.mjs';
 
-process.env.TZ = 'UTC'; // the SPEC parity config
-const engine = new Liquid({ lenientIf: true });
+const engine = newEngine();
 const realNow = Date.now;
 const cases = JSON.parse(readFileSync(new URL('../testdata/cases.json', import.meta.url)));
 let failed = 0;

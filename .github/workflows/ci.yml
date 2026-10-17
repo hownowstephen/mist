@@ -96,13 +96,20 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version-file: .node-version
       - run: npm ci --no-audit --no-fund
         working-directory: scripts
       - run: node parity.mjs
         working-directory: scripts
       - name: benchmark fixtures render as liquidjs does
         run: node bench.mjs -check
+        working-directory: scripts
+      # Both files are regenerated output; a different Node, ICU or liquidjs changes them.
+      - name: jscase.json matches this Node
+        run: node jscase.mjs -o "$RUNNER_TEMP/jscase.json" && cmp "$RUNNER_TEMP/jscase.json" ../testdata/jscase.json
+        working-directory: scripts
+      - name: corpus.json matches the oracle
+        run: node oracle.mjs -o "$RUNNER_TEMP/corpus.json" ../testdata/corpus.json && cmp "$RUNNER_TEMP/corpus.json" ../testdata/corpus.json
         working-directory: scripts
 
   differential:
@@ -119,7 +126,7 @@ jobs:
           go-version: stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version-file: .node-version
       - run: npm ci --no-audit --no-fund
         working-directory: scripts
       - name: generate 20k templates (seed ${{ env.SEED }})

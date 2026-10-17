@@ -2,16 +2,14 @@
 // writes their lax and strict results, the oracle for corpus_test.go.
 //
 //   node oracle.mjs [-o OUT.json] CASES.json...   (default out: ../testdata/corpus.json)
-import { Liquid } from 'liquidjs';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { newEngine } from './config.mjs';
 
-// The SPEC parity config runs with TZ=UTC. A fixed clock keeps 'now' reproducible;
-// corpus_test.go's corpusNow must match.
-process.env.TZ = 'UTC';
+// A fixed clock keeps 'now' reproducible; corpus_test.go's corpusEngine must match.
 Date.now = () => 1700000000123;
 
 // renderLimit only guards corpus generation against resource-limit specs.
-const engine = new Liquid({ lenientIf: true, renderLimit: 2000 });
+const engine = newEngine({ renderLimit: 2000 });
 
 // liquidjs's strip_html loops forever on an unclosed '<' after text, where mist bails;
 // throw there instead so generated cases can't hang the oracle.
