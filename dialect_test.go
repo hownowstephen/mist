@@ -197,3 +197,18 @@ func TestDialectNoBuiltinFilters(t *testing.T) {
 		}
 	}
 }
+
+// StrictAssign raises an undefined assign value under strict.
+func TestDialectStrictAssign(t *testing.T) {
+	tpl := "{% assign x = missing %}[{{ x }}]"
+	if out, err := (Engine{}).Render(tpl, nil, true); err != nil || out != "[]" {
+		t.Errorf("liquidjs: got %q, %v; want [] (lenient)", out, err)
+	}
+	e := Engine{Dialect: &Dialect{StrictAssign: true}}
+	if _, err := e.Render(tpl, nil, true); !errors.Is(err, ErrUndefined) {
+		t.Errorf("StrictAssign: got %v; want ErrUndefined", err)
+	}
+	if out, err := e.Render(tpl, nil, false); err != nil || out != "[]" {
+		t.Errorf("StrictAssign, lax: got %q, %v; want []", out, err)
+	}
+}

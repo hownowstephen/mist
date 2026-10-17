@@ -477,7 +477,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			bail(b, "assign-syntax", "expected: assign <ident> = <expr>")
 		}
 		r.p++
-		val := r.expr(live, true)
+		val := r.expr(live, r.dialect == nil || !r.dialect.StrictAssign)
 		if k := val.keyword(); k != "" {
 			bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)
 		}

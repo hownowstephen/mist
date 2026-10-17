@@ -32,6 +32,10 @@ type Dialect struct {
 	// built-ins included, for an engine whose filters all differ from liquidjs's.
 	// A registered filter returning ErrBuiltin bails too.
 	NoBuiltinFilters bool
+
+	// StrictAssign makes an undefined variable in an assign's value ErrUndefined under
+	// strict, as Ruby Liquid's strict_variables does; liquidjs reads it leniently.
+	StrictAssign bool
 }
 
 // Constructs is a set of template constructs a Dialect can reject.
