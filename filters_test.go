@@ -277,7 +277,7 @@ func (toyObject) Compare(string, any) (bool, error) { return false, nil }
 func TestComparerAsObject(t *testing.T) {
 	e := Engine{Filters: map[string]FilterFunc{
 		"dec": func(f Filter) (any, error) { return &toyDecimal{fmt.Sprint(f.Input)}, nil },
-		"obj": func(f Filter) (any, error) { return toyObject{}, nil },
+		"obj": func(Filter) (any, error) { return toyObject{}, nil },
 	}}
 	tpl := "{% assign d = 2 | dec %}{{ d | prepend: '$' }}|{{ d | append: ' pts' | upcase }}|{{ 'n' | append: d }}|{% if d %}t{% endif %}|{{ d | default: 'x' | append: '' }}|{% assign o = 1 | obj %}{% if o %}t{% endif %}"
 	if out, err := e.Render(tpl, nil, false); err != nil || out != "$2|2 PTS|n2|t|2|t" {
