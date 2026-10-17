@@ -411,6 +411,8 @@ func TestLimits(t *testing.T) {
 		{Engine{Limits: Limits{Output: 100}}, `{% liquid for i in (1..50)
 echo 'xxx'
 endfor %}`},
+		{Engine{Limits: Limits{Output: 100}}, big},
+		{Engine{Limits: Limits{Output: 100}}, `{{ 1 }}` + big},
 		{Engine{Limits: Limits{Iterations: 10}}, `{% for i in (1..12) %}{% endfor %}`},
 	} {
 		if _, err := c.e.Render(c.tpl, vars, false); !errors.Is(err, ErrUnsupported) || errors.Is(err, ErrInternal) {
@@ -422,7 +424,7 @@ endfor %}`},
 		t.Fatalf("raised limits: got %d bytes, %v", len(out), err)
 	}
 	// Output counts what this render writes, not what Append's dst already holds.
-	if _, err := e.Append(make([]byte, 1000), `x`, nil, false); err != nil {
+	if _, err := e.Append(make([]byte, 1000), `{{ 1 }}`+strings.Repeat("x", 149), nil, false); err != nil {
 		t.Fatal(err)
 	}
 }
