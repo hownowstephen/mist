@@ -51,6 +51,37 @@ func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
 func isIdentChar(c byte) bool { return identByte[c] != 0 }
 
+// wordRune is the length of the non-ASCII rune at s[i] when liquidjs counts it as a
+// word character, as it does every one but its Unicode blanks and curly double quotes;
+// else 0.
+func wordRune(s string, i int) int {
+	if i >= len(s) || s[i] < utf8.RuneSelf {
+		return 0
+	}
+	c, n := utf8.DecodeRuneInString(s[i:])
+	switch {
+	case c == utf8.RuneError && n == 1:
+		return 0 // invalid UTF-8 ends the identifier, and the parse fails where it stops
+	case c == 0xa0, c == 0x1680, c == 0x180e, c >= 0x2000 && c <= 0x200a, c == 0x2028, c == 0x2029, c == 0x202f, c == 0x205f, c == 0x3000, c == 0x201c, c == 0x201d:
+		return 0
+	}
+	return n
+}
+
+// identEnd is where the run of liquidjs word characters starting at s[i] ends.
+func identEnd(s string, i int) int {
+	for i < len(s) {
+		if isIdentChar(s[i]) {
+			i++
+		} else if n := wordRune(s, i); n > 0 {
+			i += n
+		} else {
+			break
+		}
+	}
+	return i
+}
+
 // identByte is 2 for bytes that start an identifier and 1 for the rest of liquidjs's
 // ASCII word characters (digits, '-' and '?').
 var identByte = func() (t [256]uint8) {
@@ -68,12 +99,10 @@ var identByte = func() (t [256]uint8) {
 // ident = ( letter | "_" ) { letter | digit | "_" | "-" }
 func (r *renderer) ident() string {
 	i := r.p
-	if i >= len(r.src) || !isIdentStart(r.src[i]) {
+	if i >= len(r.src) || !isIdentStart(r.src[i]) && wordRune(r.src, i) == 0 {
 		return ""
 	}
-	for i < len(r.src) && isIdentChar(r.src[i]) {
-		i++
-	}
+	i = identEnd(r.src, i)
 	s := r.src[r.p:i]
 	r.p = i
 	return s
@@ -196,7 +225,7 @@ func (r *renderer) expr(eval, lenient bool) val {
 		return val{n: r.number(), lit: litNum}
 	case c == '(':
 		return val{x: r.rangeLit(eval)}
-	case isIdentStart(c):
+	case isIdentStart(c) || wordRune(r.src, r.p) > 0:
 		save := r.p
 		var v any
 		switch r.ident() {
@@ -371,10 +400,8 @@ func (r *renderer) path(eval, lenient bool) any {
 			r.p++
 			r.ws() // liquidjs skips blanks before a property name
 			at := r.pos()
-			src, i, j := r.src, r.p, r.p
-			for j < len(src) && isIdentChar(src[j]) {
-				j++
-			}
+			src, i := r.src, r.p
+			j := identEnd(src, i)
 			r.p = j
 			seg := src[i:j]
 			if seg == "" || j < len(src) && src[j] >= utf8.RuneSelf && !r.blankAt(j) {
