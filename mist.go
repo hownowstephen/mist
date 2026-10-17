@@ -263,6 +263,7 @@ func RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrat
 func (e Engine) RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrated map[string]any) {
 	res = make([]Result, 0, len(steps))
 	owned := false
+	var cloned map[string]bool // nested maps bind has cloned, by path
 	var buf []byte
 	for i, st := range steps {
 		v := st.Vars
@@ -301,7 +302,10 @@ func (e Engine) RenderChain(steps []Step, vars map[string]any) (res []Result, n 
 				vars = map[string]any{}
 			}
 		}
-		if bindPath && !bind(vars, st.Key, body) {
+		if bindPath && cloned == nil {
+			cloned = map[string]bool{}
+		}
+		if bindPath && !bind(vars, st.Key, body, cloned, "") {
 			return res[:i], i, vars
 		}
 		if bindContent {
@@ -311,9 +315,9 @@ func (e Engine) RenderChain(steps []Step, vars map[string]any) (res []Result, n 
 	return res, len(steps), vars
 }
 
-// bind stores val at key in m, which must be owned. Nested maps are cloned.
-// ponytail: clones each nested level per bind; keep an owned set if deep keys get hot.
-func bind(m map[string]any, key []string, val any) bool {
+// bind stores val at key in m, which must be owned. A nested map is cloned the first
+// time a chain writes into it; cloned holds the paths already cloned.
+func bind(m map[string]any, key []string, val any, cloned map[string]bool, path string) bool {
 	if len(key) == 1 {
 		m[key[0]] = val
 		return true
@@ -322,10 +326,14 @@ func bind(m map[string]any, key []string, val any) bool {
 	if !isMap && m[key[0]] != nil {
 		return false // JS would set a property on a scalar; not worth mirroring
 	}
-	child = maps.Clone(child)
-	if child == nil {
-		child = map[string]any{}
+	path += "\x00" + key[0]
+	if !cloned[path] {
+		child = maps.Clone(child)
+		if child == nil {
+			child = map[string]any{}
+		}
+		m[key[0]] = child
+		cloned[path] = true
 	}
-	m[key[0]] = child
-	return bind(child, key[1:], val)
+	return bind(child, key[1:], val, cloned, path)
 }
