@@ -441,3 +441,19 @@ func TestRenderChainCountersWithNilVars(t *testing.T) {
 		t.Fatalf("got %v, %d, %v", res, n, vars)
 	}
 }
+
+// Pooled assigns maps come back empty, and big ones aren't pooled.
+func TestAssignsDoNotOutliveRender(t *testing.T) {
+	for _, n := range []int{1, maxPooledAssigns + 1} {
+		var b strings.Builder
+		for i := range n {
+			fmt.Fprintf(&b, "{%% assign a%d = 1 %%}", i)
+		}
+		if _, err := Render(b.String(), nil, false); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := Render("{{ a0 }}", nil, false); err != nil || out != "" {
+			t.Errorf("after %d assigns: got %q, %v; want empty", n, out, err)
+		}
+	}
+}
