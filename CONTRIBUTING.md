@@ -14,7 +14,7 @@ mist's contract is simple: for any template it accepts, its output matches [liqu
 ```bash
 cd scripts && cp latest/package.json latest/package-lock.json latest/liquidjs-options.json . && npm ci && cd ..
 scripts/latest/drift.sh > scripts/latest/drift.txt
-git checkout scripts && (cd scripts && npm ci)
+git checkout scripts/package.json scripts/package-lock.json scripts/liquidjs-options.json && (cd scripts && npm ci)
 ```
 
 ```bash
