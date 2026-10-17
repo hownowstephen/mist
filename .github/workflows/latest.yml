@@ -1,0 +1,40 @@
+name: Latest liquidjs
+
+# The nightly's drift check, on the PRs (mostly Dependabot's) that move scripts/latest.
+on:
+  pull_request:
+    paths:
+      - scripts/latest/**
+      - .github/workflows/latest.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: drift vs latest liquidjs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: install the newest liquidjs in place of the parity target
+        run: cp latest/package.json latest/package-lock.json latest/liquidjs-options.json . && npm ci --no-audit --no-fund
+        working-directory: scripts
+      - run: node -p "'liquidjs ' + require('liquidjs/package.json').version" | tee -a "$GITHUB_STEP_SUMMARY"
+        working-directory: scripts
+      - name: cases.json and corpus.json drift against scripts/latest/drift.txt
+        run: |
+          scripts/latest/drift.sh > "$RUNNER_TEMP/drift.txt"
+          { echo '```diff'; diff -u scripts/latest/drift.txt "$RUNNER_TEMP/drift.txt" && echo 'no change'; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          cmp -s scripts/latest/drift.txt "$RUNNER_TEMP/drift.txt"
