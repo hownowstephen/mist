@@ -283,6 +283,11 @@ func TestComparerAsObject(t *testing.T) {
 	if out, err := e.Render(tpl, nil, false); err != nil || out != "$2|2 PTS|n2|t|2|t" {
 		t.Errorf("got %q, %v", out, err)
 	}
+	// Indexing keys by String(); case/when and an array's contains use the value's ==.
+	tpl = "{% assign d = 1 | dec %}{{ xs[d] }}|{{ m[d] }}|{% case d %}{% when 1 %}one{% when d %}self{% else %}else{% endcase %}|{% assign ds = d | split: ',' %}{% if xs contains d %}c{% endif %}{% if d contains '1' %}x{% endif %}{% if '1' contains d %}s{% endif %}"
+	if out, err := e.Render(tpl, map[string]any{"xs": []any{"a", "b"}, "m": map[string]any{"1": "x"}}, false); err != nil || out != "b|x|self|s" {
+		t.Errorf("got %q, %v", out, err)
+	}
 	var me *Error
 	if _, err := e.Render("{% assign o = 1 | obj %}{{ o | append: '' }}", nil, false); !errors.As(err, &me) || me.Code != "value-type" {
 		t.Errorf("a Comparer without String: got %v; want value-type", err)
@@ -300,9 +305,9 @@ func TestComparer(t *testing.T) {
 		t.Errorf("got %q, %v; want %q", out, err, "bdefg")
 	}
 	for tpl, want := range map[string]string{
-		"{% assign d = 2 | dec %}{% if d > 's' %}{% endif %}":      "hook:value:compare",
-		"{% assign d = 2 | dec %}{% if d >= 1 %}{% endif %}":       "hook:value:compare",
-		"{% assign d = 2 | dec %}{% if d contains 1 %}{% endif %}": "value-type",
+		"{% assign d = 2 | dec %}{% if d > 's' %}{% endif %}": "hook:value:compare",
+		"{% assign d = 2 | dec %}{% if d >= 1 %}{% endif %}":  "hook:value:compare",
+		"{% assign d = 2 | dec %}{{ d | size }}":              "value-type",
 	} {
 		var me *Error
 		if _, err := e.Render(tpl, nil, false); !errors.As(err, &me) || me.Code != want {

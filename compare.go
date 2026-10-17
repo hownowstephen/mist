@@ -80,6 +80,12 @@ func ascii(s string) bool {
 
 // eq mirrors liquidjs: === on scalars, except the nil literal matches null and undefined.
 func eq(a, b val, at int) bool {
+	if c, ok := a.x.(Comparer); ok && a.lit == 0 {
+		return valueCompare(c, "==", b, at)
+	}
+	if c, ok := b.x.(Comparer); ok && b.lit == 0 {
+		return valueCompare(c, "==", a, at)
+	}
 	if a.keyword() != "" {
 		a, b = b, a
 	}
@@ -175,7 +181,13 @@ func blankValue(v val) bool {
 // contains mirrors liquidjs: array elements by ===, substrings of a string (the right side
 // coerced as indexOf does), and false for anything else.
 func contains(a, b val, at int) bool {
-	a, b = a.check(at), b.check(at)
+	if isComparer(a) {
+		return false // an object with no indexOf contains nothing
+	}
+	a = a.check(at)
+	if !isComparer(b) {
+		b = b.check(at)
+	}
 	if isObj(b) {
 		bail(at, "contains-object", "contains with an object or array on the right")
 	}
