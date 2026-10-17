@@ -456,6 +456,32 @@ var legacyLayouts = func() []string {
 	return append(ls, "Jan 2 15:04:05 2006", "January 2 15:04:05 2006") // asctime, as Date#toString once printed
 }()
 
+var legacyShapes = func() []layoutShape {
+	ss := make([]layoutShape, len(legacyLayouts))
+	for i, l := range legacyLayouts {
+		ss[i] = shapeOf(l)
+	}
+	return ss
+}()
+
+// layoutShape is what a string must share with a layout to parse with it, so legacyMs skips the
+// layouts that can't match without paying for time.Parse's error. Commas don't count: Go reads
+// one after seconds as a fractional-seconds separator.
+type layoutShape struct {
+	digit, slash, dash, pm bool
+	colons                 int
+}
+
+func shapeOf(s string) layoutShape {
+	return layoutShape{
+		digit:  s != "" && '0' <= s[0] && s[0] <= '9',
+		slash:  strings.IndexByte(s, '/') >= 0,
+		dash:   strings.IndexByte(s, '-') >= 0,
+		pm:     strings.HasSuffix(s, "AM") || strings.HasSuffix(s, "PM"),
+		colons: strings.Count(s, ":"),
+	}
+}
+
 // zoneOffsets are the zone names V8 knows, in minutes east of UTC.
 var zoneOffsets = map[string]int{"UTC": 0, "UT": 0, "GMT": 0, "EST": -300, "EDT": -240, "CST": -360, "CDT": -300, "MST": -420, "MDT": -360, "PST": -480, "PDT": -420}
 
@@ -492,7 +518,11 @@ func legacyMs(s string) (int64, bool) {
 	if n := len(s); n > 3 && (strings.EqualFold(s[n-3:], " am") || strings.EqualFold(s[n-3:], " pm")) {
 		s = s[:n-2] + strings.ToUpper(s[n-2:])
 	}
-	for _, l := range legacyLayouts {
+	shape := shapeOf(s)
+	for i, l := range legacyLayouts {
+		if legacyShapes[i] != shape {
+			continue
+		}
 		if t, err := time.ParseInLocation(l, s, time.UTC); err == nil {
 			return t.UnixMilli() - int64(off)*60000, true
 		}
