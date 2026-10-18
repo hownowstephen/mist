@@ -216,7 +216,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | Layer | What it proves |
 |---|---|
 | `testdata/cases.json` | Hand-written cases, one or more per rule above. `node scripts/parity.mjs` checks each expected output against liquidjs. A case's `now` fixes `Date.now` for `'now'` and `'today'`, and a bail case's `code` is the `Error.Code` mist must bail with. |
-| `testdata/corpus.json` | Every template with plain-JSON data from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) (including production recordings and the Dawn theme), [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) (except tests with partials) and Shopify/liquid's integration tests, plus 5,000 grammar-generated templates, each with liquidjs's lax and strict result, rendered with `TZ=UTC` and a fixed `Date.now` that `TestCorpus` shares. `TestCorpus` requires exact agreement wherever mist doesn't bail. |
+| `testdata/corpus.json` | Every template with plain-JSON data from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) (including production recordings and the Dawn theme), [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) (except tests with partials) and Shopify/liquid's integration tests, plus 5,000 grammar-generated templates, each with liquidjs's lax and strict result, rendered with `TZ=UTC` and a fixed `Date.now` that `TestCorpus` shares. `TestCorpus` requires exact agreement wherever mist doesn't bail, and fails if mist bails on a render listed in `testdata/corpus.accepted`. |
 | `scripts/gen` | Random templates from the grammar above with random data. Run large batches on demand (below). |
 | `testdata/jscase.json` | JavaScript's `toUpperCase`/`toLowerCase` for every code point (`node scripts/jscase.mjs`). `TestCaseMapping` requires `capitalize`, `downcase` and `upcase` to match or bail for each one. |
 | `testdata/jsdate.json` | liquidjs's `date` for every strftime directive, with flags and widths, across 59 instants (each hour that matters to `%p` and `%I`, each weekday, January 1 on each weekday, leap days, years 1000 and 9999), and for edge-case input strings (hour 24, second 60, February 30, ±24:00 offsets, two-digit years) (`node scripts/jsdate.mjs`). `TestDateTable` requires each to match or bail, and instants within years 1000–9999 to bail only on `%c`, `%x`, `%X` and `%Z`. |
@@ -230,6 +230,7 @@ cd scripts && npm ci
 ruby harvest.rb ../../liquid-spec ../../golden-liquid ../../liquid /tmp/harvest.json
 go run ./gen -n 5000 -seed 1 > /tmp/gen.json
 node oracle.mjs /tmp/harvest.json /tmp/gen.json
+cd .. && go test -run TestCorpus -update-accepted .
 ```
 
 For a large differential run without committing it, use a new seed each time:

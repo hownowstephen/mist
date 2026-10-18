@@ -32,7 +32,7 @@ node scripts/parity.mjs       # cases.json against liquidjs
 4. Run `go test ./...` (CI enforces a 99% coverage floor), a 100k generated differential and a few minutes of `go test -fuzz FuzzRender` ([SPEC.md § Verification](SPEC.md#verification) has the commands).
 5. Every bail takes a code (`Error.Code`), which callers rely on: reuse one that fits, or add a kebab-case one and record it with `go test -run TestCodes -update-codes .`. If a new bail depends on data rather than syntax, add its code to `runtimeCodes` in `mist_test.go`, or `FuzzRender` reports that `Check` accepted a template `Render` bailed on.
 
-Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, so the code diff stays reviewable.
+Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, so the code diff stays reviewable. `testdata/corpus.accepted` lists the corpus renders mist doesn't bail on, and `TestCorpus` fails if one starts bailing; that PR, or any that deliberately changes which renders bail, rewrites it with `go test -run TestCorpus -update-accepted .`.
 
 ### Adding a filter or tag
 
