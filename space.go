@@ -9,9 +9,11 @@ import (
 //	isBlank      ASCII whitespace: around endraw (skipBlank), and with U+00A0
 //	             between expression tokens (renderer.ws)
 //	isTrimBlank  liquidjs's BLANK class, ASCII plus U+00A0, U+1680, U+180E, U+2000–200A,
-//	             U+2028, U+2029, U+202F, U+205F, U+3000: what {%- and -%} trim
+//	             U+2028, U+2029, U+202F, U+205F, U+3000: what {%- and -%} trim, and
+//	             around each line of {% liquid %}
 //	jsSpace      JavaScript's \s, BLANK without U+180E but with U+FEFF: String#trim,
-//	             split(/\s+/), BlankDrop, and the filters that mirror them
+//	             split(/\s+/), BlankDrop, the filters that mirror them, and before
+//	             the # on each line of an inline comment
 
 // jsSpace is JavaScript's \s, which BlankDrop tests strings against.
 func jsSpace(c rune) bool {

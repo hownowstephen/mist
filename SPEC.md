@@ -8,7 +8,7 @@ _Last updated 2026-10-17. Parity target: liquidjs 10.26.0 configured with `new L
 
 ## Grammar
 
-LL(1) EBNF. Each production is one function in `render.go`/`expr.go`. Anything that doesn't derive from `template` is out of spec.
+LL(1) EBNF. Productions map to functions in `render.go`/`expr.go`, mostly of the same name (`range` is `rangeLit`, `string` is `str`, `forparam` is `forParams`, `{ filter }` is `filters`). Anything that doesn't derive from `template` is out of spec.
 
 ```ebnf
 template = { text | output | tag } ;
@@ -133,7 +133,6 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - `contains` with an array or object on the right.
 - `array_to_sentence_string` of anything but an array (liquidjs indexes a string's characters or throws), or of two or more items including an object or array; `slugify` with a mode other than those above, or of a character Go's Unicode tables don't assign.
 - `==` between two objects, including objects met while comparing arrays (JavaScript compares their references); ordering across other types or with non-ASCII strings.
-- `for` over anything but an array or nil.
 - String filters splitting a character outside the BMP, as `truncate`, `slice`, `first`, `last`, `split: ''`, `replace: ''` or `strip` with such a character can; string filters on invalid UTF-8; `downcase` or `upcase` of a character whose JavaScript mapping differs; `strip` whose argument is the `nil` literal (liquidjs passes it as a truthy Drop).
 - `truncate`, `truncatewords` or `slice` with a non-numeric count; `first` or `last` of an empty array, `last` of anything but a non-empty string or array, `first` of an object; `json` of an object.
 - `strip_html` of an unclosed `<` that follows text or a kept character, where liquidjs 10.26 loops forever.

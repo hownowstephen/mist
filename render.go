@@ -309,7 +309,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	live := r.live()
 	switch name {
 	case "if", "unless":
-		c := r.cond(live)
+		c := r.fcond(live)
 		if name == "unless" {
 			c = !c
 		}
@@ -324,7 +324,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			bail(b, "unexpected-block-tag", "unexpected elsif")
 		}
 		eval := f.parentLive && !f.taken && !r.check && r.halt == 0
-		f.active = r.cond(eval)
+		f.active = r.fcond(eval)
 		f.taken = f.taken || f.active
 	case "else":
 		r.end()
