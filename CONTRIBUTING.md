@@ -26,7 +26,7 @@ node scripts/parity.mjs       # cases.json against liquidjs
 
 [SPEC.md](SPEC.md) is normative. A change in behaviour is a change to it, made in the same PR:
 
-1. Add cases to `testdata/cases.json` and confirm them against liquidjs with `node scripts/parity.mjs`. Mark cases where mist bails with `"err": "unsupported"`.
+1. Add cases to `testdata/cases.json` and confirm them against liquidjs with `node scripts/parity.mjs`. Mark cases where mist bails with `"err": "unsupported"` and the `"code"` it bails with, which `TestCases` checks.
 2. Update SPEC.md's grammar and semantics. A spec change bumps the minor version, and the SPEC title names that line (`v0.15.x`).
 3. If the grammar changed, extend `scripts/gen` so the generated differentials cover it.
 4. Run `go test ./...` (CI enforces a 99% coverage floor), a 100k generated differential and a few minutes of `go test -fuzz FuzzRender` ([SPEC.md § Verification](SPEC.md#verification) has the commands).

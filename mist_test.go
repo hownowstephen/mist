@@ -18,7 +18,8 @@ type tcase struct {
 	Strict bool           `json:"strict"`
 	Out    string         `json:"out"`
 	Err    string         `json:"err"`
-	Now    *int64         `json:"now"` // Date.now in ms, for 'now' and 'today'
+	Code   string         `json:"code"` // Error.Code, required when Err is "unsupported"
+	Now    *int64         `json:"now"`  // Date.now in ms, for 'now' and 'today'
 }
 
 func loadCases(t testing.TB) []tcase {
@@ -52,8 +53,12 @@ func TestCases(t *testing.T) {
 					t.Fatalf("got %q, %v; want ErrUndefined", out, err)
 				}
 			case "unsupported":
-				if !errors.Is(err, ErrUnsupported) {
+				var e *Error
+				if !errors.Is(err, ErrUnsupported) || !errors.As(err, &e) {
 					t.Fatalf("got %q, %v; want ErrUnsupported", out, err)
+				}
+				if e.Code != c.Code {
+					t.Fatalf("got code %q; want %q", e.Code, c.Code)
 				}
 			}
 			// Everything that renders or fails authoritatively is in spec.
