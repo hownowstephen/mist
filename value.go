@@ -51,11 +51,11 @@ type val struct {
 	lit uint8
 }
 
-func isNilLit(v val) bool { return v.x == nilLit }
+func isNilLit(v val) bool { return v.lit == 0 && v.x == nilLit }
 
 func isUndef(v val) bool {
 	_, ok := v.x.(Undefined)
-	return ok
+	return ok && v.lit == 0
 }
 
 const (
