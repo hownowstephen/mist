@@ -1,0 +1,64 @@
+{
+  "root": [
+    "."
+  ],
+  "layouts": [
+    "."
+  ],
+  "partials": [
+    "."
+  ],
+  "relativeReference": true,
+  "jekyllInclude": false,
+  "keyValueSeparator": ":",
+  "cache": "undefined",
+  "extname": "",
+  "fs": {
+    "exists": "function",
+    "readFile": "function",
+    "existsSync": "function",
+    "readFileSync": "function",
+    "resolve": "function",
+    "fallback": "function",
+    "dirname": "function",
+    "contains": "function",
+    "containsSync": "function",
+    "sep": "/"
+  },
+  "dynamicPartials": true,
+  "jsTruthy": false,
+  "dateFormat": "%A, %B %-e, %Y at %-l:%M %P %z",
+  "locale": "en-US",
+  "trimTagRight": false,
+  "trimTagLeft": false,
+  "trimOutputRight": false,
+  "trimOutputLeft": false,
+  "greedy": true,
+  "tagDelimiterLeft": "{%",
+  "tagDelimiterRight": "%}",
+  "outputDelimiterLeft": "{{",
+  "outputDelimiterRight": "}}",
+  "preserveTimezones": false,
+  "strictFilters": false,
+  "strictVariables": false,
+  "ownPropertyOnly": true,
+  "lenientIf": true,
+  "globals": {},
+  "keepOutputType": false,
+  "operators": {
+    "==": "function",
+    "!=": "function",
+    ">": "function",
+    "<": "function",
+    ">=": "function",
+    "<=": "function",
+    "contains": "function",
+    "not": "function",
+    "and": "function",
+    "or": "function"
+  },
+  "memoryLimit": "Infinity",
+  "parseLimit": "Infinity",
+  "renderLimit": "Infinity",
+  "outputEscape": "undefined"
+}

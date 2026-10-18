@@ -543,5 +543,9 @@
   {"name": "date of a numeric offset without a time", "tpl": "{{ x | date: '%Y' }}", "data": {"x": "Mar 15 2024 +0530"}, "err": "unsupported"},
   {"name": "date of a two-digit year", "tpl": "{{ x | date: '%Y' }}", "data": {"x": "3/15/24"}, "err": "unsupported"},
   {"name": "date of a month prefix", "tpl": "{{ x | date: '%Y' }}", "data": {"x": "Marc 15 2024"}, "err": "unsupported"},
-  {"name": "date of a zone V8 doesn't know", "tpl": "{{ x | date: '%Y' }}", "data": {"x": "Mar 15 2024 10:20 CET"}, "err": "unsupported"}
+  {"name": "date of a zone V8 doesn't know", "tpl": "{{ x | date: '%Y' }}", "data": {"x": "Mar 15 2024 10:20 CET"}, "err": "unsupported"},
+  {"name": "non-ASCII property names", "tpl": "[{{ snippets.£15_bau_magic_link }}][{{snippets.é_x}}][{{ snippets.x£ }}][{{ snippets.日本 }}]", "data": {"snippets": {"£15_bau_magic_link": "L1", "é_x": "L2", "x£": "L3", "日本": "L4"}}, "out": "[L1][L2][L3][L4]"},
+  {"name": "non-ASCII root, assign and loop names", "tpl": "{{ £a }}|{% assign café = 'c' %}{{ café }}|{% for ü in xs %}{{ ü }}{% endfor %}|{{ émoji😀 }}", "data": {"£a": "top", "xs": [1, 2], "émoji😀": "e"}, "out": "top|c|12|e"},
+  {"name": "a no-break space ends a property name", "tpl": "[{{ a.b }}]", "data": {"a": {"b": "x"}}, "out": "[x]"},
+  {"name": "a curly quote ends a property name", "tpl": "{{ a.b“ }}", "data": {"a": {"b": "x"}}, "err": "unsupported"}
 ]

@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.28.x
+# mist Liquid subset — v0.30.x
 
 _Last updated 2026-10-17. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -42,8 +42,9 @@ expr     = path | string | number | range | "true" | "false" | "nil" | "null" | 
 range    = "(" ws expr ws ".." ws expr ws ")" ;
 forparam = ( "limit" | "offset" ) ws ":" ws expr | "reversed" ;   (* each at most once *)
 path     = ident { "." ws word | "[" ws expr ws "]" } ;   (* ".." ends a path, for ranges; forloop must be followed by "." word *)
-ident    = ( letter | "_" ) { letter | digit | "_" | "-" | "?" } ;  (* ASCII only *)
-word     = ( letter | digit | "_" | "-" | "?" ) { letter | digit | "_" | "-" | "?" } ;
+ident    = ( letter | "_" | uword ) { letter | digit | "_" | "-" | "?" | uword } ;
+uword    = ? any non-ASCII character but U+00A0, U+1680, U+180E, U+2000–200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+201C and U+201D ? ;   (* liquidjs's word characters *)
+word     = ( letter | digit | "_" | "-" | "?" | uword ) { letter | digit | "_" | "-" | "?" | uword } ;
 string   = "'" { char | escape } "'" | '"' { char | escape } '"' ;  (* char: any but the quote or \ *)
 escape   = "\" ( "b" | "f" | "n" | "r" | "t" | "v" | "u" hex{0..4} | oct{1..3} | ? any other ? ) ;
 number   = [ "-" | "+" ] digit { digit } [ "." { digit } ] ;
@@ -191,6 +192,9 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | `Output(dst, v)` | Prints non-string values: numbers, bools, arrays, objects, and the `blank` and `empty` keywords. Strings, nil and undefined are printed by mist as usual. |
 | `Compare(op, a, b)` | Evaluates `==`, `!=`, `<`, `>`, `<=`, `>=` in conditions. Truthiness and `and`/`or` are unchanged. |
 | `Reject` | A set of constructs that bail in both `Render` and `Check`, including in dead branches: `TrimMarkers`, `NegativeLiterals` (including negative indexes), `UnspacedOperators` (a comparison operator with no whitespace before it, such as `x==2`), `RawBlocks`, `BlankKeyword`, `EmptyKeyword`. |
+| `NumberText` | Number literals reach hooks and registered filters as `json.Number` holding their text, so `2.0` and `2` stay distinct (Ruby's Float and Integer). |
+| `NoBuiltinFilters` | Only registered filters run: any other filter, `default` included, bails with `filter:NAME`, as does a registered filter returning `ErrBuiltin`. |
+| `StrictAssign` | Under strict, an undefined variable in an `assign` value is `ErrUndefined`, as in Ruby Liquid; liquidjs reads it leniently. |
 | `NoDefaultLeniency` | Turns off the leading-`default` leniency rule. Combine with an overriding `default` in `Engine.Filters` to change `default` itself. |
 
 - **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integral number literals and results (`3`, `2 | times: 1`) and `float64` for fractional ones (`1.5`), `nil` for nil, undefined and the `nil` literal (but `mist.Undefined{}` for undefined inside arrays and objects), and `mist.Blank` and `mist.Empty` for those keywords.

@@ -5,7 +5,17 @@ mist's contract is simple: for any template it accepts, its output matches [liqu
 ## Setup
 
 - Go 1.25 or newer (`go.mod`'s minimum; CI tests the last three releases).
-- Node 22, for the liquidjs oracle: `cd scripts && npm ci`.
+- Node at the exact version in `.node-version`, for the liquidjs oracle: `cd scripts && npm ci`. Another Node release can carry another ICU, which changes case mapping and date output.
+
+`scripts/config.mjs` is the parity config that `parity.mjs`, `oracle.mjs` and `bench.mjs` share. It refuses to run unless the process locale is en-US (liquidjs takes its `locale` default from it), and fails if liquidjs's resolved options differ from `scripts/liquidjs-options.json`. After a deliberate change to either, rewrite the snapshot with `node scripts/config.mjs -w`. CI also regenerates `testdata/jscase.json` and `testdata/corpus.json` and fails if either differs from the committed file.
+
+`scripts/latest` pins the newest liquidjs, which Dependabot keeps current, with its own options snapshot. `scripts/latest/drift.txt` lists the `cases.json` and `corpus.json` renders that differ under it, and the nightly fails, opening an issue, when that list changes. PRs that touch `scripts/latest`, such as Dependabot's bumps, run the same check, so a bump that changes the list needs `drift.txt` rewritten in the same PR. After reviewing a change, rewrite `drift.txt` with the newest liquidjs installed in `scripts/`:
+
+```bash
+cd scripts && cp latest/package.json latest/package-lock.json latest/liquidjs-options.json . && npm ci && cd ..
+scripts/latest/drift.sh > scripts/latest/drift.txt
+git checkout scripts/package.json scripts/package-lock.json scripts/liquidjs-options.json && (cd scripts && npm ci)
+```
 
 ```bash
 go test ./...                 # unit tests, cases.json, the committed corpus
