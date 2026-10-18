@@ -276,8 +276,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		if _, undef := v.x.(Undefined); undef && v.lit == 0 {
 			return v // JSON.stringify(undefined) is undefined
 		}
-		var buf [128]byte
-		return strVal(string(appendJSON(buf[:0], v, at)))
+		return strVal(jsonStr(v, at))
 	case "split":
 		if !takes(0, 1) {
 			return v
