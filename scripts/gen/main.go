@@ -8,37 +8,81 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
+	"math"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"strings"
 )
 
 var (
-	names  = []string{"a", "b", "c", "x", "xs", "n", "s", "user", "items", "size", "first", "f-g", "f", "tz"}
-	props  = []string{"a", "b", "name", "id", "k", "size", "first", "last", "nested"}
-	words  = []string{"", " ", "hi", "  \n ", "\t", " ", "é", "{", "}", "%", "<p>"}
+	names = []string{"a", "b", "c", "x", "xs", "n", "s", "user", "items", "size", "first", "f-g", "f", "tz"}
+	props = []string{"a", "b", "name", "id", "k", "size", "first", "last", "nested"}
+	keys  = []string{"0", "1", "-1", "01", "b?", " a", "a b", "f-g"} // map keys that props can't reach
+	// A bare "{" before a tag makes "{{%", which bails, so text uses "{ ".
+	words  = []string{"", " ", "hi", "  \n ", "\t", "\u00a0", "é", "{ ", "}", "%", "<p>", "\r\n", "\u2003", "\u3000x"}
 	blanks = []string{"", " ", "  ", "\n", " \t "}
-	dates  = []string{"'%Y-%m-%d'", "'%s'", "'%H:%M:%S.%L %N'", "'%a %b %e %-l%P %z'", "'%A %B %-d, %Y %I:%M %p'", "'%j %U %W %u %w %y %C %q'", "'%:z %^a %#B %_5d %-m%%'", "'%Q %'", "f"}
-	zones  = []string{"'UTC'", "'America/New_York'", "'Asia/Kolkata'", "'Australia/Adelaide'", "'US/Pacific'", "-330", "300", "tz"}
+	// Rarer blanks, most of which mist bails on between tokens.
+	oddBlanks = []string{"\r", "\v", "\f", "\r\n", " \u00a0", "\u2003", "\u3000", "\u2028", "\u1680", "\ufeff", "\u180e", "\u0085", "\u202f"}
+	dates     = []string{"'%Y-%m-%d'", "'%s'", "'%H:%M:%S.%L %N'", "'%a %b %e %-l%P %z'", "'%A %B %-d, %Y %I:%M %p'", "'%j %U %W %u %w %y %C %q'", "'%:z %^a %#B %_5d %-m%%'", "'%Q %'", "f"}
+	zones     = []string{"'UTC'", "'America/New_York'", "'Asia/Kolkata'", "'Australia/Adelaide'", "'US/Pacific'", "-330", "300", "tz"}
 )
 
 type gen struct {
 	r     *rand.Rand
-	loops []string
+	loops []loop
+	data  map[string]any
 	b     strings.Builder
+	// wild templates also draw the constructs mist mostly bails on, which would bail
+	// nearly every template if all of them could.
+	wild bool
+	// liquid is set inside a liquid tag, where a newline ends the line.
+	liquid bool
 }
 
-func (g *gen) pick(xs []string) string    { return xs[g.r.IntN(len(xs))] }
-func (g *gen) ws() string                 { return g.pick(blanks) }
+// odd is a 1 in n chance in a wild template, and never in a tame one.
+func (g *gen) odd(n int) bool { return g.wild && g.r.IntN(n) == 0 }
+
+// mostly is true except for a 1 in n chance in a wild template, or 1 in 4n in a tame one.
+func (g *gen) mostly(n int) bool {
+	if g.wild {
+		return g.r.IntN(n) > 0
+	}
+	return g.r.IntN(4*n) > 0
+}
+
+// loop is an enclosing for's variable and a guess at one of its items, nil if unknown.
+type loop struct {
+	name  string
+	item  any
+	small bool // every item is a small number, so it can bound a range
+}
+
+func (g *gen) pick(xs []string) string { return xs[g.r.IntN(len(xs))] }
+func (g *gen) ws() string {
+	b := g.pick(blanks)
+	if g.odd(6) {
+		b = g.pick(oddBlanks)
+	}
+	if g.liquid {
+		return strings.ReplaceAll(b, "\n", " ")
+	}
+	return b
+}
 func (g *gen) pickF(xs []float64) float64 { return xs[g.r.IntN(len(xs))] }
 
 func (g *gen) path() string {
 	if len(g.loops) > 0 && g.r.IntN(8) == 0 {
 		return "forloop." + g.pick([]string{"index", "index0", "rindex", "rindex0", "first", "last", "length", "name", "parentloop"})
 	}
+	if g.mostly(3) {
+		p, _ := g.typedPath()
+		return p
+	}
 	var p string
 	if len(g.loops) > 0 && g.r.IntN(2) == 0 {
-		p = g.pick(g.loops)
+		p = g.loops[g.r.IntN(len(g.loops))].name
 	} else {
 		p = g.pick(names)
 	}
@@ -59,14 +103,218 @@ func (g *gen) path() string {
 	return p
 }
 
+// typedPath walks the data from a root it defines, so most steps hit a key, index or
+// size rather than a scalar. It returns the path and the value it reaches; assigns and
+// captures can still change what a root holds by the time it renders.
+func (g *gen) typedPath() (string, any) {
+	var p string
+	var v any
+	if len(g.loops) > 0 && g.r.IntN(2) == 0 {
+		l := g.loops[g.r.IntN(len(g.loops))]
+		p, v = l.name, l.item
+	} else {
+		var roots []string
+		for _, k := range names {
+			if _, ok := g.data[k]; ok {
+				roots = append(roots, k)
+			}
+		}
+		if len(roots) == 0 {
+			return g.pick(names), nil
+		}
+		p = g.pick(roots)
+		v = g.data[p]
+	}
+	for range g.r.IntN(4) {
+		switch x := v.(type) {
+		case map[string]any:
+			if len(x) == 0 {
+				return p, v
+			}
+			k := g.pick(sortedKeys(x))
+			p, v = p+g.keyRef(k), x[k]
+		case []any:
+			if len(x) == 0 {
+				return p, v
+			}
+			i := g.r.IntN(len(x))
+			switch g.r.IntN(5) {
+			case 0:
+				p, i = p+".first", 0
+			case 1:
+				p, i = p+".last", len(x)-1
+			case 2:
+				p += fmt.Sprintf("[%d]", i-len(x))
+			default:
+				p += fmt.Sprintf("[%d]", i)
+			}
+			v = x[i]
+		case string:
+			if g.r.IntN(3) == 0 {
+				return p + ".size", float64(len(x))
+			}
+			return p, v
+		default:
+			return p, v
+		}
+	}
+	return p, v
+}
+
+func sortedKeys(m map[string]any) []string { return slices.Sorted(maps.Keys(m)) }
+
+// keyRef is a step to map key k: .k where the key allows it, else ["k"].
+func (g *gen) keyRef(k string) string {
+	if g.r.IntN(3) > 0 && strings.Trim(k, "abcdefghijklmnopqrstuvwxyz0123456789-?") == "" {
+		return "." + k
+	}
+	if g.r.IntN(2) == 0 {
+		return "['" + k + "']"
+	}
+	return fmt.Sprintf("[%q]", k)
+}
+
+type found struct {
+	path string
+	v    any
+}
+
+// find returns paths, two steps deep at most, to the values in the data that match ok,
+// from roots in names other than loop variables, and with items from loop variables'
+// known items.
+func (g *gen) find(names []string, items bool, ok func(any) bool) []found {
+	var fs []found
+	var walk func(p string, v any, depth int)
+	walk = func(p string, v any, depth int) {
+		if ok(v) {
+			fs = append(fs, found{p, v})
+		}
+		if depth == 2 {
+			return
+		}
+		switch x := v.(type) {
+		case map[string]any:
+			for _, k := range sortedKeys(x) {
+				walk(p+g.keyRef(k), x[k], depth+1)
+			}
+		case []any:
+			for i, e := range x {
+				walk(p+fmt.Sprintf("[%d]", i), e, depth+1)
+			}
+		}
+	}
+	for _, l := range g.loops {
+		if items && l.item != nil {
+			walk(l.name, l.item, 0)
+		}
+	}
+	for _, k := range names {
+		if v, in := g.data[k]; in && !slices.ContainsFunc(g.loops, func(l loop) bool { return l.name == k }) {
+			walk(k, v, 0)
+		}
+	}
+	return fs
+}
+
+// bound is a range bound: a literal, or a path to a small number that no assign,
+// capture or counter can rebind (liquidjs would build the whole range of a large one).
+func (g *gen) bound() string {
+	if g.r.IntN(2) == 0 {
+		if g.odd(2) {
+			return g.pick([]string{"2.5", "'2'", "-1.5", "'a'"})
+		}
+		return g.pick([]string{"1", "0", "-2", "3", "5"})
+	}
+	var small, seen []string
+	for _, l := range slices.Backward(g.loops) { // an inner loop shadows an outer one
+		if l.small && !slices.Contains(names[:6], l.name) && !slices.Contains(seen, l.name) {
+			small = append(small, l.name)
+		}
+		seen = append(seen, l.name)
+	}
+	for _, f := range g.find(names[6:], false, func(v any) bool {
+		f, ok := v.(float64)
+		return ok && math.Abs(f) <= 20 && (f == math.Trunc(f) || g.r.IntN(4) == 0)
+	}) {
+		small = append(small, f.path)
+	}
+	if len(small) == 0 {
+		return "2"
+	}
+	return g.pick(small)
+}
+
+// collection is a for loop's collection, mostly a range or a path to an array, and
+// the loop it binds.
+func (g *gen) collection(name string) (string, loop) {
+	l := loop{name: name}
+	if g.r.IntN(3) == 0 {
+		l.item, l.small = 1.0, true
+		return g.rangeLit(), l
+	}
+	arrs := g.find(names, true, func(v any) bool { _, ok := v.([]any); return ok })
+	if len(arrs) == 0 || !g.mostly(2) {
+		return g.path(), l
+	}
+	f := arrs[g.r.IntN(len(arrs))]
+	if a := f.v.([]any); len(a) > 0 {
+		l.item = a[g.r.IntN(len(a))]
+	}
+	return f.path, l
+}
+
+func (g *gen) rangeLit() string {
+	ws := func() string { return g.pick([]string{"", "", " "}) }
+	return "(" + ws() + g.bound() + ws() + ".." + ws() + g.bound() + ws() + ")"
+}
+
+// nonNil is expr, but only a wild template draws the nil literal.
+func (g *gen) nonNil() string {
+	for {
+		if e := g.expr(); e != "nil" && e != "null" || g.odd(2) {
+			return e
+		}
+	}
+}
+
+// outExpr is mostly a path to a scalar, since output bails on arrays, objects and nil.
+func (g *gen) outExpr() string {
+	if g.mostly(2) {
+		fs := g.find(names, true, func(v any) bool {
+			switch v.(type) {
+			case float64, string, bool:
+				return true
+			}
+			return false
+		})
+		if len(fs) > 0 && g.r.IntN(3) > 0 {
+			return fs[g.r.IntN(len(fs))].path
+		}
+	}
+	return g.nonNil()
+}
+
 func (g *gen) expr() string {
-	switch g.r.IntN(8) {
+	switch g.r.IntN(9) {
 	case 0:
+		if g.odd(3) {
+			return fmt.Sprintf("'%s'", g.pick([]string{"}}", "%}", "a}}b", "{{ x }}", "{%", "-%}"}))
+		}
 		return fmt.Sprintf("'%s'", g.pick([]string{"", "a", "b", "A", "10", "2", "now", `it\'s`, `a\\b`, `\u00e9\n`, `\101\q`, `"`}))
 	case 1:
-		return g.pick([]string{fmt.Sprint(g.r.IntN(21) - 10), "1.5", "-0.25", "2.", "+3", "0.1", "10.0"})
+		return g.pick([]string{fmt.Sprint(g.r.IntN(21) - 10), "1.5", "-0.25", "2.", "+3", "0.1", "10.0", "-2.5", "-1.5", "-3.75"})
 	case 2:
 		return g.pick([]string{"true", "false", "nil", "null"})
+	case 3:
+		if g.r.IntN(3) == 0 {
+			if g.odd(3) {
+				return fmt.Sprintf(`"%s"`, g.pick([]string{"}}", "x }} y", "%}", "{%- if %}"}))
+			}
+			return fmt.Sprintf(`"%s"`, g.pick([]string{"", "a", "b", "10", "it's", `a\"b`, `\n`, "'", "A", "now"}))
+		}
+		if g.r.IntN(8) == 0 {
+			return g.rangeLit()
+		}
 	}
 	return g.path()
 }
@@ -115,7 +363,11 @@ func (g *gen) filters() string {
 			}
 		case 1:
 			af := g.pick([]string{"allow_false: true", "allow_false: false"})
-			switch g.r.IntN(6) {
+			k := g.r.IntN(5) + 2
+			if g.odd(2) {
+				k = g.r.IntN(2)
+			}
+			switch k {
 			case 0:
 				f += " | default: " + af + ", " + g.expr()
 			case 1:
@@ -176,14 +428,35 @@ func (g *gen) cmp() string {
 		return g.expr() + g.ws() + op + g.ws() + kw
 	}
 	if op == "contains" {
-		return g.expr() + " " + g.ws() + op + " " + g.ws() + g.expr()
+		return g.expr() + " " + g.ws() + op + " " + g.ws() + g.nonNil()
+	}
+	if op[0] == '<' || op[0] == '>' {
+		return g.ordered() + g.ws() + op + g.ws() + g.ordered()
 	}
 	return g.expr() + g.ws() + op + g.ws() + g.expr()
 }
 
+// ordered is mostly an operand < and > accept: a number, or a path to a number or string.
+func (g *gen) ordered() string {
+	if !g.mostly(3) {
+		return g.expr()
+	}
+	fs := g.find(names, true, func(v any) bool {
+		switch v.(type) {
+		case float64, string:
+			return true
+		}
+		return false
+	})
+	if len(fs) == 0 || g.r.IntN(4) == 0 {
+		return g.pick([]string{fmt.Sprint(g.r.IntN(21) - 10), "1.5", "-2.5", "'a'", "'10'"})
+	}
+	return fs[g.r.IntN(len(fs))].path
+}
+
 func (g *gen) open(tag string) string {
 	l, r := g.pick([]string{"{%", "{%-"}), g.pick([]string{"%}", "-%}"})
-	return l + g.pick([]string{" ", " ", "\u00a0"}) + g.ws() + tag + g.ws() + " " + r
+	return l + g.pick([]string{" ", " ", " ", " ", " ", " ", "\u00a0", "\r", "\f", "\v"}) + g.ws() + tag + g.ws() + " " + r
 }
 
 func (g *gen) block(depth int) {
@@ -197,7 +470,7 @@ func (g *gen) block(depth int) {
 				g.b.WriteString(l + g.ws() + g.pick([]string{"blank", "empty"}) + g.ws() + r)
 				break
 			}
-			g.b.WriteString(l + g.ws() + g.expr() + g.filters() + g.ws() + r)
+			g.b.WriteString(l + g.ws() + g.outExpr() + g.filters() + g.ws() + r)
 		case k == 5 && depth < 4:
 			tag := g.pick([]string{"if", "unless"})
 			g.b.WriteString(g.open(tag + " " + g.cond()))
@@ -212,22 +485,23 @@ func (g *gen) block(depth int) {
 			}
 			g.b.WriteString(g.open("end" + tag))
 		case k == 6 && depth < 4:
-			v := g.pick([]string{"i", "item", "x"})
-			coll := g.path()
-			if g.r.IntN(4) == 0 {
-				// Literal bounds only: data such as 1e21 would make liquidjs build a vast array.
-				coll = "(" + g.pick([]string{"1", "0", "-2", "3"}) + ".." + g.pick([]string{"3", "1", "5", "0"}) + ")"
-			}
+			coll, l := g.collection(g.pick([]string{"i", "item", "x"}))
+			sep := " "
 			for _, m := range []string{"limit", "offset"} {
 				if g.r.IntN(4) == 0 {
-					coll += " " + m + ":" + g.pick([]string{"2", " 1", "-1", "0", "9", "n"})
+					n := g.pick([]string{"2", " 1", "-1", "0", "9", "3"})
+					if g.odd(3) {
+						n = g.pick([]string{"n", "1.5", "'2'"})
+					}
+					coll += sep + m + ":" + n
+					sep = g.pick([]string{" ", ", ", ","})
 				}
 			}
 			if g.r.IntN(4) == 0 {
 				coll += " reversed"
 			}
-			g.b.WriteString(g.open("for " + v + " in " + coll))
-			g.loops = append(g.loops, v)
+			g.b.WriteString(g.open("for " + l.name + " in " + coll))
+			g.loops = append(g.loops, l)
 			g.block(depth + 1)
 			if g.r.IntN(3) == 0 {
 				g.b.WriteString(g.open("if "+g.cond()) + g.open(g.pick([]string{"break", "continue"})) + g.open("endif"))
@@ -260,31 +534,74 @@ func (g *gen) block(depth int) {
 		case k == 7:
 			g.b.WriteString(g.open("assign " + g.pick(names[:6]) + g.ws() + "=" + g.ws() + g.expr() + g.filters()))
 		case k == 8 && g.r.IntN(2) == 0 && depth < 4:
-			g.b.WriteString(g.open("capture " + g.pick(names[:6])))
+			c := g.pick(names[:6])
+			if g.r.IntN(4) == 0 {
+				q := g.pick([]string{`"`, "'"})
+				if g.odd(4) {
+					q = `"'`
+				}
+				c = q[:1] + c + q[len(q)-1:]
+			}
+			g.b.WriteString(g.open("capture " + c))
 			g.block(depth + 1)
 			g.b.WriteString(g.open("endcapture"))
 		case k == 9 && g.r.IntN(2) == 0:
 			switch g.r.IntN(4) {
 			case 0:
-				g.b.WriteString(g.open("echo " + g.expr() + g.filters()))
+				if g.r.IntN(6) == 0 {
+					g.b.WriteString(g.open("echo"))
+					break
+				}
+				g.b.WriteString(g.open("echo " + g.outExpr() + g.filters()))
 			case 1:
 				g.b.WriteString(g.open(g.pick([]string{"increment ", "decrement "}) + g.pick(names[:6])))
 			case 2:
-				g.b.WriteString(g.open("# " + g.pick(words) + g.pick([]string{"", "\n # more", "\n x"})))
+				c := g.pick([]string{"", "\n # more"})
+				if g.odd(3) {
+					c = "\n x"
+				}
+				g.b.WriteString(g.open("# " + g.pick(words) + c))
 			default:
 				lines := []string{"liquid"}
+				g.liquid = true
 				for range g.r.IntN(4) + 1 {
-					switch g.r.IntN(4) {
+					switch g.r.IntN(12) {
 					case 0:
-						lines = append(lines, "echo "+g.expr()+g.filters())
+						lines = append(lines, "echo "+g.outExpr()+g.filters())
 					case 1:
 						lines = append(lines, "assign "+g.pick(names[:6])+" = "+g.expr()+g.filters())
 					case 2:
 						lines = append(lines, "if "+g.cond(), "echo "+g.expr(), "endif")
+					case 3:
+						coll, _ := g.collection("i")
+						lines = append(lines, "for i in "+coll, "echo i")
+						if g.r.IntN(2) == 0 {
+							lines = append(lines, "if "+g.cond(), g.pick([]string{"break", "continue"}), "endif")
+						}
+						lines = append(lines, "endfor")
+					case 4:
+						lines = append(lines, "case "+g.expr(), "when "+g.expr(), "echo "+g.expr())
+						if g.r.IntN(2) == 0 {
+							lines = append(lines, "else", "echo "+g.expr())
+						}
+						lines = append(lines, "endcase")
+					case 5:
+						lines = append(lines, "unless "+g.cond(), "echo "+g.expr(), "endunless")
+					case 6:
+						lines = append(lines, "capture "+g.pick(names[:6]), "echo "+g.outExpr()+g.filters(), "endcapture")
+					case 7:
+						lines = append(lines, "cycle "+g.nonNil()+", "+g.nonNil())
+					case 8:
+						lines = append(lines, g.pick([]string{"increment ", "decrement "})+g.pick(names[:6]))
+					case 9:
+						lines = append(lines, "# "+g.pick([]string{"note", "", "{{ x }}", "%}"}))
+					case 10:
+						lines = append(lines, "echo")
 					default:
 						lines = append(lines, "for i in (1..3)", "echo i", "endfor")
 					}
 				}
+				g.liquid = false
 				g.b.WriteString(g.open(strings.Join(lines, g.pick([]string{"\n", "\n  ", "\n\n"}))))
 			}
 		case k == 8 && g.r.IntN(3) == 0:
@@ -293,7 +610,7 @@ func (g *gen) block(depth int) {
 				if i > 0 {
 					c += ", "
 				}
-				c += g.expr()
+				c += g.nonNil()
 			}
 			g.b.WriteString(g.open("cycle " + c))
 		case k == 8:
@@ -365,7 +682,8 @@ func (g *gen) value(depth int) any {
 	case 2:
 		return float64(g.r.IntN(21) - 10)
 	case 3:
-		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000, 1700000000, 1710460800.5, -86400})
+		return g.pickF([]float64{0.5, -1.25, 99.99, 0.1 + 0.2, 1e21, 1e-7, 2.5e-8, 123456789012345680000, 1700000000, 1710460800.5, -86400,
+			-2.5, -1.75, -12.5, 1699963200, 1699965000.25, 1710504000})
 	case 4:
 		if g.r.IntN(4) == 0 {
 			return g.dateString()
@@ -373,12 +691,20 @@ func (g *gen) value(depth int) any {
 		return g.pick([]string{"", "a", "b", "A", "10", "2", " x ", "  ", "\u00a0", "\u0085", "hELLO wORLD", "élodie", "иВАН", "ßtraße", "ΣΟΦΙΑΣ",
 			"now", "1700000000", "2024-02-29", "2024-03-10T07:30:00Z", "2024-11-03 01:30:00", "2024-03-15T10:20:30.5+05:45", "2024-02-30", "Mar 5 2024", "%d/%m", "Europe/Paris",
 			"a,b,,c", "one two  three", "a&amp;b<c>", "😀 hi", " 12 ", "0x1f", "Hello World, and more words than fit",
-			"a\r\nb\rc\n", "<b>hi</b> <script>s</script>t<!-- c -->", "<style>x</style><p>p", "a%20b+%C3%A9", "%zz", "aGk=", "aG k=x"})
+			"a\r\nb\rc\n", "<b>hi</b> <script>s</script>t<!-- c -->", "<style>x</style><p>p", "a%20b+%C3%A9", "%zz", "aGk=", "aG k=x",
+			"2024-03-10T12:00:00Z", "2023-11-14 12:30:00", "a}}b{%c%}", "\u2003x\u3000", "a\vb\fc",
+			"The quick brown fox jumps over the lazy dog, then naps in the warm afternoon sun",
+			"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen",
+			"ééééééééééééééééééééééééé ééééééééééééééééééééééééé éé", "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀 tail words here"})
 	case 5, 6:
 		if depth < 3 {
 			m := map[string]any{}
 			for range g.r.IntN(4) {
-				m[g.pick(props)] = g.value(depth + 1)
+				k := g.pick(props)
+				if g.r.IntN(4) == 0 {
+					k = g.pick(keys)
+				}
+				m[k] = g.value(depth + 1)
 			}
 			return m
 		}
@@ -402,13 +728,16 @@ func main() {
 	var cases []map[string]any
 	for i := range *n {
 		g.b.Reset()
-		g.block(0)
 		data := map[string]any{}
 		for _, k := range names {
-			if g.r.IntN(3) > 0 {
+			// size and first are mostly defined: undefined, they resolve to liquidjs built-ins and bail.
+			if g.r.IntN(3) > 0 || (k == "size" || k == "first") && g.r.IntN(8) > 0 {
 				data[k] = g.value(0)
 			}
 		}
+		g.data = data
+		g.wild = g.r.IntN(6) == 0
+		g.block(0)
 		cases = append(cases, map[string]any{"src": "generated", "name": fmt.Sprintf("gen-%d-%d", *seed, i), "tpl": g.b.String(), "data": data})
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(cases); err != nil {
