@@ -44,7 +44,7 @@ func (r *renderer) filters(v val, eval bool) val {
 		}
 
 		var buf [maxFilterArgs]val
-		args, allowFalse := buf[:0], false
+		args, allowFalse, named := buf[:0], false, false
 		r.ws()
 		for sep := byte(':'); r.peek() == sep; sep = ',' {
 			r.p++
@@ -58,8 +58,14 @@ func (r *renderer) filters(v val, eval bool) val {
 				if key != "allow_false" || name != "default" || (w != "true" && w != "false") {
 					bail(at, "named-filter-arguments", "named filter arguments other than default's allow_false: true/false are not supported")
 				}
-				allowFalse = w == "true"
+				if len(args) == 0 {
+					bail(at, "named-filter-arguments", "allow_false needs a default value before it") // liquidjs uses the pair as the default
+				}
+				allowFalse, named = w == "true", true
 			} else {
+				if named {
+					bail(at, "named-filter-arguments", "positional filter arguments after allow_false are not supported")
+				}
 				if len(args) == maxFilterArgs {
 					bail(at, "too-many-filter-arguments", "more than %d filter arguments", maxFilterArgs)
 				}

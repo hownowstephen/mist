@@ -167,6 +167,7 @@ func (r *renderer) run() {
 		}
 		if start == len(s) {
 			r.emit(text)
+			r.checkOutput(start)
 			break
 		}
 		b, e, next, lt, rt := delimBounds(s, start, isTag)

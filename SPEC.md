@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.29.x
+# mist Liquid subset — v0.30.x
 
-_Last updated 2026-10-16. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-17. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, though it may report a different error. Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails. Every error is an `*Error` whose `Code` names the reason and stays the same across releases (`testdata/codes.txt` lists them), so callers can count bails by reason without parsing `Msg`. A panic in mist or in a registered tag, filter or dialect hook is recovered as `ErrInternal`, which wraps `ErrUnsupported` so the caller falls back; it means a bug, and `Error.Stack` says where.
 
@@ -14,8 +14,8 @@ LL(1) EBNF. Each production is one function in `render.go`/`expr.go`. Anything t
 template = { text | output | tag } ;
 text     = ? bytes up to the next "{{" or "{%" ? ;
 output   = "{{" [ "-" ] ws expr { filter } ws [ "-" ] "}}" ;
-filter   = "|" ident [ ":" [ farg { "," farg } ] ] ;          (* at most 4 positional args; built-ins take the counts below; "f:" alone has none *)
-farg     = expr | "allow_false" ":" ( "true" | "false" ) ;    (* named: only default's allow_false *)
+filter   = "|" ident [ ":" [ expr { "," expr } { "," named } ] ] ;  (* at most 4 positional args; built-ins take the counts below; "f:" alone has none *)
+named    = "allow_false" ":" ( "true" | "false" ) ;           (* only default's, after its value *)
 tag      = "{%" [ "-" ] ws tagbody ws [ "-" ] "%}" ;
 
 tagbody  = "if" fcond | "elsif" fcond | "else" | "endif"
@@ -147,7 +147,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 
 ### Out of spec (always bails)
 
-Filters other than the built-ins above and registered ones (with `Engine.PassUnknownFilters`, only those liquidjs defines); built-ins with more arguments than listed (or none where one is required); named filter arguments other than `allow_false`; `for` parameters other than `limit`, `offset` and `reversed` (and `reversed` with a value), `break`/`continue`/`forloop` outside a `for`, `cycle` values not separated by commas or that are `blank`, `empty` or `nil`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `tablerow`, `include`/`render`, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, a string escape of half a surrogate pair, and any tag not in the grammar.
+Filters other than the built-ins above and registered ones (with `Engine.PassUnknownFilters`, only those liquidjs defines); built-ins with more arguments than listed (or none where one is required); named filter arguments other than `allow_false`, and `allow_false` without a value before it or with a positional argument after it; `for` parameters other than `limit`, `offset` and `reversed` (and `reversed` with a value), `break`/`continue`/`forloop` outside a `for`, `cycle` values not separated by commas or that are `blank`, `empty` or `nil`, a `when` after `else`, `when` values separated by anything but `,` or `or`, `case` on `blank` or `empty`, `tablerow`, `include`/`render`, `contains nil`, `contains` glued to the next word (`a containsb`), `capture` with anything after its name, a string escape of half a surrogate pair, and any tag not in the grammar.
 
 ## Limits
 

@@ -114,7 +114,17 @@ func (g *gen) filters() string {
 				}
 			}
 		case 1:
-			f += " | default: " + g.expr() + g.pick([]string{"", ", allow_false: true", ", allow_false: false"})
+			af := g.pick([]string{"allow_false: true", "allow_false: false"})
+			switch g.r.IntN(6) {
+			case 0:
+				f += " | default: " + af + ", " + g.expr()
+			case 1:
+				f += " | default: " + af
+			case 2:
+				f += " | default: " + g.expr()
+			default:
+				f += " | default: " + g.expr() + ", " + af
+			}
 		case 2, 3:
 			f += " | default: " + g.expr()
 		default:
