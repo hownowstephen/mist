@@ -153,6 +153,9 @@ func (r *renderer) push(f frame) {
 	case r.depth-inlineDepth < len(r.deep):
 		r.deep[r.depth-inlineDepth] = f
 	default:
+		if r.deep == nil {
+			r.deep = make([]frame, 0, inlineDepth) // one allocation up to twice inlineDepth
+		}
 		r.deep = append(r.deep, f)
 	}
 	r.depth++
