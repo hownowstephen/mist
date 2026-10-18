@@ -25,7 +25,7 @@ For every template mist accepts, its output must match liquidjs 10.26 (`new Liqu
 | `testdata/cases.json` | Hand-written cases, each checked against liquidjs |
 | `testdata/corpus.json` | Harvested and generated templates with liquidjs's results |
 | `testdata/corpus.accepted` | The corpus renders mist doesn't bail on; `TestCorpus` fails if one starts bailing |
-| `scripts/` | `config.mjs` (the shared liquidjs config and environment checks), `parity.mjs`, `oracle.mjs` (liquidjs as oracle), `gen/` (template generator), `bench.mjs` |
+| `scripts/` | `config.mjs` (the shared liquidjs config and environment checks), `parity.mjs`, `oracle.mjs` (liquidjs as oracle), `gen/` (template generator), `fuzzcases/` (fuzz corpus to oracle input), `bench.mjs` |
 | `cmd/mistcheck` | The template checker |
 
 ## Commands
