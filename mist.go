@@ -153,7 +153,7 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 	return v, true
 }
 
-// maxNested is how deep Tag.Render nests, as the render service limits nested renders.
+// maxNested bounds how deep Tag.Render nests.
 const maxNested = 100
 
 // Render appends src rendered as Liquid in the tag's scope, as liquidjs renders a
@@ -193,7 +193,7 @@ func Append(dst []byte, tpl string, vars map[string]any, strict bool) ([]byte, e
 // Templates that pass can still bail at render time on data-dependent rules (see SPEC.md).
 func Check(tpl string) error { return Engine{}.Check(tpl) }
 
-// Render is the package-level Render with e's custom tags.
+// Render is the package-level Render with e's configuration.
 func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, error) {
 	if start, _ := nextDelim(tpl, 0); start == len(tpl) && len(tpl) <= e.Limits.orDefaults().Output {
 		return tpl, nil
@@ -202,7 +202,7 @@ func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, er
 	return unsafe.String(unsafe.SliceData(out), len(out)), err // out is ours alone
 }
 
-// Append is the package-level Append with e's custom tags.
+// Append is the package-level Append with e's configuration.
 func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
 	out, _, err = e.append(dst, tpl, vars, strict)
 	return out, err
@@ -219,7 +219,7 @@ func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool)
 	return r.out, nil, nil
 }
 
-// Check is the package-level Check, also accepting e's custom tags.
+// Check is the package-level Check with e's configuration.
 func (e Engine) Check(tpl string) (err error) {
 	r := renderer{config: e.config(nil, false), tpl: tpl, check: true}
 	defer r.recoverBail(&err)
@@ -253,7 +253,7 @@ func RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrat
 	return Engine{}.RenderChain(steps, vars)
 }
 
-// RenderChain is the package-level RenderChain with e's custom tags.
+// RenderChain is the package-level RenderChain with e's configuration.
 func (e Engine) RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrated map[string]any) {
 	res = make([]Result, 0, len(steps))
 	owned := false

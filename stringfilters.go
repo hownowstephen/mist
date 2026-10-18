@@ -418,7 +418,7 @@ func appendJSON(dst []byte, v val, at int) []byte {
 				dst = append(dst, ',')
 			}
 			if e == nil {
-				dst = append(dst, "null"...) // JSON.stringify writes null for undefined elements too
+				dst = append(dst, "null"...)
 				continue
 			}
 			dst = appendJSON(dst, val{x: e}, at)
