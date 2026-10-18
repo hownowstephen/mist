@@ -1,9 +1,12 @@
 // Runs harvested/generated cases through liquidjs (the SPEC.md parity config) and
-// writes their lax and strict results, the oracle for corpus_test.go.
+// writes their lax and strict results, and what the lax render charged memoryLimit,
+// the oracle for corpus_test.go.
 //
 //   node oracle.mjs [-o OUT.json] CASES.json...   (default out: ../testdata/corpus.json)
 import { readFileSync, writeFileSync } from 'node:fs';
-import { newEngine } from './config.mjs';
+import { countMemory, newEngine } from './config.mjs';
+
+const memory = countMemory();
 
 // A fixed clock keeps 'now' reproducible; corpus_test.go's corpusEngine must match.
 Date.now = () => 1700000000123;
@@ -47,9 +50,12 @@ function run(tpl, data, strict) {
 }
 
 const corpus = cases.map(({ src, name, tpl, data }) => {
+  memory.spent = 0;
   const lax = run(tpl, data, false);
+  const mem = memory.spent;
   const strict = run(tpl, data, true);
   const c = { src, name, tpl, data, lax };
+  if (lax.out !== undefined && mem > 0) c.mem = mem;
   if (JSON.stringify(strict) !== JSON.stringify(lax)) c.strict = strict;
   return c;
 });

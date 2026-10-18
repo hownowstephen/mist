@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"math"
 	"os"
 	"slices"
 	"strings"
@@ -15,7 +16,9 @@ import (
 // corpus.json holds templates harvested from Shopify/liquid-spec and Shopify/liquid's
 // tests with liquidjs's results (scripts/oracle.mjs). Wherever mist doesn't bail it
 // must agree with liquidjs exactly, except that ErrUndefined only requires liquidjs to
-// fail too (it may report a later syntax error instead). MIST_CORPUS points the test at another oracle file.
+// fail too (it may report a later syntax error instead). Where mist renders what liquidjs
+// rendered, it must bail with Limits.Memory just under what liquidjs charged its
+// memoryLimit, as liquidjs would refuse then. MIST_CORPUS points the test at another oracle file.
 type corpusCase struct {
 	Src    string         `json:"src"`
 	Name   string         `json:"name"`
@@ -23,6 +26,7 @@ type corpusCase struct {
 	Data   map[string]any `json:"data"`
 	Lax    oracle         `json:"lax"`
 	Strict *oracle        `json:"strict"`
+	Mem    float64        `json:"mem"` // what the lax render charged liquidjs's memoryLimit
 }
 
 type oracle struct {
@@ -50,7 +54,7 @@ func TestCorpus(t *testing.T) {
 	if err := json.Unmarshal(b, &cs); err != nil {
 		t.Fatal(err)
 	}
-	var accepted, mismatched, bailed int
+	var accepted, mismatched, bailed, memChecked int
 	var keys []string
 	reasons := map[string]int{}
 	for _, c := range cs {
@@ -74,6 +78,15 @@ func TestCorpus(t *testing.T) {
 			accepted++
 			switch {
 			case err == nil && want.Out != nil && out == *want.Out:
+				if !strict && c.Mem > 1 {
+					memChecked++
+					e := corpusEngine
+					e.Limits.Memory = int(math.Ceil(c.Mem)) - 1
+					var me *Error
+					if out, err := e.Render(c.Tpl, c.Data, false); !errors.As(err, &me) || me.Code != "memory-limit" {
+						t.Errorf("%s %q: liquidjs charges %v, so refuses with memoryLimit %d, but mist gave %q, %v\n  tpl:  %q\n  data: %v", c.Src, c.Name, c.Mem, e.Limits.Memory, out, err, c.Tpl, c.Data)
+					}
+				}
 			case errors.Is(err, ErrUndefined) && want.Err != "":
 			default:
 				mismatched++
@@ -88,7 +101,7 @@ func TestCorpus(t *testing.T) {
 	if baseline {
 		checkAccepted(t, keys)
 	}
-	t.Logf("%d renders agreed with liquidjs, %d didn't, %d bailed (%.0f%% accepted)", accepted-mismatched, mismatched, bailed, 100*float64(accepted)/float64(accepted+bailed))
+	t.Logf("%d renders agreed with liquidjs, %d didn't, %d bailed (%.0f%% accepted); %d checked against liquidjs's memoryLimit", accepted-mismatched, mismatched, bailed, 100*float64(accepted)/float64(accepted+bailed), memChecked)
 	type kv struct {
 		k string
 		v int
