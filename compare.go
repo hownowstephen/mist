@@ -96,7 +96,7 @@ func eq(a, b val, at int) bool {
 		return emptyValue(a.check(at))
 	}
 	a, b = a.check(at), b.check(at)
-	if (a.lit == 0 && a.x == nilLit) || (b.lit == 0 && b.x == nilLit) {
+	if isNilLit(a) || isNilLit(b) {
 		return isNil(a) && isNil(b)
 	}
 	if isObj(a) || isObj(b) {
@@ -204,7 +204,7 @@ func contains(a, b val, at int) bool {
 		return false
 	}
 	needle := "null"
-	switch _, undef := b.x.(Undefined); {
+	switch undef := isUndef(b); {
 	case b.lit != 0 || b.x != nil && !undef:
 		needle = toStr(b, at)
 	case undef:

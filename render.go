@@ -32,7 +32,7 @@ type frame struct {
 	lit        uint8 // case: the subject's lit
 	parentLive bool
 	active     bool // current branch (or loop body) executes
-	taken      bool // a branch of this if/unless already executed, or a when of this case matched
+	taken      bool // if/unless: a branch executed; case: a when matched; for: the collection was empty, so else renders
 	sawElse    bool
 	rtrim      bool  // for: the for tag's -%}, reapplied on each iteration
 	rev        bool  // for: iterate coll from the end (reversed)
@@ -298,7 +298,7 @@ func (r *renderer) output(b, e int) {
 		}
 		return // liquidjs prints EmptyDrop's valueOf, ""
 	}
-	if r.ws(); v.lit == 0 && v.x == nilLit && r.peek() != '|' && literal(text) {
+	if r.ws(); isNilLit(v) && r.peek() != '|' && literal(text) {
 		bail(b, "output-nil-literal", "output of the nil literal") // see write; an assigned nil bails there
 	}
 	v = r.filters(v, live)
@@ -330,7 +330,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		r.push(frame{kind: k, parentLive: live, active: c, taken: c})
 	case "elsif":
 		f := r.top()
-		if f == nil || f.kind >= kFor || f.sawElse {
+		if f == nil || (f.kind != kIf && f.kind != kUnless) || f.sawElse {
 			bail(b, "unexpected-block-tag", "unexpected elsif")
 		}
 		eval := f.parentLive && !f.taken && !r.check && r.halt == 0
@@ -362,7 +362,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		v = r.filters(v, live)
 		r.end()
-		if v.lit == 0 && v.x == nilLit {
+		if isNilLit(v) {
 			v = val{} // liquidjs unwraps the nil Drop to null, which no longer matches undefined
 		}
 		// Until the first when, the body is parsed but never rendered.
@@ -625,7 +625,7 @@ func (r *renderer) cycle(live bool, at int) {
 func (r *renderer) cycleValue(eval bool) val {
 	at := r.pos()
 	v := r.expr(eval, false)
-	if v.keyword() != "" || v.lit == 0 && v.x == nilLit {
+	if v.keyword() != "" || isNilLit(v) {
 		bail(at, "cycle-value", "cycle value %s", r.src[at-r.base:r.p])
 	}
 	return v

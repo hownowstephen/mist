@@ -17,10 +17,11 @@ import (
 // A switch rather than a table of funcs, so calls stay direct and nothing escapes.
 func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int) val {
 	n := len(a)
+	badArgs := func() { bail(at, "filter-arguments:"+name, "%d arguments to filter %q", n, name) }
 	// takes bails unless the filter got lo to hi arguments, and reports whether to apply it.
 	takes := func(lo, hi int) bool {
 		if n < lo || n > hi {
-			bail(at, "filter-arguments:"+name, "%d arguments to filter %q", n, name)
+			badArgs()
 		}
 		return eval
 	}
@@ -273,7 +274,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		if !takes(0, 0) {
 			return v
 		}
-		if _, undef := v.x.(Undefined); undef && v.lit == 0 {
+		if isUndef(v) {
 			return v // JSON.stringify(undefined) is undefined
 		}
 		return strVal(jsonStr(v, at))
@@ -436,27 +437,34 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		out := slices.Clone(toArray(v, at))
 		slices.Reverse(out)
 		return val{x: out}
-
 	case "abs", "ceil", "floor":
 		if !takes(0, 0) {
 			return v
 		}
+		return mathFilter(name, v, a, at)
 	case "round":
 		if !takes(0, 1) {
 			return v
 		}
+		return mathFilter(name, v, a, at)
 	case "plus", "minus", "times", "divided_by", "modulo", "at_least", "at_most":
 		if !takes(1, 1) {
 			return v
 		}
-	case "default": // only reaches here with more arguments than it takes
-		takes(0, 1)
+		return mathFilter(name, v, a, at)
+	case "default": // filters.go applies it with at most one argument
+		badArgs()
 	default:
 		if r.passUnknown && !liquidjsFilters[name] {
 			return v // liquidjs's strictFilters: false; the arguments were evaluated above
 		}
 		bail(at, "filter:"+name, "unsupported filter %q", name)
 	}
+	panic("unreachable")
+}
+
+// mathFilter applies a math filter whose arguments builtinFilter checked.
+func mathFilter(name string, v val, a []val, at int) val {
 	x := toNumber(v, at)
 	var f float64
 	switch name {
@@ -468,8 +476,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		f = math.Floor(x)
 	case "round":
 		f = round(x, a, at)
-	}
-	if n > 0 && name != "round" {
+	default:
 		y := toNumber(a[0], at)
 		switch name {
 		case "plus":
@@ -518,7 +525,7 @@ func argNum(args []val, i int, d float64, at int) float64 {
 	if i >= len(args) {
 		return d
 	}
-	if _, undef := args[i].x.(Undefined); undef && args[i].lit == 0 {
+	if isUndef(args[i]) {
 		return d
 	}
 	f, ok := args[i].check(at).num(at)
@@ -548,7 +555,7 @@ func jsTruthy(v val, at int) bool {
 
 // argOrDefault stringifies v, or returns d where JavaScript's default parameter applies.
 func argOrDefault(v val, d string, at int) string {
-	if _, undef := v.x.(Undefined); undef && v.lit == 0 {
+	if isUndef(v) {
 		return d
 	}
 	return toStr(v, at)

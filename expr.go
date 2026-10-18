@@ -175,12 +175,12 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 			if r.dialect == nil || r.dialect.Compare == nil {
 				return false, a, false // liquidjs's EmptyDrop orders before and after nothing
 			}
-		case other.keyword() != "" || (other.lit == 0 && other.x == nilLit):
+		case other.keyword() != "" || isNilLit(other):
 			bail(start, "keyword-against-keyword", "%s compared with blank, empty or nil", k) // liquidjs is asymmetric here
 		}
 	}
 	if op == "contains" {
-		if b.lit == 0 && b.x == nilLit {
+		if isNilLit(b) {
 			bail(at, "contains-nil", "contains nil") // liquidjs searches for "null"
 		}
 		if r.dialect != nil && r.dialect.Compare != nil {
@@ -423,7 +423,7 @@ func (r *renderer) path(eval, lenient bool) any {
 			if k.keyword() != "" {
 				bail(at, "keyword-index", "%s as an index", k.keyword())
 			}
-			if _, undef := k.x.(Undefined); eval && r.strict && undef && k.lit == 0 {
+			if eval && r.strict && isUndef(k) {
 				// liquidjs evaluates index keys strictly, even where the path itself is lenient.
 				panic(bailout{&Error{Kind: ErrUndefined, Code: "undefined", Pos: at, Msg: r.src[at-r.base : r.p]}})
 			}
