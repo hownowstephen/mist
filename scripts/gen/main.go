@@ -74,7 +74,7 @@ func (g *gen) pickF(xs []float64) float64 { return xs[g.r.IntN(len(xs))] }
 
 func (g *gen) path() string {
 	if len(g.loops) > 0 && g.r.IntN(8) == 0 {
-		return "forloop." + g.pick([]string{"index", "index0", "rindex", "rindex0", "first", "last", "length", "name", "parentloop"})
+		return "forloop." + g.pick([]string{"index", "index0", "rindex", "rindex0", "first", "last", "length", "name", "parentloop", "i"})
 	}
 	if g.mostly(3) {
 		p, _ := g.typedPath()

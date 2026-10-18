@@ -49,6 +49,7 @@ for-over-non-array
 for-parameter-value
 for-parameters
 for-syntax
+forloop-js-property
 forloop-outside-for
 group-by-object
 hook:KIND:NAME
@@ -64,6 +65,7 @@ keyword-against-keyword
 keyword-index
 keyword-outside-equality
 liquid-tag-block
+liquid-tag-dash
 liquid-tag-unclosed
 literal-property
 malformed-number
