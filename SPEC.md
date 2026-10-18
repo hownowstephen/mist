@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.30.x
+# mist Liquid subset — v0.31.x
 
 _Last updated 2026-10-17. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -131,7 +131,7 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - `uniq` of objects or arrays (JavaScript compares them by reference); `sort_natural` of objects, arrays or strings outside the BMP; `url_decode` of a malformed escape or of bytes that aren't UTF-8 (`decodeURIComponent` throws); `base64_decode` to bytes that aren't UTF-8 (Node substitutes U+FFFD).
 - `map`, `sum`, `sort` and `find` on an object, or with a path reaching an item that isn't an object; `sum` of an object or array item; `sort` of booleans, arrays or objects, of mixed numbers and strings, or of strings outside the BMP; `push` or `unshift` of nil or undefined; `group_by` of an object, or by a key that's an object or array.
 - `contains` with an array or object on the right.
-- `array_to_sentence_string` of anything but an array (liquidjs indexes a string's characters or throws), or of two or more items including an object or array; `slugify` with a mode other than those above, or of a character Go's Unicode tables don't assign.
+- `array_to_sentence_string` of anything but an array (liquidjs indexes a string's characters or throws), or of two or more items including an object or array; `slugify` with a mode other than those above, or of a character Go's Unicode tables don't assign or that Unicode 17 added (JavaScript's tables are Unicode 16).
 - `==` between two objects, including objects met while comparing arrays (JavaScript compares their references); ordering across other types or with non-ASCII strings.
 - String filters splitting a character outside the BMP, as `truncate`, `slice`, `first`, `last`, `split: ''`, `replace: ''` or `strip` with such a character can; string filters on invalid UTF-8; `downcase` or `upcase` of a character whose JavaScript mapping differs; `strip` whose argument is the `nil` literal (liquidjs passes it as a truthy Drop).
 - `truncate`, `truncatewords` or `slice` with a non-numeric count; `first` or `last` of an empty array, `last` of anything but a non-empty string or array, `first` of an object; `json` of an object.

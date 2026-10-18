@@ -515,6 +515,7 @@
   {"name": "group_by of an object", "tpl": "{{ o | group_by: 'a' | size }}", "data": {"o": {"a": 1}}, "err": "unsupported", "code": "group-by-object"},
   {"name": "where_exp item names that aren't variables", "tpl": "{{ xs | where_exp: 'x.y', 'x' | size }}{{ xs | where_exp: 'x y', 'x' | size }}", "data": {"xs": []}, "err": "unsupported", "code": "expression-filter-arguments"},
   {"name": "slugify of an unassigned character", "tpl": "{{ s | slugify }}", "data": {"s": "a͸"}, "err": "unsupported", "code": "unicode-version"},
+  {"name": "slugify of a character Unicode 17 added", "tpl": "{{ s | slugify }}", "data": {"s": "a࢏"}, "err": "unsupported", "code": "unicode-version"},
   {"name": "uniq and group_by of undefined", "tpl": "{{ xs | map: 'k' | uniq | size }}|{{ xs | group_by: 'k' | size }}", "data": {"xs": [{"k": 1}, {}, {}]}, "out": "2|2"},
   {"name": "inline comments", "tpl": "{% # hi %}a{%# x %}b{%- # y -%} c{% #z %}d{% # one\n  # two\n\n %}e", "out": "abcde"},
   {"name": "inline comment with a line not starting with #", "tpl": "{% # a\n b %}x", "err": "unsupported", "code": "inline-comment-line"},
