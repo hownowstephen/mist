@@ -587,5 +587,21 @@
   {"name": "memory: array_to_sentence_string charges its default connector", "tpl": "{{ xs | array_to_sentence_string }}", "data": {"xs": ["a", "b"]}, "out": "a and b", "mem": 5, "mistMem": 7},
   {"name": "memory: join charges a string as a one-item array", "tpl": "{{ 'ab' | join }}", "out": "ab", "mem": 2, "mistMem": 4},
   {"name": "memory: join with a nil separator charges ' '", "tpl": "{{ xs | join: nil }}", "data": {"xs": ["a", "b"]}, "out": "a b", "mem": 4, "mistMem": 8},
-  {"name": "memory: array filters charge '' as a one-item array", "tpl": "{{ '' | reverse | join: '' }}", "out": "", "mem": 2, "mistMem": 6}
+  {"name": "memory: array filters charge '' as a one-item array", "tpl": "{{ '' | reverse | join: '' }}", "out": "", "mem": 2, "mistMem": 6},
+  {"name": "liquid tag drops a dash ending its last line", "tpl": "{% liquid assign foo = false- %}{{ foo }}", "strict": true, "out": "false"},
+  {"name": "liquid tag drops a dash ending its last line before blanks", "tpl": "{% liquid echo 'a' | append: x-\n %}", "data": {"x": "X"}, "strict": true, "out": "aX"},
+  {"name": "liquid tag keeps a dash ending an earlier line", "tpl": "{% liquid echo x-\necho 1 %}", "data": {"x": "X"}, "strict": true, "err": "undefined"},
+  {"name": "liquid tag drops a dash starting a line", "tpl": "{% liquid -echo 1\n  -echo 2 - -%}", "strict": true, "out": "12"},
+  {"name": "liquid tag line of only a dash", "tpl": "{% liquid echo 1\n-\n %}", "err": "unsupported", "code": "liquid-tag-dash"},
+  {"name": "forloop.i is index0", "tpl": "{% for x in (1..3) %}{{ forloop.i }}{% endfor %}", "strict": true, "out": "012"},
+  {"name": "forloop.next advances the loop", "tpl": "{% for x in (1..5) %}{{ forloop.next }}{{ forloop.index }},{% endfor %}", "err": "unsupported", "code": "forloop-js-property"},
+  {"name": "forloop.toString", "tpl": "{% for x in (1..2) %}{{ forloop.toString }}{% endfor %}", "strict": true, "err": "unsupported", "code": "forloop-js-property"},
+  {"name": "forloop.size is undefined", "tpl": "{% for x in (1..2) %}[{{ forloop.size }}]{% endfor %}", "out": "[][]"},
+  {"name": "radix string with upper-case digits", "tpl": "{{ '0XaB' | plus: 0 }}", "out": "171"},
+  {"name": "radix string with a control character is NaN", "tpl": "{{ '0X\u00101' | plus: 0 }}", "out": "0"},
+  {"name": "bracket path then colon is a keyword argument name", "tpl": "{{ 0 | append: x[y]: }}", "strict": true, "err": "unsupported", "code": "named-filter-arguments"},
+  {"name": "base64_decode reads a UTF-16 unit's low byte", "tpl": "{{ 'A0ķ' | base64_decode }}", "out": "\u0003N"},
+  {"name": "base64_decode reads a surrogate's low byte", "tpl": "{{ t | base64_decode }}", "data": {"t": "A0񾼷"}, "out": "\u0003N"},
+  {"name": "base64_decode stops at a unit whose low byte is '='", "tpl": "{{ t | base64_decode }}", "data": {"t": "aGkhĽaGk"}, "out": "hi!"},
+  {"name": "memory: replace charges what a number prints as", "tpl": "{{ 1111 | replace: '1', 'bbbbbbbbbb' }}", "out": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "mem": 40, "mistMem": 80}
 ]

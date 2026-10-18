@@ -729,8 +729,12 @@ func jsNumberOf(v val, at int) float64 {
 func radixValue(s string, base int, at int) float64 {
 	n := 0.0
 	for i := range len(s) {
-		d := strings.IndexByte("0123456789abcdef", s[i]|0x20)
-		if d < 0 || d >= base || s[i] == '_' {
+		c := s[i]
+		if 'A' <= c && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		d := strings.IndexByte("0123456789abcdef", c)
+		if d < 0 || d >= base {
 			return math.NaN()
 		}
 		if n = n*float64(base) + float64(d); n >= maxSafeInt {
