@@ -181,7 +181,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 - A returned value implementing `mist.Comparer` compares itself: `==`, `!=`, `<`, `>`, `<=` and `>=` with it on either side call its `Compare` (with the operator mirrored when it's on the right), before any dialect `Compare` hook. An error from it wrapping `ErrUnsupported` bails with code `hook:value:compare`. It is a JavaScript object to liquidjs, so it's truthy and `default` keeps it; with a `String()` method (`fmt.Stringer`) it stringifies as that wherever liquidjs calls `String()` on it, as string filters and their arguments do. As an index (`xs[d]`) it keys by `String()`, as JavaScript property access does. `case`/`when` and an array's `contains` compare it with its own `==`; it contains nothing itself, and a string contains it by `String()`. Elsewhere (`size`, numeric filters, output) it's a value of an unknown type.
 - A `nil` `FilterFunc` is accepted by `Check` and bails at render time.
 - The parity contract doesn't cover registered filters.
-- `Engine.PassUnknownFilters` matches liquidjs's `strictFilters: false`, its default: a filter that liquidjs 10.26 doesn't define and that isn't registered returns its input unchanged. Its arguments are still evaluated, so under strict an undefined argument is `ErrUndefined`, and the leading-`default` leniency doesn't apply to it. Filters liquidjs does define but mist doesn't implement (`uniq`, `compact`, …) still bail. Off by default, because an unknown name usually means a filter the full engine has and mist doesn't; set it only when `Filters` covers every filter the full engine defines.
+- `Engine.PassUnknownFilters` matches liquidjs's `strictFilters: false`, its default: a filter that liquidjs 10.26 doesn't define and that isn't registered returns its input unchanged. Its arguments are still evaluated, so under strict an undefined argument is `ErrUndefined`, and the leading-`default` leniency doesn't apply to it. Filters liquidjs does define but mist doesn't implement (only `sample`) still bail. Off by default, because an unknown name usually means a filter the full engine has and mist doesn't; set it only when `Filters` covers every filter the full engine defines.
 
 ## Dialects
 
@@ -241,6 +241,4 @@ MIST_CORPUS=/tmp/g.oracle.json go test -run TestCorpus -v .
 
 ## Changing the spec
 
-1. Add cases to `testdata/cases.json` and confirm them with `node scripts/parity.mjs`.
-2. Update the grammar and semantics here in the same change. If the grammar changed, extend `scripts/gen`.
-3. Regenerate the corpus, run `go test ./...`, and do a 100k generated run plus a couple of minutes of `go test -fuzz FuzzRender`.
+[CONTRIBUTING.md § Making a change](CONTRIBUTING.md#making-a-change) is the checklist.

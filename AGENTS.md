@@ -48,4 +48,6 @@ golangci-lint run ./...
 5. Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change.
 6. Keep `Append` allocation-free on the `basic` benchmark fixture (`alloc_test.go`).
 
+Adding a filter or tag touches more files: [CONTRIBUTING.md § Adding a filter or tag](CONTRIBUTING.md#adding-a-filter-or-tag) lists them.
+
 PR titles start with `feat:`, `fix:`, `chore:`, `docs:` or `refactor:`.
