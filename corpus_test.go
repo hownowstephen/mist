@@ -18,7 +18,8 @@ import (
 // must agree with liquidjs exactly, except that ErrUndefined only requires liquidjs to
 // fail too (it may report a later syntax error instead). Where mist renders what liquidjs
 // rendered, it must bail with Limits.Memory just under what liquidjs charged its
-// memoryLimit, as liquidjs would refuse then. MIST_CORPUS points the test at another oracle file.
+// memoryLimit, as liquidjs would refuse then. Ruby, Shopify's expected output where the source
+// has one, never fails the test. MIST_CORPUS points the test at another oracle file.
 type corpusCase struct {
 	Src    string         `json:"src"`
 	Name   string         `json:"name"`
@@ -27,6 +28,7 @@ type corpusCase struct {
 	Lax    oracle         `json:"lax"`
 	Strict *oracle        `json:"strict"`
 	Mem    float64        `json:"mem"` // what the lax render charged liquidjs's memoryLimit
+	Ruby   *string        `json:"ruby"`
 }
 
 type oracle struct {
@@ -34,7 +36,7 @@ type oracle struct {
 	Err string  `json:"err"`
 }
 
-var updateAccepted = flag.Bool("update-accepted", false, "rewrite testdata/corpus.accepted")
+var updateAccepted = flag.Bool("update-accepted", false, "rewrite testdata/corpus.accepted and testdata/corpus.fragile")
 
 // corpusEngine uses oracle.mjs's fixed Date.now, and passes unknown filters through
 // as oracle.mjs's liquidjs does by default.
@@ -55,7 +57,7 @@ func TestCorpus(t *testing.T) {
 		t.Fatal(err)
 	}
 	var accepted, mismatched, bailed, memChecked int
-	var keys []string
+	var keys, fragile []string
 	reasons := map[string]int{}
 	for _, c := range cs {
 		for i, strict := range []bool{false, true} {
@@ -71,13 +73,17 @@ func TestCorpus(t *testing.T) {
 				reasons[e.Code]++
 				continue
 			}
-			keys = append(keys, c.Src+"\t"+c.Name+"\t"+[]string{"lax", "strict"}[i])
+			key := c.Src + "\t" + c.Name + "\t" + []string{"lax", "strict"}[i]
+			keys = append(keys, key)
 			if strings.Contains(want.Err, "limit") {
 				continue // liquidjs resource limit during corpus generation
 			}
 			accepted++
 			switch {
 			case err == nil && want.Out != nil && out == *want.Out:
+				if c.Ruby != nil && out != *c.Ruby {
+					fragile = append(fragile, key)
+				}
 				if !strict && c.Mem > 1 {
 					memChecked++
 					e := corpusEngine
@@ -100,8 +106,9 @@ func TestCorpus(t *testing.T) {
 	}
 	if baseline {
 		checkAccepted(t, keys)
+		checkFragile(t, fragile)
 	}
-	t.Logf("%d renders agreed with liquidjs, %d didn't, %d bailed (%.0f%% accepted); %d checked against liquidjs's memoryLimit", accepted-mismatched, mismatched, bailed, 100*float64(accepted)/float64(accepted+bailed), memChecked)
+	t.Logf("%d renders agreed with liquidjs, %d didn't, %d bailed (%.0f%% accepted); %d checked against liquidjs's memoryLimit; %d fragile, where liquidjs differs from Ruby", accepted-mismatched, mismatched, bailed, 100*float64(accepted)/float64(accepted+bailed), memChecked, len(fragile))
 	type kv struct {
 		k string
 		v int
@@ -152,6 +159,39 @@ func checkAccepted(t *testing.T, keys []string) {
 	}
 	if len(lost) > 0 {
 		t.Errorf("%d renders in testdata/corpus.accepted now bail; if that's deliberate, run go test -run TestCorpus -update-accepted:\n%s", len(lost), strings.Join(lost[:min(20, len(lost))], "\n"))
+	}
+}
+
+// testdata/corpus.fragile lists the accepted renders where liquidjs's output differs from Ruby
+// Liquid's, which liquidjs has tended to change towards Ruby's. A change to the set is logged,
+// never failed; -update-accepted rewrites it.
+func checkFragile(t *testing.T, keys []string) {
+	text := encodeAccepted(keys)
+	if testing.Verbose() {
+		t.Logf("fragile renders:\n%s", text)
+	}
+	if *updateAccepted {
+		if err := os.WriteFile("testdata/corpus.fragile", []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, err := os.ReadFile("testdata/corpus.fragile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	was := map[string]int{}
+	for _, k := range decodeAccepted(string(b)) {
+		was[k]++
+	}
+	for _, k := range keys {
+		if was[k]--; was[k] < 0 {
+			t.Logf("newly fragile: %s", k)
+		}
+	}
+	for k, n := range was {
+		if n > 0 {
+			t.Logf("no longer fragile: %s", k)
+		}
 	}
 }
 
