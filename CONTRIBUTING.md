@@ -34,6 +34,22 @@ node scripts/parity.mjs       # cases.json against liquidjs
 
 Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, so the code diff stays reviewable.
 
+### Adding a filter or tag
+
+On top of the steps above, a built-in filter touches:
+
+- `stdfilters.go`: a `builtinFilter` case that checks its argument count with `takes(lo, hi)` and returns. Longer implementations go in `stringfilters.go` or `arrayfilters.go`.
+- `filters.go`: `spend`, if liquidjs's `memoryLimit` charges it more than its input and arguments, or if its output can be much larger than its input.
+- `liquidjs_filters.go`: only if liquidjs added the filter. `parity.mjs` checks this list.
+- SPEC.md: its row under Semantics, and any data-dependent bails under Runtime bails.
+- `docs/supported.md`'s filter table and `scripts/gen`'s `filters()`. `TestBuiltinFiltersListed` fails if either is missing a `builtinFilter` name.
+
+A built-in tag touches:
+
+- `render.go`: a case in `tag`. A block tag also needs a `frameKind`, any `frame` fields it uses (with a comment saying which kind uses them), its end tag, and the `else`/`elsif` guards if they apply. `liquid` decides which tags its lines can hold.
+- SPEC.md: `tagbody` in the grammar, the structural rules for block tags, and a row under Semantics.
+- `docs/supported.md`'s tag table, and `scripts/gen`'s `block` (`TestBuiltinFiltersListed` doesn't cover tags).
+
 ## Performance
 
 `Append` must not allocate on the basic fixture; CI enforces that. The benchmark fixtures in `testdata/bench` (template, data and liquidjs's output) are what `BenchmarkFixture` renders and `scripts/bench.mjs` times liquidjs on; after changing one, rewrite its output with `node scripts/bench.mjs -w`. To compare locally:
