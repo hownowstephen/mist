@@ -111,6 +111,9 @@ jobs:
       - name: jsdate.json matches this liquidjs
         run: node jsdate.mjs -o "$RUNNER_TEMP/jsdate.json" && cmp "$RUNNER_TEMP/jsdate.json" ../testdata/jsdate.json
         working-directory: scripts
+      - name: jschar.json matches this Node and liquidjs
+        run: node jschar.mjs -o "$RUNNER_TEMP/jschar.json" && cmp "$RUNNER_TEMP/jschar.json" ../testdata/jschar.json
+        working-directory: scripts
       - name: corpus.json matches the oracle
         run: node oracle.mjs -o "$RUNNER_TEMP/corpus.json" ../testdata/corpus.json && cmp "$RUNNER_TEMP/corpus.json" ../testdata/corpus.json
         working-directory: scripts
