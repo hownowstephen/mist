@@ -42,11 +42,13 @@ golangci-lint run ./...
 
 ## When changing behaviour
 
-1. Add cases to `testdata/cases.json` and confirm them with `node scripts/parity.mjs` before relying on them.
+1. Add cases to `testdata/cases.json` and confirm them with `node scripts/parity.mjs` before relying on them. A bail case (`"err": "unsupported"`) names its `"code"`.
 2. Update SPEC.md in the same change, and bump its title's minor version (`v0.N.x`).
 3. Extend `scripts/gen` for new grammar or filters, and run a 100k differential with a new seed.
 4. Every `bail` takes a code (`Error.Code`), which is API: reuse one that fits, or add a kebab-case one and run `go test -run TestCodes -update-codes .` to record it in `testdata/codes.txt`. A data-dependent bail's code also goes in `runtimeCodes` (`mist_test.go`), or `FuzzRender` fails.
 5. Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, which also rewrites `testdata/corpus.accepted` (`go test -run TestCorpus -update-accepted .`).
 6. Keep `Append` allocation-free on the `basic` benchmark fixture (`alloc_test.go`).
+
+Adding a filter or tag touches more files: [CONTRIBUTING.md § Adding a filter or tag](CONTRIBUTING.md#adding-a-filter-or-tag) lists them.
 
 PR titles start with `feat:`, `fix:`, `chore:`, `docs:` or `refactor:`.

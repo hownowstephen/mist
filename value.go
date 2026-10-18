@@ -42,12 +42,20 @@ var (
 	emptyLit = emptyT{}
 )
 
-// val carries literals unboxed so evaluating them doesn't allocate.
+// val carries literals unboxed so evaluating them doesn't allocate. lit != 0 implies
+// x == nil, so x == nil alone doesn't mean null.
 type val struct {
 	x   any // data values, bools, nil, undefined
 	s   string
 	n   float64
 	lit uint8
+}
+
+func isNilLit(v val) bool { return v.lit == 0 && v.x == nilLit }
+
+func isUndef(v val) bool {
+	_, ok := v.x.(Undefined)
+	return ok && v.lit == 0
 }
 
 const (
@@ -295,7 +303,7 @@ func (r *renderer) write(v val) {
 		r.out = append(r.out, s...)
 		return
 	}
-	if v.lit == 0 && v.x == nilLit {
+	if isNilLit(v) {
 		// liquidjs's nil literal is a Drop: "" by default, but "[object Object]" under
 		// an outputEscape that String()s objects, so the output depends on configuration.
 		bail(r.base, "output-nil-literal-result", "cannot output the nil literal") // e.g. from default: nil

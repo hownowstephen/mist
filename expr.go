@@ -96,7 +96,7 @@ var identByte = func() (t [256]uint8) {
 	return t
 }()
 
-// ident = ( letter | "_" ) { letter | digit | "_" | "-" }
+// ident = ( letter | "_" | uword ) { letter | digit | "_" | "-" | "?" | uword }
 func (r *renderer) ident() string {
 	i := r.p
 	if i >= len(r.src) || !isIdentStart(r.src[i]) && wordRune(r.src, i) == 0 {
@@ -108,10 +108,10 @@ func (r *renderer) ident() string {
 	return s
 }
 
-// cond = cmp { "and" cmp } | cmp { "or" cmp }
+// fcond = cond { filter }
 // Returns false when not evaluating. Undefined variables are lenient (lenientIf).
-func (r *renderer) cond(eval bool) bool {
-	res, v, lone := r.chain(eval)
+func (r *renderer) fcond(eval bool) bool {
+	res, v, lone := r.cond(eval)
 	if r.peek() != '|' {
 		return res
 	}
@@ -128,9 +128,9 @@ func (r *renderer) cond(eval bool) bool {
 	return eval && truthy(v, at)
 }
 
-// chain = cmp [ ( "and" | "or" ) chain ]. The recursion groups right to left, as
+// cond = cmp [ ( "and" | "or" ) cond ]. The recursion groups right to left, as
 // liquidjs does: a and b or c is a and (b or c).
-func (r *renderer) chain(eval bool) (res bool, first val, lone bool) {
+func (r *renderer) cond(eval bool) (res bool, first val, lone bool) {
 	res, first, lone = r.cmp(eval)
 	r.ws()
 	if r.p == len(r.src) || r.peek() == '|' {
@@ -141,7 +141,7 @@ func (r *renderer) chain(eval bool) (res bool, first val, lone bool) {
 	if w != "and" && w != "or" {
 		bail(at, "expected-and-or", "expected and/or, got %q", r.src[at-r.base:])
 	}
-	rest, _, _ := r.chain(eval)
+	rest, _, _ := r.cond(eval)
 	if w == "and" {
 		return res && rest, first, false
 	}
@@ -175,12 +175,12 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 			if r.dialect == nil || r.dialect.Compare == nil {
 				return false, a, false // liquidjs's EmptyDrop orders before and after nothing
 			}
-		case other.keyword() != "" || (other.lit == 0 && other.x == nilLit):
+		case other.keyword() != "" || isNilLit(other):
 			bail(start, "keyword-against-keyword", "%s compared with blank, empty or nil", k) // liquidjs is asymmetric here
 		}
 	}
 	if op == "contains" {
-		if b.lit == 0 && b.x == nilLit {
+		if isNilLit(b) {
 			bail(at, "contains-nil", "contains nil") // liquidjs searches for "null"
 		}
 		if r.dialect != nil && r.dialect.Compare != nil {
@@ -214,7 +214,7 @@ func (r *renderer) op() string {
 	return ""
 }
 
-// expr = path | string | int | "true" | "false" | "nil"
+// expr = path | string | number | range | "true" | "false" | "nil" | "null" | "blank" | "empty"
 func (r *renderer) expr(eval, lenient bool) val {
 	r.ws()
 	at := r.pos()
@@ -374,7 +374,7 @@ func (r *renderer) blankAt(i int) bool {
 	return strings.HasPrefix(r.src[i:], "\u00a0")
 }
 
-// path = ident { "." ident | "[" int "]" | "[" string "]" }
+// path = ident { "." ws word | "[" ws expr ws "]" }
 func (r *renderer) path(eval, lenient bool) any {
 	start := r.p
 	name := r.ident()
@@ -423,7 +423,7 @@ func (r *renderer) path(eval, lenient bool) any {
 			if k.keyword() != "" {
 				bail(at, "keyword-index", "%s as an index", k.keyword())
 			}
-			if _, undef := k.x.(Undefined); eval && r.strict && undef && k.lit == 0 {
+			if eval && r.strict && isUndef(k) {
 				// liquidjs evaluates index keys strictly, even where the path itself is lenient.
 				panic(bailout{&Error{Kind: ErrUndefined, Code: "undefined", Pos: at, Msg: r.src[at-r.base : r.p]}})
 			}
@@ -483,7 +483,7 @@ func (r *renderer) expValue(eval bool, exp, name string, item any, at int) val {
 	src, base, p, undef, hit := r.src, r.base, r.p, r.undef, r.lenientUndef
 	r.src, r.base, r.p, r.undef, r.lenientUndef = exp, at, 0, pendingUndef{}, false
 	r.binds = append(r.binds, binding{name, item})
-	res, v, lone := r.chain(eval)
+	res, v, lone := r.cond(eval)
 	if k := v.keyword(); lone && k != "" {
 		bail(at, "keyword-outside-equality", "%s is only supported in conditions and output", k)
 	}

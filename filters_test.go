@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 )
 
@@ -43,6 +45,67 @@ func TestCaseMapping(t *testing.T) {
 	}
 	if len(bad) > 0 {
 		t.Fatalf("%d code points map differently from JavaScript without bailing: %s", len(bad), strings.Join(bad[:min(20, len(bad))], ", "))
+	}
+}
+
+// TestDateTable checks date against liquidjs (testdata/jsdate.json, from scripts/jsdate.mjs):
+// every directive at each instant, and each edge-case input string, matches or bails. An
+// instant displayed within years 1000–9999 bails only on directives that print with the
+// locale (%c, %x, %X) or the process's zone name (%Z).
+func TestDateTable(t *testing.T) {
+	b, err := os.ReadFile("testdata/jsdate.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var js struct {
+		Instants    []float64
+		Formats     map[string][]*string
+		InputFormat string
+		Inputs      map[string]*string
+	}
+	if err := json.Unmarshal(b, &js); err != nil {
+		t.Fatal(err)
+	}
+	var bad []string
+	check := func(d any, f string, want *string, mayBail func(code string) bool) {
+		out, err := Render("{{ d | date: f }}", map[string]any{"d": d, "f": f}, false)
+		failInternal(t, err)
+		var e *Error
+		switch {
+		case errors.As(err, &e) && errors.Is(err, ErrUnsupported):
+			if !mayBail(e.Code) {
+				bad = append(bad, fmt.Sprintf("%v | date: %q bailed: %v", d, f, err))
+			}
+		case want == nil || err != nil || out != *want:
+			js := "threw"
+			if want != nil {
+				js = strconv.Quote(*want)
+			}
+			bad = append(bad, fmt.Sprintf("%v | date: %q gave %q, %v; liquidjs %s", d, f, out, err, js))
+		}
+	}
+	for f, outs := range js.Formats {
+		for i, d := range js.Instants {
+			y := time.UnixMilli(int64(math.Round(d * 1000))).UTC().Year()
+			check(d, f, outs[i], func(code string) bool {
+				switch code {
+				case "date-year-range":
+					return y < 1000 || y > 9999
+				case "date-locale-format":
+					return strings.ContainsAny(f[len(f)-1:], "cxX")
+				case "date-zone-name":
+					return strings.HasSuffix(f, "Z")
+				}
+				return false
+			})
+		}
+	}
+	for s, want := range js.Inputs {
+		check(s, js.InputFormat, want, func(string) bool { return true })
+	}
+	if len(bad) > 0 {
+		slices.Sort(bad)
+		t.Fatalf("%d dates differ from liquidjs:\n%s", len(bad), strings.Join(bad[:min(20, len(bad))], "\n"))
 	}
 }
 

@@ -346,6 +346,63 @@ var removeAccents = strings.NewReplacer(
 	"ì", "i", "í", "i", "î", "i", "ï", "i", "ð", "d", "ñ", "n", "ò", "o", "ó", "o", "ô", "o", "õ", "o", "ö", "o", "ø", "o",
 	"ù", "u", "ú", "u", "û", "u", "ü", "u", "ý", "y", "ÿ", "y", "ß", "ss", "œ", "oe", "þ", "th", "ẞ", "SS", "Œ", "OE", "Þ", "TH")
 
+// unicode17 is what Unicode 17 added, which Go 1.27's tables assign and JavaScript's
+// (Unicode 16 in Node 22's ICU) don't.
+// ponytail: one version's additions; a Go with newer tables than Node's fails TestCharClasses until they're added here.
+var unicode17 = &unicode.RangeTable{
+	R16: []unicode.Range16{
+		{0x088F, 0x088F, 1},
+		{0x0C5C, 0x0C5C, 1},
+		{0x0CDC, 0x0CDC, 1},
+		{0x1ACF, 0x1ADD, 1},
+		{0x1AE0, 0x1AEB, 1},
+		{0x20C1, 0x20C1, 1},
+		{0x2B96, 0x2B96, 1},
+		{0xA7CE, 0xA7CF, 1},
+		{0xA7D2, 0xA7D2, 1},
+		{0xA7D4, 0xA7D4, 1},
+		{0xA7F1, 0xA7F1, 1},
+		{0xFBC3, 0xFBD2, 1},
+		{0xFD90, 0xFD91, 1},
+		{0xFDC8, 0xFDCE, 1},
+	},
+	R32: []unicode.Range32{
+		{0x10940, 0x10959, 1},
+		{0x10EC5, 0x10EC7, 1},
+		{0x10ED0, 0x10ED8, 1},
+		{0x10EFA, 0x10EFB, 1},
+		{0x11B60, 0x11B67, 1},
+		{0x11DB0, 0x11DDB, 1},
+		{0x11DE0, 0x11DE9, 1},
+		{0x16EA0, 0x16EB8, 1},
+		{0x16EBB, 0x16ED3, 1},
+		{0x16FF2, 0x16FF6, 1},
+		{0x187F8, 0x187FF, 1},
+		{0x18D09, 0x18D1E, 1},
+		{0x18D80, 0x18DF2, 1},
+		{0x1CCFA, 0x1CCFC, 1},
+		{0x1CEBA, 0x1CED0, 1},
+		{0x1CEE0, 0x1CEF0, 1},
+		{0x1E6C0, 0x1E6DE, 1},
+		{0x1E6E0, 0x1E6F5, 1},
+		{0x1E6FE, 0x1E6FF, 1},
+		{0x1F6D8, 0x1F6D8, 1},
+		{0x1F777, 0x1F77A, 1},
+		{0x1F8D0, 0x1F8D8, 1},
+		{0x1FA54, 0x1FA57, 1},
+		{0x1FA8A, 0x1FA8A, 1},
+		{0x1FA8E, 0x1FA8E, 1},
+		{0x1FAC8, 0x1FAC8, 1},
+		{0x1FACD, 0x1FACD, 1},
+		{0x1FAEA, 0x1FAEA, 1},
+		{0x1FAEF, 0x1FAEF, 1},
+		{0x1FBFA, 0x1FBFA, 1},
+		{0x2B73A, 0x2B73F, 1},
+		{0x2CEA2, 0x2CEAD, 1},
+		{0x323B0, 0x33479, 1},
+	},
+}
+
 // slugify is liquidjs's slugify: runs of characters the mode doesn't keep become one
 // "-", then a leading and a trailing "-" go, and the result is lower-cased unless cased.
 func slugify(s string, a []val, at int) string {
@@ -361,8 +418,8 @@ func slugify(s string, a []val, at int) string {
 	case "default", "latin", "pretty":
 		pretty := mode == "pretty"
 		keep = func(c rune) bool {
-			if !unicode.In(c, unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.Z, unicode.Cc, unicode.Cf, unicode.Co) {
-				bail(at, "unicode-version", "slugify of %q, unassigned in Go's Unicode version", c)
+			if !unicode.In(c, unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.Z, unicode.Cc, unicode.Cf, unicode.Co) || unicode.Is(unicode17, c) {
+				bail(at, "unicode-version", "slugify of %q, assigned in only one of Go's and JavaScript's Unicode versions", c)
 			}
 			return unicode.In(c, unicode.L, unicode.M, unicode.Nd) || pretty && strings.ContainsRune("._~!$&'()+,;=@", c)
 		}
@@ -418,7 +475,7 @@ func appendJSON(dst []byte, v val, at int) []byte {
 				dst = append(dst, ',')
 			}
 			if e == nil {
-				dst = append(dst, "null"...) // JSON.stringify writes null for undefined elements too
+				dst = append(dst, "null"...)
 				continue
 			}
 			dst = appendJSON(dst, val{x: e}, at)

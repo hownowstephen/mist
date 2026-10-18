@@ -421,8 +421,7 @@ func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any
 	}
 	matchTruthy := len(a) == 1
 	if !matchTruthy {
-		_, undef := a[1].x.(Undefined)
-		matchTruthy = undef && a[1].lit == 0 // liquidjs's expected === undefined
+		matchTruthy = isUndef(a[1]) // liquidjs's expected === undefined
 	}
 	out, idx = []any{}, -1
 	for i, it := range items {
@@ -446,9 +445,9 @@ func (r *renderer) itemPath(item any, path string, at int) any {
 			bail(at, "where-computed-key", "where by %s on an item that isn't an object", first)
 		}
 	}
-	x, strict := item, r.strict // a range-over-func body capturing r moves the renderer to the heap before Go 1.25
+	x := item
 	for key := range strings.SplitSeq(path, ".") {
-		if strict && isNil(val{x: x}) {
+		if r.strict && isNil(val{x: x}) {
 			bail(at, "where-strict-missing", "where on an item missing %q under strict", path) // liquidjs throws
 		}
 		x = prop(x, key, at)

@@ -118,18 +118,10 @@ type Tag struct {
 
 // tagScope is the render state a Tag reads and Tag.Render carries on, copied back after the call.
 type tagScope struct {
-	vars, assigns, env map[string]any
-	cycles             map[string]int
-	strict             bool
-	tags               map[string]TagFunc
-	filterFns          map[string]FilterFunc
-	passUnknown        bool
-	dialect            *Dialect
-	now                func() time.Time
-	limits             Limits
-	outUsed            int // output so far, against limits.Output
-	spent, iters       int
-	nested             int
+	config
+	shared
+	outUsed int // output so far, against limits.Output
+	nested  int
 }
 
 // Lookup resolves a variable path such as `product.url` or `items[0]` in the tag's
@@ -144,7 +136,7 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 			v, ok = nil, false
 		}
 	}()
-	r := renderer{tpl: path, vars: t.Vars, assigns: t.scope.assigns, env: t.scope.env}
+	r := renderer{tpl: path, config: config{vars: t.Vars}, shared: shared{assigns: t.scope.assigns, env: t.scope.env}}
 	for _, f := range t.frames {
 		r.push(f)
 	}
@@ -161,7 +153,7 @@ func (t Tag) Lookup(path string) (v any, ok bool) {
 	return v, true
 }
 
-// maxNested is how deep Tag.Render nests, as the render service limits nested renders.
+// maxNested bounds how deep Tag.Render nests.
 const maxNested = 100
 
 // Render appends src rendered as Liquid in the tag's scope, as liquidjs renders a
@@ -175,16 +167,12 @@ func (t Tag) Render(dst []byte, src string) (out []byte, err error) {
 	if p.nested == maxNested {
 		return nil, &Error{Kind: ErrUnsupported, Code: "nested-render-depth", Msg: fmt.Sprintf("Tag.Render nested %d deep", maxNested)}
 	}
-	c := &renderer{
-		tpl: src, out: dst, vars: p.vars, assigns: p.assigns, env: p.env, cycles: p.cycles,
-		strict: p.strict, tags: p.tags, filterFns: p.filterFns, passUnknown: p.passUnknown, dialect: p.dialect, now: p.now,
-		limits: p.limits, outBase: len(dst) - p.outUsed, spent: p.spent, iters: p.iters, nested: p.nested + 1,
-	}
+	c := &renderer{config: p.config, shared: p.shared, tpl: src, out: dst, outBase: len(dst) - p.outUsed, nested: p.nested + 1}
 	for _, f := range t.frames {
 		c.push(f)
 	}
 	c.floor = c.depth
-	defer func() { p.assigns, p.env, p.cycles, p.spent, p.iters = c.assigns, c.env, c.cycles, c.spent, c.iters }()
+	defer func() { p.shared = c.shared }()
 	defer c.recoverBail(&err)
 	c.run()
 	return c.out, nil
@@ -205,7 +193,7 @@ func Append(dst []byte, tpl string, vars map[string]any, strict bool) ([]byte, e
 // Templates that pass can still bail at render time on data-dependent rules (see SPEC.md).
 func Check(tpl string) error { return Engine{}.Check(tpl) }
 
-// Render is the package-level Render with e's custom tags.
+// Render is the package-level Render with e's configuration.
 func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, error) {
 	if start, _ := nextDelim(tpl, 0); start == len(tpl) && len(tpl) <= e.Limits.orDefaults().Output {
 		return tpl, nil
@@ -214,7 +202,7 @@ func (e Engine) Render(tpl string, vars map[string]any, strict bool) (string, er
 	return unsafe.String(unsafe.SliceData(out), len(out)), err // out is ours alone
 }
 
-// Append is the package-level Append with e's custom tags.
+// Append is the package-level Append with e's configuration.
 func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, err error) {
 	out, _, err = e.append(dst, tpl, vars, strict)
 	return out, err
@@ -223,7 +211,7 @@ func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool)
 // append is Append that also returns the increment and decrement counters, which
 // liquidjs writes into the data a chain's later steps share.
 func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
-	r := renderer{tpl: tpl, out: dst, outBase: len(dst), vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, now: e.Now, passUnknown: e.PassUnknownFilters, limits: e.Limits.orDefaults()}
+	r := renderer{config: e.config(vars, strict), tpl: tpl, out: dst, outBase: len(dst)}
 	defer func() { env = r.env }()
 	defer r.releaseAssigns()
 	defer r.recoverBail(&err)
@@ -231,12 +219,16 @@ func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool)
 	return r.out, nil, nil
 }
 
-// Check is the package-level Check, also accepting e's custom tags.
+// Check is the package-level Check with e's configuration.
 func (e Engine) Check(tpl string) (err error) {
-	r := renderer{tpl: tpl, check: true, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, passUnknown: e.PassUnknownFilters, limits: e.Limits.orDefaults()}
+	r := renderer{config: e.config(nil, false), tpl: tpl, check: true}
 	defer r.recoverBail(&err)
 	r.run()
 	return nil
+}
+
+func (e Engine) config(vars map[string]any, strict bool) config {
+	return config{vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, passUnknown: e.PassUnknownFilters, dialect: e.Dialect, now: e.Now, limits: e.Limits.orDefaults()}
 }
 
 // Step is one template in a RenderChain.
@@ -261,7 +253,7 @@ func RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrat
 	return Engine{}.RenderChain(steps, vars)
 }
 
-// RenderChain is the package-level RenderChain with e's custom tags.
+// RenderChain is the package-level RenderChain with e's configuration.
 func (e Engine) RenderChain(steps []Step, vars map[string]any) (res []Result, n int, hydrated map[string]any) {
 	res = make([]Result, 0, len(steps))
 	owned := false

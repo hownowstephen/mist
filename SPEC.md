@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.30.x
+# mist Liquid subset — v0.31.x
 
 _Last updated 2026-10-17. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -8,7 +8,7 @@ _Last updated 2026-10-17. Parity target: liquidjs 10.26.0 configured with `new L
 
 ## Grammar
 
-LL(1) EBNF. Each production is one function in `render.go`/`expr.go`. Anything that doesn't derive from `template` is out of spec.
+LL(1) EBNF. Productions map to functions in `render.go`/`expr.go`, mostly of the same name (`range` is `rangeLit`, `string` is `str`, `forparam` is `forParams`, `{ filter }` is `filters`). Anything that doesn't derive from `template` is out of spec.
 
 ```ebnf
 template = { text | output | tag } ;
@@ -131,9 +131,8 @@ Data-dependent. `Check` passes these; `Render` returns `ErrUnsupported`:
 - `uniq` of objects or arrays (JavaScript compares them by reference); `sort_natural` of objects, arrays or strings outside the BMP; `url_decode` of a malformed escape or of bytes that aren't UTF-8 (`decodeURIComponent` throws); `base64_decode` to bytes that aren't UTF-8 (Node substitutes U+FFFD).
 - `map`, `sum`, `sort` and `find` on an object, or with a path reaching an item that isn't an object; `sum` of an object or array item; `sort` of booleans, arrays or objects, of mixed numbers and strings, or of strings outside the BMP; `push` or `unshift` of nil or undefined; `group_by` of an object, or by a key that's an object or array.
 - `contains` with an array or object on the right.
-- `array_to_sentence_string` of anything but an array (liquidjs indexes a string's characters or throws), or of two or more items including an object or array; `slugify` with a mode other than those above, or of a character Go's Unicode tables don't assign.
+- `array_to_sentence_string` of anything but an array (liquidjs indexes a string's characters or throws), or of two or more items including an object or array; `slugify` with a mode other than those above, or of a character Go's Unicode tables don't assign or that Unicode 17 added (JavaScript's tables are Unicode 16).
 - `==` between two objects, including objects met while comparing arrays (JavaScript compares their references); ordering across other types or with non-ASCII strings.
-- `for` over anything but an array or nil.
 - String filters splitting a character outside the BMP, as `truncate`, `slice`, `first`, `last`, `split: ''`, `replace: ''` or `strip` with such a character can; string filters on invalid UTF-8; `downcase` or `upcase` of a character whose JavaScript mapping differs; `strip` whose argument is the `nil` literal (liquidjs passes it as a truthy Drop).
 - `truncate`, `truncatewords` or `slice` with a non-numeric count; `first` or `last` of an empty array, `last` of anything but a non-empty string or array, `first` of an object; `json` of an object.
 - `strip_html` of an unclosed `<` that follows text or a kept character, where liquidjs 10.26 loops forever.
@@ -181,7 +180,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 - A returned value implementing `mist.Comparer` compares itself: `==`, `!=`, `<`, `>`, `<=` and `>=` with it on either side call its `Compare` (with the operator mirrored when it's on the right), before any dialect `Compare` hook. An error from it wrapping `ErrUnsupported` bails with code `hook:value:compare`. It is a JavaScript object to liquidjs, so it's truthy and `default` keeps it; with a `String()` method (`fmt.Stringer`) it stringifies as that wherever liquidjs calls `String()` on it, as string filters and their arguments do. As an index (`xs[d]`) it keys by `String()`, as JavaScript property access does. `case`/`when` and an array's `contains` compare it with its own `==`; it contains nothing itself, and a string contains it by `String()`. Elsewhere (`size`, numeric filters, output) it's a value of an unknown type.
 - A `nil` `FilterFunc` is accepted by `Check` and bails at render time.
 - The parity contract doesn't cover registered filters.
-- `Engine.PassUnknownFilters` matches liquidjs's `strictFilters: false`, its default: a filter that liquidjs 10.26 doesn't define and that isn't registered returns its input unchanged. Its arguments are still evaluated, so under strict an undefined argument is `ErrUndefined`, and the leading-`default` leniency doesn't apply to it. Filters liquidjs does define but mist doesn't implement (`uniq`, `compact`, …) still bail. Off by default, because an unknown name usually means a filter the full engine has and mist doesn't; set it only when `Filters` covers every filter the full engine defines.
+- `Engine.PassUnknownFilters` matches liquidjs's `strictFilters: false`, its default: a filter that liquidjs 10.26 doesn't define and that isn't registered returns its input unchanged. Its arguments are still evaluated, so under strict an undefined argument is `ErrUndefined`, and the leading-`default` leniency doesn't apply to it. Filters liquidjs does define but mist doesn't implement (only `sample`) still bail. Off by default, because an unknown name usually means a filter the full engine has and mist doesn't; set it only when `Filters` covers every filter the full engine defines.
 
 ## Dialects
 
@@ -216,10 +215,12 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 
 | Layer | What it proves |
 |---|---|
-| `testdata/cases.json` | Hand-written cases, one or more per rule above. `node scripts/parity.mjs` checks each expected output against liquidjs. A case's `now` fixes `Date.now` for `'now'` and `'today'`. |
+| `testdata/cases.json` | Hand-written cases, one or more per rule above. `node scripts/parity.mjs` checks each expected output against liquidjs. A case's `now` fixes `Date.now` for `'now'` and `'today'`, and a bail case's `code` is the `Error.Code` mist must bail with. |
 | `testdata/corpus.json` | Every template with plain-JSON data from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) (including production recordings and the Dawn theme), [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) (except tests with partials) and Shopify/liquid's integration tests, plus 5,000 grammar-generated templates, each with liquidjs's lax and strict result, rendered with `TZ=UTC` and a fixed `Date.now` that `TestCorpus` shares. `TestCorpus` requires exact agreement wherever mist doesn't bail, and fails if mist bails on a render listed in `testdata/corpus.accepted`. |
 | `scripts/gen` | Random templates from the grammar above with random data. Run large batches on demand (below). |
 | `testdata/jscase.json` | JavaScript's `toUpperCase`/`toLowerCase` for every code point (`node scripts/jscase.mjs`). `TestCaseMapping` requires `capitalize`, `downcase` and `upcase` to match or bail for each one. |
+| `testdata/jsdate.json` | liquidjs's `date` for every strftime directive, with flags and widths, across 59 instants (each hour that matters to `%p` and `%I`, each weekday, January 1 on each weekday, leap days, years 1000 and 9999), and for edge-case input strings (hour 24, second 60, February 30, ±24:00 offsets, two-digit years) (`node scripts/jsdate.mjs`). `TestDateTable` requires each to match or bail, and instants within years 1000–9999 to bail only on `%c`, `%x`, `%X` and `%Z`. |
+| `testdata/jschar.json` | For every code point, JavaScript's `\s`, what liquidjs's `{{-` trims (found by rendering it), what `number_of_words: 'cjk'` counts as a word of its own, and what `slugify` keeps in the `default`, `pretty` and `raw` modes; and liquidjs's output for each whitespace character in whitespace control, `{% # %}` and `{% liquid %}` lines, `strip`, `normalize_whitespace`, `number_of_words`, `truncatewords`, `slugify`, `to_integer` and `blank` (`node scripts/jschar.mjs`). `TestCharClasses` requires `jsSpace`, `isTrimBlank`, `isCJK` and `slugify` to match or bail for each code point, and each whitespace render to match exactly. |
 | `FuzzRender` | No panics. `Check` rejects ⇒ `Render` fails, and `Check` accepts ⇒ `Render` never bails on syntax. |
 
 Regenerate the corpus (needs Ruby, Node, and clones of Shopify/liquid-spec, [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) and Shopify/liquid):
@@ -242,6 +243,4 @@ MIST_CORPUS=/tmp/g.oracle.json go test -run TestCorpus -v .
 
 ## Changing the spec
 
-1. Add cases to `testdata/cases.json` and confirm them with `node scripts/parity.mjs`.
-2. Update the grammar and semantics here in the same change. If the grammar changed, extend `scripts/gen`.
-3. Regenerate the corpus, run `go test ./...`, and do a 100k generated run plus a couple of minutes of `go test -fuzz FuzzRender`.
+[CONTRIBUTING.md § Making a change](CONTRIBUTING.md#making-a-change) is the checklist.

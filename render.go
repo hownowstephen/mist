@@ -32,7 +32,7 @@ type frame struct {
 	lit        uint8 // case: the subject's lit
 	parentLive bool
 	active     bool // current branch (or loop body) executes
-	taken      bool // a branch of this if/unless already executed, or a when of this case matched
+	taken      bool // if/unless: a branch executed; case: a when matched; for: the collection was empty, so else renders
 	sawElse    bool
 	rtrim      bool  // for: the for tag's -%}, reapplied on each iteration
 	rev        bool  // for: iterate coll from the end (reversed)
@@ -53,40 +53,50 @@ func (f *frame) subject() val { return val{x: f.x, s: f.name, n: f.n, lit: f.lit
 func (f *frame) looping() bool { return f.kind == kFor && !f.sawElse }
 
 type renderer struct {
+	config
+	shared
 	tpl          string
 	out          []byte
-	vars         map[string]any
-	assigns      map[string]any
-	strict       bool
 	check        bool         // parse every branch, evaluate nothing
 	undef        pendingUndef // strict undefined, raised once the current tag parses cleanly
-	tags         map[string]TagFunc
-	filterFns    map[string]FilterFunc
-	passUnknown  bool // Engine.PassUnknownFilters
-	dialect      *Dialect
-	now          func() time.Time
 	stack        [inlineDepth]frame
 	deep         []frame // frames from inlineDepth on
 	tagFrames    []frame // the open frames, reused for each custom tag call
 	depth        int
-	limits       Limits
-	outBase      int            // len(out) before the render, which Limits.Output doesn't count
-	spent        int            // memory units filters have charged, against limits.Memory
-	iters        int            // loop iterations so far, against limits.Iterations
-	halt         int            // 1 + the stack index of the for a break or continue is unwinding to, or 0
-	haltBreak    bool           // the halt is a break, not a continue
-	cycles       map[string]int // cycle positions by liquidjs's fingerprint
-	binds        []binding      // expression filter items, innermost last
-	lenientUndef bool           // a lenient path met an undefined variable under strict
-	env          map[string]any // increment and decrement counters, which liquidjs keeps in the data scope
-	floor        int            // frames a Tag.Render inherited, which its tags can't close or break out of
-	nested       int            // Tag.Render depth
-	scope        *tagScope      // what custom tags see, allocated on the first call so the renderer stays on the stack
+	outBase      int       // len(out) before the render, which Limits.Output doesn't count
+	halt         int       // 1 + the stack index of the for a break or continue is unwinding to, or 0
+	haltBreak    bool      // the halt is a break, not a continue
+	binds        []binding // expression filter items, innermost last
+	lenientUndef bool      // a lenient path met an undefined variable under strict
+	floor        int       // frames a Tag.Render inherited, which its tags can't close or break out of
+	nested       int       // Tag.Render depth
+	scope        *tagScope // what custom tags see, allocated on the first call so the renderer stays on the stack
 
 	// expression cursor: src is tpl[base:base+len(src)]
 	src  string
 	base int
 	p    int
+}
+
+// config is a render's settings, which nested Tag.Render calls inherit unchanged.
+type config struct {
+	vars        map[string]any
+	strict      bool
+	tags        map[string]TagFunc
+	filterFns   map[string]FilterFunc
+	passUnknown bool // Engine.PassUnknownFilters
+	dialect     *Dialect
+	now         func() time.Time
+	limits      Limits
+}
+
+// shared is the state a custom tag call carries on and hands back.
+type shared struct {
+	assigns map[string]any
+	env     map[string]any // increment and decrement counters, which liquidjs keeps in the data scope
+	cycles  map[string]int // cycle positions by liquidjs's fingerprint
+	spent   int            // memory units filters have charged, against limits.Memory
+	iters   int            // loop iterations so far, against limits.Iterations
 }
 
 type bailout struct{ err error }
@@ -288,7 +298,7 @@ func (r *renderer) output(b, e int) {
 		}
 		return // liquidjs prints EmptyDrop's valueOf, ""
 	}
-	if r.ws(); v.lit == 0 && v.x == nilLit && r.peek() != '|' && literal(text) {
+	if r.ws(); isNilLit(v) && r.peek() != '|' && literal(text) {
 		bail(b, "output-nil-literal", "output of the nil literal") // see write; an assigned nil bails there
 	}
 	v = r.filters(v, live)
@@ -309,7 +319,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 	live := r.live()
 	switch name {
 	case "if", "unless":
-		c := r.cond(live)
+		c := r.fcond(live)
 		if name == "unless" {
 			c = !c
 		}
@@ -320,11 +330,11 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		r.push(frame{kind: k, parentLive: live, active: c, taken: c})
 	case "elsif":
 		f := r.top()
-		if f == nil || f.kind >= kFor || f.sawElse {
+		if f == nil || (f.kind != kIf && f.kind != kUnless) || f.sawElse {
 			bail(b, "unexpected-block-tag", "unexpected elsif")
 		}
 		eval := f.parentLive && !f.taken && !r.check && r.halt == 0
-		f.active = r.cond(eval)
+		f.active = r.fcond(eval)
 		f.taken = f.taken || f.active
 	case "else":
 		r.end()
@@ -352,7 +362,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		v = r.filters(v, live)
 		r.end()
-		if v.lit == 0 && v.x == nilLit {
+		if isNilLit(v) {
 			v = val{} // liquidjs unwraps the nil Drop to null, which no longer matches undefined
 		}
 		// Until the first when, the body is parsed but never rendered.
@@ -615,7 +625,7 @@ func (r *renderer) cycle(live bool, at int) {
 func (r *renderer) cycleValue(eval bool) val {
 	at := r.pos()
 	v := r.expr(eval, false)
-	if v.keyword() != "" || v.lit == 0 && v.x == nilLit {
+	if v.keyword() != "" || isNilLit(v) {
 		bail(at, "cycle-value", "cycle value %s", r.src[at-r.base:r.p])
 	}
 	return v
@@ -717,14 +727,10 @@ func (r *renderer) callTag(fn TagFunc, name, args, src string, pos int) {
 		r.scope = new(tagScope)
 	}
 	s := r.scope
-	*s = tagScope{
-		vars: r.vars, assigns: r.assigns, env: r.env, cycles: r.cycles,
-		strict: r.strict, tags: r.tags, filterFns: r.filterFns, passUnknown: r.passUnknown, dialect: r.dialect, now: r.now,
-		limits: r.limits, outUsed: len(r.out) - r.outBase, spent: r.spent, iters: r.iters, nested: r.nested,
-	}
+	*s = tagScope{config: r.config, shared: r.shared, outUsed: len(r.out) - r.outBase, nested: r.nested}
 	t := Tag{Name: name, Args: args, Source: src, Vars: r.vars, Strict: r.strict, Depth: r.nested, frames: r.frames(), scope: s}
 	out, err := fn(r.out, t)
-	r.assigns, r.env, r.cycles, r.spent, r.iters = s.assigns, s.env, s.cycles, s.spent, s.iters
+	r.shared = s.shared
 	if err != nil {
 		if me := (*Error)(nil); errors.As(err, &me) {
 			e := *me // from Tag.Render, say: keep its kind and code, at the tag
