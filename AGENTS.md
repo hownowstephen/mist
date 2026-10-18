@@ -24,6 +24,7 @@ For every template mist accepts, its output must match liquidjs 10.26 (`new Liqu
 | `liquidjs_filters.go` | Every filter liquidjs defines (checked by `parity.mjs`) |
 | `testdata/cases.json` | Hand-written cases, each checked against liquidjs |
 | `testdata/corpus.json` | Harvested and generated templates with liquidjs's results |
+| `testdata/corpus.accepted` | The corpus renders mist doesn't bail on; `TestCorpus` fails if one starts bailing |
 | `scripts/` | `config.mjs` (the shared liquidjs config and environment checks), `parity.mjs`, `oracle.mjs` (liquidjs as oracle), `gen/` (template generator), `bench.mjs` |
 | `cmd/mistcheck` | The template checker |
 
@@ -45,7 +46,7 @@ golangci-lint run ./...
 2. Update SPEC.md in the same change, and bump its title's minor version (`v0.N.x`).
 3. Extend `scripts/gen` for new grammar or filters, and run a 100k differential with a new seed.
 4. Every `bail` takes a code (`Error.Code`), which is API: reuse one that fits, or add a kebab-case one and run `go test -run TestCodes -update-codes .` to record it in `testdata/codes.txt`. A data-dependent bail's code also goes in `runtimeCodes` (`mist_test.go`), or `FuzzRender` fails.
-5. Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change.
+5. Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, which also rewrites `testdata/corpus.accepted` (`go test -run TestCorpus -update-accepted .`).
 6. Keep `Append` allocation-free on the `basic` benchmark fixture (`alloc_test.go`).
 
 PR titles start with `feat:`, `fix:`, `chore:`, `docs:` or `refactor:`.
