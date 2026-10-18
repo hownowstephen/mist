@@ -59,6 +59,7 @@ jobs:
           key: fuzz-${{ github.run_id }}
           restore-keys: fuzz-
       - run: go test -run '^$' -fuzz FuzzRender -fuzztime 5m .
+      - run: go test -run '^$' -fuzz FuzzInvariants -fuzztime 5m .
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
