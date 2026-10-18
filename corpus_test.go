@@ -107,9 +107,8 @@ func TestCorpus(t *testing.T) {
 // makes mist bail on more of them fails. After a deliberate change, or regenerating the
 // corpus, rewrite it with go test -run TestCorpus -update-accepted.
 func checkAccepted(t *testing.T, keys []string) {
-	slices.Sort(keys)
 	if *updateAccepted {
-		if err := os.WriteFile("testdata/corpus.accepted", []byte(strings.Join(keys, "\n")+"\n"), 0o644); err != nil {
+		if err := os.WriteFile("testdata/corpus.accepted", []byte(encodeAccepted(keys)), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -117,7 +116,7 @@ func checkAccepted(t *testing.T, keys []string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+	want := decodeAccepted(string(b))
 	count := map[string]int{}
 	for _, k := range keys {
 		count[k]++
@@ -141,4 +140,56 @@ func checkAccepted(t *testing.T, keys []string) {
 	if len(lost) > 0 {
 		t.Errorf("%d renders in testdata/corpus.accepted now bail; if that's deliberate, run go test -run TestCorpus -update-accepted:\n%s", len(lost), strings.Join(lost[:min(20, len(lost))], "\n"))
 	}
+}
+
+// encodeAccepted groups "src\tname\tmode" keys under a line per src: "\tname" where both modes
+// are accepted, "\tname\tmode" where one is. Names repeat once per duplicate case.
+func encodeAccepted(keys []string) string {
+	slices.Sort(keys)
+	var b strings.Builder
+	src := ""
+	for i := 0; i < len(keys); {
+		s, rest, _ := strings.Cut(keys[i], "\t")
+		name := rest[:strings.LastIndexByte(rest, '\t')]
+		prefix := s + "\t" + name + "\t"
+		j, lax := i, 0
+		for ; j < len(keys) && (keys[j] == prefix+"lax" || keys[j] == prefix+"strict"); j++ {
+			if keys[j] == prefix+"lax" {
+				lax++
+			}
+		}
+		if s != src {
+			src = s
+			b.WriteString(s + "\n")
+		}
+		both := min(lax, j-i-lax)
+		for range both {
+			b.WriteString("\t" + name + "\n")
+		}
+		for range lax - both {
+			b.WriteString("\t" + name + "\tlax\n")
+		}
+		for range j - i - lax - both {
+			b.WriteString("\t" + name + "\tstrict\n")
+		}
+		i = j
+	}
+	return b.String()
+}
+
+func decodeAccepted(text string) []string {
+	var keys []string
+	src := ""
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		name, ok := strings.CutPrefix(line, "\t")
+		switch {
+		case !ok:
+			src = line
+		case strings.HasSuffix(name, "\tlax"), strings.HasSuffix(name, "\tstrict"):
+			keys = append(keys, src+"\t"+name)
+		default:
+			keys = append(keys, src+"\t"+name+"\tlax", src+"\t"+name+"\tstrict")
+		}
+	}
+	return keys
 }
