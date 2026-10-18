@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -174,6 +175,78 @@ func FuzzRender(f *testing.F) {
 			}
 		} else if errors.Is(err1, ErrUnsupported) && !runtimeBail(err1) {
 			t.Fatalf("Check accepted but Render bailed on syntax: %v", err1)
+		}
+	})
+}
+
+// FuzzInvariants checks properties that need no oracle, on fuzzed data as well as
+// templates: rendering is deterministic, Append and a one-step RenderChain agree with
+// Render, raising Limits or passing unknown filters never changes what renders, and the
+// caller's vars are never mutated. Strict and lax output may differ, as liquidjs's
+// lenientIf makes them.
+func FuzzInvariants(f *testing.F) {
+	for _, c := range loadCases(f) {
+		b, _ := json.Marshal(c.Data)
+		f.Add(c.Tpl, b, c.Strict)
+	}
+	if b, err := os.ReadFile("testdata/corpus.json"); err == nil {
+		var cs []corpusCase
+		if json.Unmarshal(b, &cs) == nil {
+			for _, c := range cs {
+				b, _ := json.Marshal(c.Data)
+				f.Add(c.Tpl, b, false)
+			}
+		}
+	}
+	now := func() time.Time { return time.UnixMilli(1700000000123) }
+	e := Engine{Now: now}
+	raised := Engine{Now: now, PassUnknownFilters: true, Limits: Limits{Memory: 1 << 40, Output: 1 << 30, Iterations: 1 << 30}}
+	f.Fuzz(func(t *testing.T, tpl string, data []byte, strict bool) {
+		newVars := func() map[string]any {
+			var m map[string]any
+			if json.Unmarshal(data, &m) != nil {
+				m = map[string]any{"a": map[string]any{"b": "x", "n": 2.0}, "xs": []any{1.0, "s", nil}, "t": true, "s": "str"}
+			}
+			return m
+		}
+		vars := newVars()
+		errStr := func(err error) string {
+			if err == nil {
+				return ""
+			}
+			return err.Error()
+		}
+		out, err := e.Render(tpl, vars, strict)
+		failInternal(t, err)
+		if out2, err2 := e.Render(tpl, vars, strict); out2 != out || errStr(err2) != errStr(err) {
+			t.Fatalf("not deterministic: %q, %v then %q, %v", out, err, out2, err2)
+		}
+		prefix := []byte("pre\x00")
+		app, aerr := e.Append(append(make([]byte, 0, 64), prefix...), tpl, vars, strict)
+		switch {
+		case errStr(aerr) != errStr(err):
+			t.Fatalf("Append: %v; Render: %v", aerr, err)
+		case err != nil && app != nil:
+			t.Fatalf("Append returned %q with %v", app, err)
+		case err == nil && string(app) != string(prefix)+out:
+			t.Fatalf("Append: %q; Render with the prefix: %q", app, string(prefix)+out)
+		}
+		res, n, _ := e.RenderChain([]Step{{Body: tpl, Strict: strict}}, vars)
+		switch {
+		case errors.Is(err, ErrUnsupported):
+			if n != 0 || len(res) != 0 {
+				t.Fatalf("RenderChain: step %d, %v; Render bailed: %v", n, res, err)
+			}
+		case n != 1 || len(res) != 1 || res[0].Out != out || errStr(res[0].Err) != errStr(err):
+			t.Fatalf("RenderChain: step %d, %+v; Render: %q, %v", n, res, out, err)
+		}
+		if !errors.Is(err, ErrUnsupported) {
+			if out2, err2 := raised.Render(tpl, vars, strict); out2 != out || errStr(err2) != errStr(err) {
+				t.Fatalf("with raised limits and unknown filters passed: %q, %v; by default: %q, %v", out2, err2, out, err)
+			}
+		}
+		if !reflect.DeepEqual(vars, newVars()) {
+			t.Fatalf("vars mutated: %v", vars)
 		}
 	})
 }

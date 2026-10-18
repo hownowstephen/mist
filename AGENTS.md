@@ -37,6 +37,7 @@ go run ./scripts/gen -n 100000 -seed 7 > /tmp/g.json
 node scripts/oracle.mjs -o /tmp/o.json /tmp/g.json
 MIST_CORPUS=/tmp/o.json go test -run TestCorpus -v .   # differential: must report 0 mismatches
 go test -run '^$' -fuzz FuzzRender -fuzztime 60s .
+go test -run '^$' -fuzz FuzzInvariants -fuzztime 60s .
 golangci-lint run ./...
 ```
 
