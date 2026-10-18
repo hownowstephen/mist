@@ -327,6 +327,7 @@
   {"name": "strip argument truthiness", "tpl": "[{{ ' x ' | strip: nothing }}][{{ 'txt' | strip: true }}][{{ 'falsex' | lstrip: false }}][{{ 'abx' | lstrip: xs }}]", "data": {"xs": ["a", "b"], "nothing": null}, "out": "[x][x][falsex][x]"},
   {"name": "json escapes control characters", "tpl": "{{ s | json }}", "data": {"s": "\b\f\r\t"}, "out": "\"\\b\\f\\r\\t\""},
   {"name": "slice with a negative length", "tpl": "[{{ 'abcdef' | slice: 4, -2 }}]", "out": "[]"},
+  {"name": "slice truncates a fractional end toward zero", "tpl": "{{ 'abcde' | slice: 1, -2.5 }}|{{ 'abcde' | slice: -2.5, 2 }}", "out": "bcd|cd"},
   {"name": "math filters parse strings like Number", "tpl": "{{ '' | plus: 1 }}|{{ '0o17' | plus: 0 }}|{{ '0B101' | plus: 0 }}|{{ '2E-1' | times: 10 }}|{{ '1e' | plus: 1 }}|{{ '+.5e1' | plus: 0 }}|{{ '-0x10' | plus: 1 }}", "out": "1|15|5|2|1|5|1"},
   {"name": "math filter on Infinity", "tpl": "{{ 'Infinity' | plus: 0 }}", "err": "unsupported", "code": "number-from-string"},
   {"name": "math filter on an oversized hex string", "tpl": "{{ '0x1ffffffffffffffff' | plus: 0 }}", "err": "unsupported", "code": "number-from-string"},
