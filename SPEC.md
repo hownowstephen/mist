@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.31.x
+# mist Liquid subset — v0.32.x
 
 _Last updated 2026-10-17. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -151,7 +151,7 @@ Filters other than the built-ins above and registered ones (with `Engine.PassUnk
 ## Limits
 
 `Engine.Limits` bounds each render; zero fields take the defaults, and going over one bails.
-- `Memory` (default 10,000,000) is a budget in liquidjs's `memoryLimit` units. Before it runs, each filter is charged at least what liquidjs charges it: the length of its input and each argument (UTF-16 length, counted as UTF-8 bytes, which is never less), an array's length plus its items', 24 for a number, boolean or object, and for `join` the array's length times one plus the separator's, for `slice` the length argument. `replace` is also charged for the text it adds, and `date` for its output, the two filters whose output can far exceed their input. So with `Memory` at or below the full engine's `memoryLimit`, mist never renders a template that engine refuses. liquidjs's default has no limit, so the default only bails.
+- `Memory` (default 10,000,000) is a budget in liquidjs's `memoryLimit` units. Before it runs, each filter is charged at least what liquidjs charges it: the length of its input and each argument (UTF-16 length, counted as UTF-8 bytes, which is never less, and 1 for `''`, which array filters treat as a one-item array), an array's length plus its items', 24 for a number, boolean or object, and for `join` the number of items (1 for a value that isn't an array or nil) times one plus the separator's length (1 for a nil separator), for `slice` the length argument, and 3 for the default `'...'` of `truncate` and `truncatewords` and `'and'` of `array_to_sentence_string` when that argument is missing or undefined. `replace` is also charged for the text it adds, and `date` for its output, the two filters whose output can far exceed their input. A range is charged its number of items, as liquidjs charges it. So with `Memory` at or below the full engine's `memoryLimit`, mist never renders a template that engine refuses. liquidjs's default has no limit, so the default only bails.
 - `Output` (default 4 MiB) caps the bytes one render writes, captures included.
 - `Iterations` (default 1,000,000) caps `for` loop iterations across the render.
 
@@ -215,7 +215,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 
 | Layer | What it proves |
 |---|---|
-| `testdata/cases.json` | Hand-written cases, one or more per rule above. `node scripts/parity.mjs` checks each expected output against liquidjs. A case's `now` fixes `Date.now` for `'now'` and `'today'`, and a bail case's `code` is the `Error.Code` mist must bail with. |
+| `testdata/cases.json` | Hand-written cases, one or more per rule above. `node scripts/parity.mjs` checks each expected output against liquidjs. A case's `now` fixes `Date.now` for `'now'` and `'today'`, a bail case's `code` is the `Error.Code` mist must bail with, and `mem` is what its render charges liquidjs's `memoryLimit`. `TestCases` renders a case with `mem` at `Limits.Memory` equal to it, or to its `mistMem` where mist charges more, and requires a `memory-limit` bail at one less. |
 | `testdata/corpus.json` | Every template with plain-JSON data from [Shopify/liquid-spec](https://github.com/Shopify/liquid-spec) (including production recordings and the Dawn theme), [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) (except tests with partials) and Shopify/liquid's integration tests, plus 5,000 grammar-generated templates, each with liquidjs's lax and strict result, rendered with `TZ=UTC` and a fixed `Date.now` that `TestCorpus` shares. `TestCorpus` requires exact agreement wherever mist doesn't bail, and fails if mist bails on a render listed in `testdata/corpus.accepted`. |
 | `scripts/gen` | Random templates from the grammar above with random data. Run large batches on demand (below). |
 | `testdata/jscase.json` | JavaScript's `toUpperCase`/`toLowerCase` for every code point (`node scripts/jscase.mjs`). `TestCaseMapping` requires `capitalize`, `downcase` and `upcase` to match or bail for each one. |

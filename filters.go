@@ -118,12 +118,24 @@ func (r *renderer) spend(name string, v val, args []val, at int) {
 	case "escape_once": // escape(unescape(s)) charges s twice
 		cost += memSize(v)
 	case "join":
-		sep := 1
-		if len(args) > 0 {
+		sep := 1 // a nil separator joins with ' '
+		if len(args) > 0 && !isNil(args[0]) {
 			sep = memSize(args[0])
 		}
+		n := 1 // liquidjs's toArray wraps a value that isn't an array or nil
 		if a, ok := v.x.([]any); ok && v.lit == 0 {
-			cost += len(a) * (1 + sep)
+			n = len(a)
+		} else if isNil(v) {
+			n = 0
+		}
+		cost += n * (1 + sep)
+	case "truncate", "truncatewords", "array_to_sentence_string":
+		i := 1 // an undefined ellipsis defaults to '...'
+		if name == "array_to_sentence_string" {
+			i = 0 // and an undefined connector to 'and'
+		}
+		if len(args) <= i || args[i].lit == 0 && args[i].x == (Undefined{}) {
+			cost += 3
 		}
 	case "slice", "sample": // liquidjs charges slice's length and sample's count
 		if i := len(args) - 1; i >= 0 && (name == "sample" || i == 1) {
@@ -149,12 +161,13 @@ func (r *renderer) charge(cost, at int) {
 }
 
 // memSize is at least the length liquidjs charges for a value: a string's UTF-16 length
-// (no more than its bytes), an array's length plus its items', and a bound on the length
-// a number, boolean or object prints as.
+// (no more than its bytes) but 1 for ”, which array filters wrap in a one-item array,
+// an array's length plus its items', and a bound on the length a number, boolean or
+// object prints as.
 func memSize(v val) int {
 	switch v.lit {
 	case litStr:
-		return len(v.s)
+		return max(len(v.s), 1)
 	case litNum:
 		return 24
 	}
@@ -164,7 +177,7 @@ func memSize(v val) int {
 func dataSize(x any) int {
 	switch x := x.(type) {
 	case string:
-		return len(x)
+		return max(len(x), 1)
 	case []any:
 		n := len(x)
 		for _, e := range x {
