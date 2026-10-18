@@ -39,12 +39,15 @@ type frame struct {
 	idx        int32 // for: the current item
 	collStart  int32 // for: the collection as written in the template, for forloop.name
 	collEnd    int32
+	span       int32  // for over a range: its item count after offset and limit; coll is nil
 	body       int    // for: offset just past the for tag; capture: where its output starts
 	name       string // for: the loop variable; capture: the target; case: the subject's s
 	coll       []any
-	x          any     // case: the subject's x
-	n          float64 // case: the subject's n
+	x          any     // case: the subject's x; for over a range: the current item, once boxed
+	n          float64 // case: the subject's n; for over a range: its first item
 }
+
+func (f *frame) len() int { return len(f.coll) + int(f.span) }
 
 func (f *frame) subject() val { return val{x: f.x, s: f.name, n: f.n, lit: f.lit} }
 
@@ -419,23 +422,36 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			bail(r.base+r.p, "for-collection", "for collection must be a variable path or a range")
 		}
 		cs := r.p
-		coll := r.expr(live, false).x
+		var coll any
+		lo, n := 0, -1 // a range literal's items, boxed as the loop reaches them
+		if r.peek() == '(' {
+			lo, n = r.rangeBounds(live)
+		} else {
+			coll = r.expr(live, false).x
+		}
 		f := frame{kind: kFor, parentLive: live, body: next, rtrim: rt, name: v, collStart: int32(r.base + cs), collEnd: int32(r.pos())}
 		mods := r.forParams(live)
 		r.end()
 		if live {
 			switch c := coll.(type) {
+			case nil:
+				if n < 0 {
+					f.taken = true
+					break
+				}
+				i, j := mods.bounds(n)
+				f.n, f.span, f.taken = float64(lo+i), int32(j-i), n == 0
 			case []any:
 				f.coll = mods.apply(c)
 				f.taken = len(c) == 0 // for its else part
-			case nil, Undefined:
+			case Undefined:
 				f.taken = true
 			default:
 				bail(b, "for-over-non-array", "for over non-array %T", coll)
 			}
 		}
 		f.rev = mods.rev
-		f.active = len(f.coll) > 0
+		f.active = f.len() > 0
 		r.push(f)
 	case "break", "continue":
 		r.end()
@@ -682,13 +698,20 @@ type forMods struct {
 
 // apply is liquidjs's arr.slice(offset), then .slice(0, limit); reversal happens as the loop iterates.
 func (m forMods) apply(a []any) []any {
+	i, j := m.bounds(len(a))
+	return a[i:j]
+}
+
+// bounds is where apply slices n items.
+func (m forMods) bounds(n int) (i, j int) {
 	if m.hasOffset {
-		a = a[sliceIndex(m.offset, len(a)):]
+		i = sliceIndex(m.offset, n)
 	}
+	j = n
 	if m.hasLimit {
-		a = a[:sliceIndex(m.limit, len(a))]
+		j = i + sliceIndex(m.limit, n-i)
 	}
-	return a
+	return i, j
 }
 
 // sliceIndex resolves an Array.prototype.slice bound: negative counts from the end.
@@ -810,11 +833,11 @@ func (r *renderer) endIteration(at int) bool {
 			return false
 		}
 	}
-	if f.active && !r.check && int(f.idx)+1 < len(f.coll) {
+	if f.active && !r.check && int(f.idx)+1 < f.len() {
 		if r.iters++; r.iters > r.limits.Iterations {
 			bail(at, "iteration-limit", "more than %d loop iterations", r.limits.Iterations) // ranges make loop counts template-controlled
 		}
-		f.idx++
+		f.idx, f.x = f.idx+1, nil
 		return true
 	}
 	return false
