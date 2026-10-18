@@ -224,6 +224,7 @@ func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool)
 func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
 	r := renderer{tpl: tpl, out: dst, outBase: len(dst), vars: vars, strict: strict, tags: e.Tags, filterFns: e.Filters, dialect: e.Dialect, now: e.Now, passUnknown: e.PassUnknownFilters, limits: e.Limits.orDefaults()}
 	defer func() { env = r.env }()
+	defer r.releaseAssigns()
 	defer r.recoverBail(&err)
 	r.run()
 	return r.out, nil, nil
