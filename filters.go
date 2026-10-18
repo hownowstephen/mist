@@ -110,13 +110,14 @@ func (r *renderer) filters(v val, eval bool) val {
 // ponytail: charges inputs, as liquidjs does, plus the output of replace and date, the
 // filters whose output can dwarf their input; other results aren't charged.
 func (r *renderer) spend(name string, v val, args []val, at int) {
-	cost := memSize(v)
+	in := r.memSize(v)
+	cost := in
 	for _, a := range args {
-		cost += memSize(a)
+		cost += r.memSize(a)
 	}
 	switch name {
 	case "escape_once": // escape(unescape(s)) charges s twice
-		cost += memSize(v)
+		cost += in
 	case "join":
 		sep := 1 // a nil separator joins with ' '
 		if len(args) > 0 && !isNil(args[0]) {
@@ -158,6 +159,48 @@ func (r *renderer) charge(cost, at int) {
 	if r.spent += cost; r.spent > r.limits.Memory {
 		bail(at, "memory-limit", "filters over the memory limit of %d", r.limits.Memory)
 	}
+}
+
+// memSize is memSize(v), remembering the sizes of the last few large arrays so that a
+// filter on an array inside a loop over it doesn't walk the array every iteration.
+func (r *renderer) memSize(v val) int {
+	a, ok := v.x.([]any)
+	if !ok || v.lit != 0 || len(a) == 0 {
+		return memSize(v)
+	}
+	p := &a[0]
+	c := r.sizes
+	if c != nil {
+		for _, e := range c.e {
+			if e.p == p && e.n == len(a) {
+				return e.size
+			}
+		}
+	}
+	n := dataSize(a)
+	if n >= minCachedSize {
+		if c == nil {
+			c = new(sizeCache)
+			r.sizes = c
+		}
+		c.e[c.next] = sizeEntry{p, len(a), n}
+		c.next = (c.next + 1) % len(c.e)
+	}
+	return n
+}
+
+const minCachedSize = 256
+
+// sizeCache holds a few array sizes; render data and filter results are never mutated, so
+// an array's first item and length identify its contents.
+type sizeCache struct {
+	e    [8]sizeEntry
+	next int
+}
+
+type sizeEntry struct {
+	p       *any
+	n, size int
 }
 
 // memSize is at least the length liquidjs charges for a value: a string's UTF-16 length

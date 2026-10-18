@@ -378,3 +378,45 @@ func TestComparer(t *testing.T) {
 		}
 	}
 }
+
+// Remembered array sizes charge exactly what walking the arrays does.
+func TestArraySizeCache(t *testing.T) {
+	items := slices.Repeat([]any{"x"}, 300) // 600 units
+	arrs := make([]any, 10)
+	for i := range arrs {
+		arrs[i] = slices.Clone(items)
+	}
+	vars := map[string]any{"items": items, "prefix": items[:299], "arrs": arrs}
+	for tpl, want := range map[string]int{
+		"{% for x in items %}{{ items | size }}{% endfor %}":                                         300 * 600,
+		"{{ items | size }}{{ prefix | size }}{{ items | size }}":                                    600 + 598 + 600,
+		"{% for a in arrs %}{{ a | size }}{% endfor %}{% for a in arrs %}{{ a | size }}{% endfor %}": 20 * 600,
+	} {
+		for _, mem := range []int{want, want - 1} {
+			e := Engine{Limits: Limits{Memory: mem}}
+			_, err := e.Render(tpl, vars, true)
+			var me *Error
+			if bailed := errors.As(err, &me) && me.Code == "memory-limit"; bailed != (mem < want) || !bailed && err != nil {
+				t.Errorf("%s with Memory %d: %v", tpl, mem, err)
+			}
+		}
+	}
+}
+
+// BenchmarkFilterInLoop charges a filter on the array it loops over every iteration.
+func BenchmarkFilterInLoop(b *testing.B) {
+	e := Engine{Limits: Limits{Memory: math.MaxInt32}}
+	for _, n := range []int{1000, 10000} {
+		vars := map[string]any{"items": slices.Repeat([]any{"x"}, n)}
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			buf := make([]byte, 0, 8*n)
+			b.ReportAllocs()
+			for b.Loop() {
+				var err error
+				if buf, err = e.Append(buf[:0], "{% for x in items %}{{ items | size }}{% endfor %}", vars, true); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
