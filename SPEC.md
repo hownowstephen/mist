@@ -223,6 +223,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | `testdata/jschar.json` | For every code point, JavaScript's `\s`, what liquidjs's `{{-` trims (found by rendering it), what `number_of_words: 'cjk'` counts as a word of its own, and what `slugify` keeps in the `default`, `pretty` and `raw` modes; and liquidjs's output for each whitespace character in whitespace control, `{% # %}` and `{% liquid %}` lines, `strip`, `normalize_whitespace`, `number_of_words`, `truncatewords`, `slugify`, `to_integer` and `blank` (`node scripts/jschar.mjs`). `TestCharClasses` requires `jsSpace`, `isTrimBlank`, `isCJK` and `slugify` to match or bail for each code point, and each whitespace render to match exactly. |
 | `FuzzRender` | No panics. `Check` rejects ⇒ `Render` fails, and `Check` accepts ⇒ `Render` never bails on syntax. |
 | `FuzzInvariants` | On fuzzed templates and JSON data: `Render` is deterministic, `Append` gives the prefix plus `Render`'s output, a one-step `RenderChain` gives `Render`'s result, raising `Limits` or setting `PassUnknownFilters` never changes what renders, and the caller's vars are never mutated. |
+| `FuzzParity` | Opt-in (`MIST_FUZZ_PARITY=1`, needs Node): on fuzzed templates and JSON data, wherever mist renders, liquidjs (`scripts/parity-worker.mjs`) gives the same output, and wherever mist returns `ErrUndefined`, liquidjs fails. |
 
 Regenerate the corpus (needs Ruby, Node, and clones of Shopify/liquid-spec, [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) and Shopify/liquid):
 
