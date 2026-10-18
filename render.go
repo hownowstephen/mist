@@ -865,6 +865,7 @@ func (r *renderer) counter(name string, inc bool) {
 // to end. Blocks opened in it must close in it, as liquidjs parses it on its own.
 func (r *renderer) liquid(start, end int) {
 	depth := r.depth
+	end = start + len(strings.TrimRightFunc(r.tpl[start:end], isTrimBlank))
 	for pos := start; pos < end; {
 		eol := strings.IndexByte(r.tpl[pos:end], '\n')
 		next := end
@@ -879,6 +880,19 @@ func (r *renderer) liquid(start, end int) {
 		if b == e {
 			pos = next
 			continue
+		}
+		// liquidjs reads each line as a DelimitedToken, which drops a leading '-' and a
+		// trailing one; only the last line can end in '-', as the others end in '\n'.
+		if b < e && r.tpl[b] == '-' {
+			b++
+		}
+		if eol == end && b < e && r.tpl[e-1] == '-' {
+			e--
+		}
+		b += len(r.tpl[b:e]) - len(strings.TrimLeftFunc(r.tpl[b:e], isTrimBlank))
+		e = b + len(strings.TrimRightFunc(r.tpl[b:e], isTrimBlank))
+		if b == e {
+			bail(b, "liquid-tag-dash", "a liquid tag line of only '-'")
 		}
 		r.setSrc(b, e)
 		if r.peek() != '#' {

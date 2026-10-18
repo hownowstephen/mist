@@ -1,6 +1,6 @@
 // Runs harvested/generated cases through liquidjs (the SPEC.md parity config) and
 // writes their lax and strict results, and what the lax render charged memoryLimit,
-// the oracle for corpus_test.go.
+// the oracle for corpus_test.go. A case's `ruby` (harvest.rb) passes through unchanged.
 //
 //   node oracle.mjs [-o OUT.json] CASES.json...   (default out: ../testdata/corpus.json)
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -22,7 +22,7 @@ function run(tpl, data, strict) {
   }
 }
 
-const corpus = cases.map(({ src, name, tpl, data }) => {
+const corpus = cases.map(({ src, name, tpl, data, ruby }) => {
   memory.spent = 0;
   const lax = run(tpl, data, false);
   const mem = memory.spent;
@@ -30,6 +30,7 @@ const corpus = cases.map(({ src, name, tpl, data }) => {
   const c = { src, name, tpl, data, lax };
   if (lax.out !== undefined && mem > 0) c.mem = mem;
   if (JSON.stringify(strict) !== JSON.stringify(lax)) c.strict = strict;
+  if (ruby !== undefined) c.ruby = ruby;
   return c;
 });
 writeFileSync(out, '[\n' + corpus.map((c) => JSON.stringify(c)).join(',\n') + '\n]\n');

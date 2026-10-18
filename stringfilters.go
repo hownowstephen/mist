@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -274,18 +275,32 @@ func urlDecode(s string, at int) string {
 func isHex(c byte) bool { return isDigit(c) || c|0x20 >= 'a' && c|0x20 <= 'f' }
 
 // base64Decode is Node's lenient Buffer.from(s, 'base64'): standard and URL-safe
-// alphabets, everything else skipped, stopping at the first '='. Bytes that aren't
-// UTF-8 bail rather than reproduce the replacement characters.
+// alphabets, everything else skipped, stopping at the first '='. Node reads each UTF-16
+// unit's low byte. Bytes that aren't UTF-8 bail rather than reproduce the replacement
+// characters.
 func base64Decode(s string, at int) string {
 	var clean []byte
-	for i := 0; i < len(s) && s[i] != '='; i++ {
-		switch c := s[i]; {
-		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '+', c == '/':
-			clean = append(clean, c)
-		case c == '-':
-			clean = append(clean, '+')
-		case c == '_':
-			clean = append(clean, '/')
+	var units [2]uint16
+scan:
+	for _, r := range s {
+		u := units[:1]
+		if r1, r2 := utf16.EncodeRune(r); r1 != utf8.RuneError {
+			units[0], units[1] = uint16(r1), uint16(r2)
+			u = units[:]
+		} else {
+			units[0] = uint16(r)
+		}
+		for _, w := range u {
+			switch c := byte(w); {
+			case c == '=':
+				break scan
+			case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '+', c == '/':
+				clean = append(clean, c)
+			case c == '-':
+				clean = append(clean, '+')
+			case c == '_':
+				clean = append(clean, '/')
+			}
 		}
 	}
 	if len(clean)%4 == 1 {

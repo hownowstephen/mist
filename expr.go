@@ -595,6 +595,12 @@ func (r *renderer) forloop(eval bool, start int) any {
 	if p == "" {
 		bail(at, "expected-property-name", "expected property name")
 	}
+	switch p {
+	case "next", "valueOf", "toString", "toLocaleString", "constructor", "hasOwnProperty", "isPrototypeOf",
+		"propertyIsEnumerable", "liquidMethodMissing", "__proto__", "__defineGetter__", "__defineSetter__",
+		"__lookupGetter__", "__lookupSetter__":
+		bail(at, "forloop-js-property", "forloop.%s is a JavaScript property of liquidjs's ForloopDrop", p)
+	}
 	if !eval {
 		return nil
 	}
@@ -603,7 +609,7 @@ func (r *renderer) forloop(eval bool, start int) any {
 	switch p {
 	case "index":
 		v = boxInt(i + 1)
-	case "index0":
+	case "index0", "i":
 		v = boxInt(i)
 	case "rindex":
 		v = boxInt(n - i)

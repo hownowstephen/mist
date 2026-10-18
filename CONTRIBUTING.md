@@ -40,7 +40,7 @@ MIST_FUZZ_PARITY=1 go test -run '^$' -fuzz FuzzParity -fuzztime 10m .
 
 A crasher in `testdata/fuzz/FuzzParity` replays with `MIST_FUZZ_PARITY=1 go test -run FuzzParity/NAME .`; once it's understood, add it to `testdata/cases.json`.
 
-Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, so the code diff stays reviewable. `testdata/corpus.accepted` lists the corpus renders mist doesn't bail on, and `TestCorpus` fails if one starts bailing; that PR, or any that deliberately changes which renders bail, rewrites it with `go test -run TestCorpus -update-accepted .`.
+Regenerating `testdata/corpus.json` goes in a separate PR stacked on the change, so the code diff stays reviewable. `testdata/corpus.accepted` lists the corpus renders mist doesn't bail on, and `TestCorpus` fails if one starts bailing; that PR, or any that deliberately changes which renders bail, rewrites it with `go test -run TestCorpus -update-accepted .`. The same flag rewrites `testdata/corpus.fragile`, the accepted renders where liquidjs's output differs from Ruby Liquid's (the corpus's `ruby` field). Those are where a future liquidjs is most likely to change, so a PR that adds to it is accepting templates that may need a bail later. `TestCorpus -v` lists them, and logs any change to the set without failing.
 
 ### Adding a filter or tag
 

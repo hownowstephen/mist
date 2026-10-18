@@ -69,6 +69,16 @@ func (r *renderer) filters(v val, eval bool) val {
 				if len(args) == maxFilterArgs {
 					bail(at, "too-many-filter-arguments", "more than %d filter arguments", maxFilterArgs)
 				}
+				if eval && strings.IndexByte(r.src[r.p:], '[') >= 0 {
+					// liquidjs reads `x[y]:` as a keyword argument, so look for the ':' before evaluating y.
+					save := r.p
+					r.expr(false, false)
+					r.ws()
+					if r.peek() == ':' {
+						bail(at, "named-filter-arguments", "named filter arguments other than default's allow_false: true/false are not supported")
+					}
+					r.p = save
+				}
 				arg := r.expr(eval, false)
 				if k := arg.keyword(); k != "" {
 					bail(at, "keyword-outside-equality", "%s is only supported in conditions and output", k)
@@ -143,11 +153,15 @@ func (r *renderer) spend(name string, v val, args []val, at int) {
 				cost += int(min(math.Abs(f), maxSafeInt))
 			}
 		}
-	case "replace":
-		if s, ok := v.str(); ok && len(args) == 2 {
+	case "replace": // liquidjs charges replace's output, of what any input prints as
+		if len(args) == 2 {
 			p, _ := args[0].str()
 			if growth := memSize(args[1]) - len(p); growth > 0 {
-				cost += (strings.Count(s, p) + 1) * growth
+				n := memSize(v) // an object prints as [object Object], which p occurs in at most that often
+				if _, obj := v.x.(map[string]any); !obj {
+					n = strings.Count(toStr(v, at), p)
+				}
+				cost += (n + 1) * growth
 			}
 		}
 	}
