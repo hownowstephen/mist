@@ -276,7 +276,7 @@ func (r *renderer) builtinFilter(name string, v val, a []val, eval bool, at int)
 		if _, undef := v.x.(Undefined); undef && v.lit == 0 {
 			return v // JSON.stringify(undefined) is undefined
 		}
-		return strVal(string(appendJSON(nil, v, at)))
+		return strVal(jsonStr(v, at))
 	case "split":
 		if !takes(0, 1) {
 			return v
@@ -501,7 +501,8 @@ func toStr(v val, at int) string {
 	if s, ok := v.str(); ok {
 		return s
 	}
-	return string(stringify(nil, v, at))
+	var buf [32]byte // numbers and bools fit
+	return string(stringify(buf[:0], v, at))
 }
 
 // argStr stringifies argument i, which JavaScript leaves undefined (so "") when absent.

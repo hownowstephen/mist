@@ -386,6 +386,14 @@ func slugify(s string, a []val, at int) string {
 	return caseMap(s, false, at)
 }
 
+// jsonStr is appendJSON as a string. Not inlined, so its buffer stays out of builtinFilter's frame.
+//
+//go:noinline
+func jsonStr(v val, at int) string {
+	var buf [128]byte
+	return string(appendJSON(buf[:0], v, at))
+}
+
 // appendJSON is JSON.stringify for values whose output Go can reproduce: objects bail,
 // because JavaScript keeps their key order and Go maps don't.
 func appendJSON(dst []byte, v val, at int) []byte {

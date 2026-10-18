@@ -206,7 +206,7 @@ func contains(a, b val, at int) bool {
 	needle := "null"
 	switch _, undef := b.x.(Undefined); {
 	case b.lit != 0 || b.x != nil && !undef:
-		needle = string(stringify(nil, b, at))
+		needle = toStr(b, at)
 	case undef:
 		needle = "undefined"
 	}
