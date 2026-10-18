@@ -421,8 +421,7 @@ func (r *renderer) matching(v val, a []val, at int, first, keep bool) (out []any
 	}
 	matchTruthy := len(a) == 1
 	if !matchTruthy {
-		_, undef := a[1].x.(Undefined)
-		matchTruthy = undef && a[1].lit == 0 // liquidjs's expected === undefined
+		matchTruthy = isUndef(a[1]) // liquidjs's expected === undefined
 	}
 	out, idx = []any{}, -1
 	for i, it := range items {

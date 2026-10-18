@@ -196,11 +196,11 @@ func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at 
 		bail(at, "nil-filter-func", "filter %q is registered without a function", name) // e.g. for Check only
 	}
 	f := Filter{Name: name, Input: v.data(), Args: make([]any, len(args)), Strict: r.strict}
-	if v.lit == 0 && v.x == nilLit {
+	if isNilLit(v) {
 		bail(at, "nil-literal-registered-filter", "the nil literal into a registered filter, which liquidjs passes as a Drop")
 	}
 	for i, a := range args {
-		if a.lit == 0 && a.x == nilLit {
+		if isNilLit(a) {
 			bail(at, "nil-literal-registered-filter", "the nil literal into a registered filter, which liquidjs passes as a Drop")
 		}
 		f.Args[i] = a.data()
