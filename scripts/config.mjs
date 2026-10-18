@@ -2,7 +2,7 @@
 // checks the environment liquidjs renders in, and liquidjs's resolved options.
 //
 //   node config.mjs -w    rewrite liquidjs-options.json after a deliberate change
-import { Liquid } from 'liquidjs';
+import { Context, Liquid } from 'liquidjs';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +10,21 @@ process.env.TZ = 'UTC';
 
 export function newEngine(opts) {
   return new Liquid({ lenientIf: true, ...opts });
+}
+
+// countMemory makes every render add what it charges memoryLimit to the returned
+// counter's spent, so tests can check mist charges at least as much. renderLimit is a
+// Limiter too, charged in milliseconds.
+export function countMemory() {
+  const counter = { spent: 0 };
+  const { memoryLimit } = new Context();
+  const Limiter = memoryLimit.constructor;
+  const use = Limiter.prototype.use;
+  Limiter.prototype.use = function (count) {
+    use.call(this, count);
+    if (this.message === memoryLimit.message && +count > 0) counter.spent += +count;
+  };
+  return counter;
 }
 
 function fail(msg) {

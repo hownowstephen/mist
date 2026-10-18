@@ -75,10 +75,10 @@ type Engine struct {
 // Limits bound one render. Going over one bails with ErrUnsupported, so the full engine,
 // with its own limits, decides.
 type Limits struct {
-	// Memory is a budget in liquidjs's memoryLimit units. Each filter spends at least what
-	// liquidjs charges it (the lengths of its input and arguments, and join's and slice's
-	// sizes), so with Memory at or below the full engine's memoryLimit, mist never renders a
-	// template that engine rejects. Default 10,000,000.
+	// Memory is a budget in liquidjs's memoryLimit units. Each filter and range spends at
+	// least what liquidjs charges it (the lengths of a filter's input and arguments, join's
+	// and slice's sizes, and a range's items), so with Memory at or below the full engine's
+	// memoryLimit, mist never renders a template that engine rejects. Default 10,000,000.
 	Memory int
 	// Output is the most bytes one render writes, captures included. Default 4 MiB.
 	Output int

@@ -21,6 +21,10 @@ type tcase struct {
 	Err    string         `json:"err"`
 	Code   string         `json:"code"` // Error.Code, required when Err is "unsupported"
 	Now    *int64         `json:"now"`  // Date.now in ms, for 'now' and 'today'
+	// Mem is what liquidjs charges memoryLimit (parity.mjs checks), and MistMem what mist
+	// charges Limits.Memory where that's more: it renders with exactly that much.
+	Mem     int `json:"mem"`
+	MistMem int `json:"mistMem"`
 }
 
 func loadCases(t testing.TB) []tcase {
@@ -62,6 +66,9 @@ func TestCases(t *testing.T) {
 					t.Fatalf("got code %q; want %q", e.Code, c.Code)
 				}
 			}
+			if c.Mem > 0 {
+				checkMem(t, c)
+			}
 			// Everything that renders or fails authoritatively is in spec.
 			if c.Err == "" {
 				if err := Check(c.Tpl); err != nil {
@@ -69,6 +76,28 @@ func TestCases(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// checkMem checks that c renders with its memory charge but not with one less, and that
+// mist charges no less than liquidjs, so it bails wherever liquidjs's memoryLimit would.
+func checkMem(t *testing.T, c tcase) {
+	t.Helper()
+	m := c.Mem
+	if c.MistMem != 0 {
+		if c.MistMem <= c.Mem {
+			t.Fatalf("mistMem %d must be more than mem %d", c.MistMem, c.Mem)
+		}
+		m = c.MistMem
+	}
+	e := Engine{Limits: Limits{Memory: m}}
+	if out, err := e.Render(c.Tpl, c.Data, c.Strict); err != nil || out != c.Out {
+		t.Fatalf("Limits.Memory %d: got %q, %v; want %q", m, out, err, c.Out)
+	}
+	e.Limits.Memory = m - 1
+	var me *Error
+	if _, err := e.Render(c.Tpl, c.Data, c.Strict); !errors.As(err, &me) || me.Code != "memory-limit" {
+		t.Fatalf("Limits.Memory %d: got %v; want memory-limit", m-1, err)
 	}
 }
 

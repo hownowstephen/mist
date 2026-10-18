@@ -555,6 +555,9 @@ func (r *renderer) rangeLit(eval bool) any {
 	if b-a >= maxRange {
 		bail(at, "range-too-long", "range of more than %d items", maxRange)
 	}
+	if b >= a {
+		r.charge(b-a+1, at) // liquidjs charges memoryLimit for the items
+	}
 	out := make([]any, 0, max(0, b-a+1))
 	for i := a; i <= b; i++ {
 		out = append(out, boxInt(i))

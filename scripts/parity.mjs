@@ -1,9 +1,11 @@
 // Asserts testdata/cases.json against liquidjs as configured in SPEC.md.
-// Cases marked "unsupported" are only printed: mist bails, so liquidjs decides.
+// Cases marked "unsupported" are only printed: mist bails, so liquidjs decides. A case's
+// "mem" must be exactly what its render charges memoryLimit.
 import { readFileSync } from 'node:fs';
-import { newEngine } from './config.mjs';
+import { countMemory, newEngine } from './config.mjs';
 
 const engine = newEngine();
+const memory = countMemory();
 const realNow = Date.now;
 const cases = JSON.parse(readFileSync(new URL('../testdata/cases.json', import.meta.url)));
 let failed = 0;
@@ -11,6 +13,7 @@ let failed = 0;
 for (const c of cases) {
   let got, err;
   Date.now = c.now === undefined ? realNow : () => c.now;
+  memory.spent = 0;
   try {
     got = await engine.parseAndRender(c.tpl, structuredClone(c.data ?? {}), { strictVariables: !!c.strict });
   } catch (e) {
@@ -25,6 +28,10 @@ for (const c of cases) {
   if (!ok) {
     failed++;
     console.log(`FAIL ${c.name}: want ${c.err ?? JSON.stringify(c.out)}, liquidjs gave ${err ? 'ERR ' + err : JSON.stringify(got)}`);
+  }
+  if (c.mem !== undefined && memory.spent !== c.mem) {
+    failed++;
+    console.log(`FAIL ${c.name}: want mem ${c.mem}, liquidjs charged ${memory.spent}`);
   }
 }
 // liquidjs_filters.go must name exactly the filters this liquidjs defines.
