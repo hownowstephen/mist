@@ -356,6 +356,19 @@ func BenchmarkFixture(b *testing.B) {
 	}
 }
 
+func BenchmarkRangeFor(b *testing.B) {
+	for _, n := range []int{10, 1000, 10000} {
+		tpl := fmt.Sprintf("{%% for i in (1..%d) %%}{{ i }}{%% endfor %%}", n)
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			buf := make([]byte, 0, 6*n)
+			b.ReportAllocs()
+			for b.Loop() {
+				buf, _ = Append(buf[:0], tpl, nil, true)
+			}
+		})
+	}
+}
+
 func BenchmarkRender(b *testing.B) {
 	tpl, vars, _ := benchFixture(b, "basic")
 	b.ReportAllocs()

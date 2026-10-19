@@ -534,6 +534,19 @@ func magic(key string) bool { return key == "size" || key == "first" || key == "
 
 // rangeLit = "(" ws expr ws ".." ws expr ws ")" with integer bounds, liquidjs's range(+lo, +hi + 1).
 func (r *renderer) rangeLit(eval bool) any {
+	lo, n := r.rangeBounds(eval)
+	if !eval {
+		return nil
+	}
+	out := make([]any, n)
+	for i := range out {
+		out[i] = boxInt(lo + i)
+	}
+	return out
+}
+
+// rangeBounds parses a range literal and charges for its items, returning its first item and count.
+func (r *renderer) rangeBounds(eval bool) (first, n int) {
 	at := r.pos()
 	r.p++
 	lo := r.expr(eval, false)
@@ -549,7 +562,7 @@ func (r *renderer) rangeLit(eval bool) any {
 	}
 	r.p++
 	if !eval {
-		return nil
+		return 0, 0
 	}
 	a, b := rangeBound(lo, at), rangeBound(hi, at)
 	if b-a >= maxRange {
@@ -558,11 +571,7 @@ func (r *renderer) rangeLit(eval bool) any {
 	if b >= a {
 		r.charge(b-a+1, at) // liquidjs charges memoryLimit for the items
 	}
-	out := make([]any, 0, max(0, b-a+1))
-	for i := a; i <= b; i++ {
-		out = append(out, boxInt(i))
-	}
-	return out
+	return a, max(0, b-a+1)
 }
 
 const maxRange = 100000
@@ -577,10 +586,17 @@ func rangeBound(v val, at int) int {
 }
 
 func (f *frame) item() any {
+	i := int(f.idx)
 	if f.rev {
-		return f.coll[len(f.coll)-1-int(f.idx)]
+		i = f.len() - 1 - i
 	}
-	return f.coll[int(f.idx)]
+	if f.coll != nil {
+		return f.coll[i]
+	}
+	if f.x == nil {
+		f.x = boxInt(int(f.n) + i)
+	}
+	return f.x
 }
 
 // forloop resolves forloop.<prop> against the innermost for, as liquidjs's ForloopDrop.
@@ -604,7 +620,7 @@ func (r *renderer) forloop(eval bool, start int) any {
 	if !eval {
 		return nil
 	}
-	n, i := len(f.coll), int(f.idx)
+	n, i := f.len(), int(f.idx)
 	var v any
 	switch p {
 	case "index":
