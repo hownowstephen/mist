@@ -390,6 +390,44 @@ func BenchmarkCheck(b *testing.B) {
 	}
 }
 
+func BenchmarkSmall(b *testing.B) {
+	vars := map[string]any{"customer": map[string]any{"first_name": "Ada"}}
+	buf := make([]byte, 0, 64)
+	b.ReportAllocs()
+	for b.Loop() {
+		buf, _ = Append(buf[:0], "Hi {{ customer.first_name }}!", vars, true)
+	}
+}
+
+func BenchmarkTagLookup(b *testing.B) {
+	e := Engine{Tags: map[string]TagFunc{"t": func(dst []byte, t Tag) ([]byte, error) {
+		v, _ := t.Lookup("customer.first_name")
+		s, _ := v.(string)
+		return append(dst, s...), nil
+	}}}
+	vars := map[string]any{"customer": map[string]any{"first_name": "Ada"}}
+	buf := make([]byte, 0, 64)
+	b.ReportAllocs()
+	for b.Loop() {
+		buf, _ = e.Append(buf[:0], "{% t %}", vars, true)
+	}
+}
+
+// BenchmarkNesting renders ifs nested n deep; frames past the inline stack allocate.
+func BenchmarkNesting(b *testing.B) {
+	for _, n := range []int{4, 8, 9, 12, 16, 17} {
+		tpl := strings.Repeat("{% if a %}", n) + "x" + strings.Repeat("{% endif %}", n)
+		vars := map[string]any{"a": true}
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			buf := make([]byte, 0, 64)
+			b.ReportAllocs()
+			for b.Loop() {
+				buf, _ = Append(buf[:0], tpl, vars, true)
+			}
+		})
+	}
+}
+
 // Go callers can pass values JSON never produces; liquidjs sees their JSON form.
 func TestGoValues(t *testing.T) {
 	vars := map[string]any{"i": 3, "i64": int64(-4), "jn": json.Number("5.0"), "ss": []string{"a"}, "bad": json.Number("x")}

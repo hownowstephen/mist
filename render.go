@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	inlineDepth = 16   // frames kept in the renderer; deeper ones go to a slice
+	inlineDepth = 8    // frames kept in the renderer; deeper ones go to a slice
 	maxDepth    = 1024 // liquidjs has no limit; this bounds pathological templates
 )
 
@@ -156,6 +156,9 @@ func (r *renderer) push(f frame) {
 	case r.depth-inlineDepth < len(r.deep):
 		r.deep[r.depth-inlineDepth] = f
 	default:
+		if r.deep == nil {
+			r.deep = make([]frame, 0, inlineDepth) // one allocation up to twice inlineDepth
+		}
 		r.deep = append(r.deep, f)
 	}
 	r.depth++
