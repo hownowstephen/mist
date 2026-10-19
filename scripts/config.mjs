@@ -1,4 +1,4 @@
-// The SPEC.md parity config, shared by parity.mjs, oracle.mjs and bench.mjs. Importing it
+// The SPEC.md parity config, shared by parity.mjs, oracle.mjs, parity-worker.mjs and bench.mjs. Importing it
 // checks the environment liquidjs renders in, and liquidjs's resolved options.
 //
 //   node config.mjs -w    rewrite liquidjs-options.json after a deliberate change
@@ -10,6 +10,37 @@ process.env.TZ = 'UTC';
 
 export function newEngine(opts) {
   return new Liquid({ lenientIf: true, ...opts });
+}
+
+// oracleEngine is the engine oracle.mjs and parity-worker.mjs render with. It fixes Date.now,
+// which corpus_test.go's corpusEngine must match, so 'now' is reproducible.
+export function oracleEngine() {
+  Date.now = () => 1700000000123;
+  // renderLimit only guards corpus generation against resource-limit specs.
+  const engine = newEngine({ renderLimit: 2000 });
+  // liquidjs's strip_html loops forever on an unclosed '<' after text, where mist bails;
+  // throw there instead so generated cases can't hang the oracle.
+  const stripHTML = engine.filters.strip_html;
+  engine.registerFilter('strip_html', function (v) {
+    const s = Array.isArray(v) ? v.flat(Infinity).join('') : String(v ?? '');
+    const blocks = new Map([['<script', '</script>'], ['<style', '</style>'], ['<!--', '-->'], ['<', '>']]);
+    for (let i = 0; i < s.length; ) {
+      const lt = s.indexOf('<', i);
+      if (lt < 0) break;
+      let next = i;
+      for (const [open, close] of blocks) {
+        if (!s.startsWith(open, lt)) continue;
+        const e = s.indexOf(close, lt + open.length);
+        if (e >= 0) { next = e + close.length; break; }
+        blocks.delete(open);
+      }
+      if (next !== i) i = next;
+      else if (i === lt) break;
+      else throw new Error('strip_html would loop forever');
+    }
+    return stripHTML.call(this, v);
+  });
+  return engine;
 }
 
 // countMemory makes every render add what it charges memoryLimit to the returned

@@ -81,6 +81,37 @@ jobs:
             testdata/fuzz
             ${{ runner.temp }}/fuzz-oracle.json
 
+  # FuzzRender and FuzzInvariants have no oracle; this fuzzes against liquidjs itself.
+  fuzz-parity:
+    name: fuzz against liquidjs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: npm ci --no-audit --no-fund
+        working-directory: scripts
+      # Not "fuzz-", which the fuzz job's restore-keys would match.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build/fuzz
+          key: parity-fuzz-${{ github.run_id }}
+          restore-keys: parity-fuzz-
+      - run: go test -run '^$' -fuzz FuzzParity -fuzztime 5m .
+        env:
+          MIST_FUZZ_PARITY: "1"
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-parity-crashers
+          path: testdata/fuzz/FuzzParity
+
   # liquidjs moves on; this shows what would change if the parity target did.
   # scripts/latest pins the newest liquidjs, which Dependabot keeps current, and drift.txt
   # lists the renders known to differ under it. A change to that list fails the job.
@@ -131,7 +162,7 @@ jobs:
 
   report:
     name: open an issue on failure
-    needs: [differential, fuzz, liquidjs-latest]
+    needs: [differential, fuzz, fuzz-parity, liquidjs-latest]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:
