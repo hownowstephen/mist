@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 )
 
 const (
@@ -111,11 +112,25 @@ func (r *renderer) recoverBail(err *error) {
 	if e == nil {
 		return
 	}
-	if b, ok := e.(bailout); ok {
-		*err = b.err
-		return
+	b, ok := e.(bailout)
+	if !ok {
+		b.err = &Error{Kind: ErrInternal, Code: "internal", Pos: r.pos(), Msg: fmt.Sprint("panic: ", e), Stack: debug.Stack()}
 	}
-	*err = &Error{Kind: ErrInternal, Code: "internal", Pos: r.pos(), Msg: fmt.Sprint("panic: ", e), Stack: debug.Stack()}
+	if me, ok := b.err.(*Error); ok {
+		me.Line, me.Col = position(r.tpl, me.Pos)
+	}
+	*err = b.err
+}
+
+// position is offset pos of tpl as liquidjs's Token.getPosition counts it.
+func position(tpl string, pos int) (line, col int) {
+	pos = min(max(pos, 0), len(tpl))
+	start := strings.LastIndexByte(tpl[:pos], '\n') + 1
+	col = 1
+	for _, c := range tpl[start:pos] {
+		col += utf16.RuneLen(c)
+	}
+	return strings.Count(tpl[:start], "\n") + 1, col
 }
 
 // bail stops the render with ErrUnsupported. code is the Error.Code, stable across releases.

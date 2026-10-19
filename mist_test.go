@@ -162,6 +162,35 @@ func TestUndefinedNamesWholePath(t *testing.T) {
 	}
 }
 
+// Path, Line and Col word liquidjs's undefined variable error; want is liquidjs's message.
+func TestUndefinedPath(t *testing.T) {
+	data := map[string]any{"c": map[string]any{"n": "ada"}, "xs": []any{map[string]any{}}}
+	for _, c := range []struct{ tpl, want string }{
+		{"{{ c.n }} {{ c.a.b }}", "undefined variable: c.a, line:1, col:14"},
+		{"a\n  ünï {{ c.y }}", "undefined variable: c.y, line:2, col:10"},
+		{"{{ xs[0].nope }}", "undefined variable: xs.0.nope, line:1, col:4"},
+		{"{{ c.z | default: c.w }}", "undefined variable: c.w, line:1, col:19"},
+		{"{{ c[k] }}", "undefined variable: k, line:1, col:6"},
+		{"{% for i in (1..1) %}{{ forloop.parentloop.index }}{% endfor %}", "undefined variable: forloop.parentloop, line:1, col:25"},
+	} {
+		_, err := Render(c.tpl, data, true)
+		var e *Error
+		if !errors.As(err, &e) || !errors.Is(err, ErrUndefined) || e.Path == nil {
+			t.Errorf("%q: got %v; want ErrUndefined with a Path", c.tpl, err)
+			continue
+		}
+		if got := fmt.Sprintf("undefined variable: %s, line:%d, col:%d", strings.Join(e.Path, "."), e.Line, e.Col); got != c.want {
+			t.Errorf("%q: got %q; want %q", c.tpl, got, c.want)
+		}
+	}
+	// liquidjs reports the later syntax error instead.
+	_, err := Render("{{ c.z }} {% if %}{% endif %}", data, true)
+	var e *Error
+	if !errors.As(err, &e) || !errors.Is(err, ErrUndefined) || e.Path != nil {
+		t.Errorf("got %v with Path %v; want ErrUndefined without a Path", err, e.Path)
+	}
+}
+
 func TestErrorPosition(t *testing.T) {
 	_, err := Render("line1\n{{ a | b }}", nil, false)
 	var e *Error

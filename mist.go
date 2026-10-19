@@ -39,9 +39,17 @@ type Error struct {
 	// filter mist doesn't support, "hook:tag:NAME", "hook:filter:NAME" or
 	// "hook:dialect:output" for a hook's error, and otherwise a kebab-case reason such as
 	// "nesting-too-deep" (testdata/codes.txt lists them all). Msg is for people and may change.
-	Code  string
-	Pos   int // byte offset into the template
-	Msg   string
+	Code string
+	Pos  int // byte offset into the template
+	// Line and Col are Pos as liquidjs counts them: lines split on \n, columns in UTF-16
+	// code units, both from 1.
+	Line, Col int
+	Msg       string
+	// Path, for ErrUndefined, is what liquidjs's error names: the keys up to and including
+	// the first undefined one, bracket indexes as their values' JavaScript strings, so its
+	// message is "undefined variable: " + strings.Join(Path, ".") + ", line:Line, col:Col".
+	// It's nil where mist can't say.
+	Path  []string
 	Stack []byte // ErrInternal: the stack where the panic happened
 }
 
@@ -211,6 +219,14 @@ func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool)
 // append is Append that also returns the increment and decrement counters, which
 // liquidjs writes into the data a chain's later steps share.
 func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
+	out, env, err = e.run(dst, tpl, vars, strict)
+	if me, ok := err.(*Error); ok && me.Path != nil && e.Check(tpl) != nil {
+		me.Path = nil // liquidjs parses the whole template first, and may report a later error instead
+	}
+	return out, env, err
+}
+
+func (e Engine) run(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
 	r := renderer{config: e.config(vars, strict), tpl: tpl, out: dst, outBase: len(dst)}
 	defer func() { env = r.env }()
 	defer r.releaseAssigns()

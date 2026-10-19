@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"math"
 	"os"
 	"slices"
@@ -56,7 +57,7 @@ func TestCorpus(t *testing.T) {
 	if err := json.Unmarshal(b, &cs); err != nil {
 		t.Fatal(err)
 	}
-	var accepted, mismatched, bailed, memChecked int
+	var accepted, mismatched, bailed, memChecked, undefChecked int
 	var keys, fragile []string
 	reasons := map[string]int{}
 	for _, c := range cs {
@@ -94,6 +95,12 @@ func TestCorpus(t *testing.T) {
 					}
 				}
 			case errors.Is(err, ErrUndefined) && want.Err != "":
+				if errors.As(err, &e) && e.Path != nil {
+					undefChecked++
+					if msg := fmt.Sprintf("undefined variable: %s, line:%d, col:%d", strings.Join(e.Path, "."), e.Line, e.Col); msg != want.Err {
+						t.Errorf("%s %q: mist's undefined error words as %q, liquidjs's as %q\n  tpl:  %q", c.Src, c.Name, msg, want.Err, c.Tpl)
+					}
+				}
 			default:
 				mismatched++
 				wantS := want.Err
@@ -108,7 +115,7 @@ func TestCorpus(t *testing.T) {
 		checkAccepted(t, keys)
 		checkFragile(t, fragile)
 	}
-	t.Logf("%d renders agreed with liquidjs, %d didn't, %d bailed (%.0f%% accepted); %d checked against liquidjs's memoryLimit; %d fragile, where liquidjs differs from Ruby", accepted-mismatched, mismatched, bailed, 100*float64(accepted)/float64(accepted+bailed), memChecked, len(fragile))
+	t.Logf("%d renders agreed with liquidjs, %d didn't, %d bailed (%.0f%% accepted); %d checked against liquidjs's memoryLimit; %d undefined errors worded as liquidjs's; %d fragile, where liquidjs differs from Ruby", accepted-mismatched, mismatched, bailed, 100*float64(accepted)/float64(accepted+bailed), memChecked, undefChecked, len(fragile))
 	type kv struct {
 		k string
 		v int
