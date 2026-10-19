@@ -60,11 +60,26 @@ jobs:
           restore-keys: fuzz-
       - run: go test -run '^$' -fuzz FuzzRender -fuzztime 5m .
       - run: go test -run '^$' -fuzz FuzzInvariants -fuzztime 5m .
+      # The fuzz targets have no oracle, so liquidjs checks every input they've kept.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: npm ci --no-audit --no-fund
+        working-directory: scripts
+      - name: fuzz corpus as oracle input
+        run: go run ./scripts/fuzzcases testdata/fuzz "$(go env GOCACHE)/fuzz" > "$RUNNER_TEMP/fuzz.json"
+      - name: liquidjs oracle on the fuzz corpus
+        run: node scripts/oracle.mjs -o "$RUNNER_TEMP/fuzz-oracle.json" "$RUNNER_TEMP/fuzz.json"
+      - name: diff mist against liquidjs on the fuzz corpus
+        run: MIST_CORPUS="$RUNNER_TEMP/fuzz-oracle.json" go test -run TestCorpus -v . | tail -40
+        shell: bash -o pipefail {0}
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-crashers
-          path: testdata/fuzz
+          path: |
+            testdata/fuzz
+            ${{ runner.temp }}/fuzz-oracle.json
 
   # liquidjs moves on; this shows what would change if the parity target did.
   # scripts/latest pins the newest liquidjs, which Dependabot keeps current, and drift.txt

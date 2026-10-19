@@ -242,6 +242,8 @@ node scripts/oracle.mjs -o /tmp/g.oracle.json /tmp/g.json
 MIST_CORPUS=/tmp/g.oracle.json go test -run TestCorpus -v .
 ```
 
+The same differential runs on what fuzzing has kept: `go run ./scripts/fuzzcases testdata/fuzz "$(go env GOCACHE)/fuzz" > /tmp/f.json` turns the fuzz corpus into oracle input, with `FuzzRender`'s vars or a `FuzzInvariants` input's own JSON data. The nightly runs it after fuzzing.
+
 ## Changing the spec
 
 [CONTRIBUTING.md § Making a change](CONTRIBUTING.md#making-a-change) is the checklist.
