@@ -74,6 +74,7 @@ type renderer struct {
 	floor        int       // frames a Tag.Render inherited, which its tags can't close or break out of
 	nested       int       // Tag.Render depth
 	scope        *tagScope // what custom tags see, allocated on the first call so the renderer stays on the stack
+	sizes        *sizeCache
 
 	// expression cursor: src is tpl[base:base+len(src)]
 	src  string
