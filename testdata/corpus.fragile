@@ -1,0 +1,368 @@
+golden-liquid
+	filters, base64 url safe decode, from string
+	filters, base64 url safe decode, from string with URL unsafe
+	filters, base64 url safe encode, from string
+	filters, base64 url safe encode, from string with URL unsafe
+	filters, base64 url safe encode, not a string
+	filters, date, undefined argument	lax
+	filters, default, 0.0 is not falsy
+	filters, divided by, integer division
+	filters, divided by, integer value and float arg
+	filters, divided by, render
+	filters, divided by, zero divided by float
+	filters, find index, array of hashes, explicit nil, match	lax
+	filters, find index, array of strings, default value	lax
+	filters, find index, array of strings, substring match, default value	lax
+	filters, find index, hash input, explicit nil, match
+	filters, find, array of hashes, with a nil	lax
+	filters, find, array of strings, default value	lax
+	filters, find, array of strings, substring match, default value	lax
+	filters, has, array of hashes, with a nil	lax
+	filters, has, array of strings, default value	lax
+	filters, has, array of strings, default value, substring match	lax
+	filters, has, hash input, explicit nil, match
+	filters, has, hash input, explicit nil, no match
+	filters, join, undefined argument	lax
+	filters, minus, float value and float arg
+	filters, minus, integer value and float arg
+	filters, minus, string not a number
+	filters, minus, string value and string arg
+	filters, modulo, float value and float arg
+	filters, modulo, integer value and float arg
+	filters, modulo, string not a number
+	filters, modulo, string value and argument
+	filters, plus, integer value and float arg
+	filters, plus, string not a number
+	filters, reject, array of strings, default value	lax
+	filters, reject, input is a hash, explicit nil match
+	filters, replace, undefined first argument	lax
+	filters, size, size of a hash
+	filters, split, argument is a single space
+	filters, squish, any whitespace before between and after
+	filters, squish, just space after
+	filters, squish, just space before
+	filters, squish, just space between
+	filters, squish, just whitespace
+	filters, squish, line terminators collapse to a single space
+	filters, squish, many words
+	filters, squish, space before and after
+	filters, squish, space before between and after
+	filters, truncate, undefined second argument	lax
+	filters, truncatewords, all whitespace is clobbered
+	filters, truncatewords, undefined second argument	lax
+	filters, url encode, some special URL characters
+	special, first of an object	lax
+	tags, case, evaluate multiple matching blocks
+	tags, case, mix or and comma separated when expression
+	tags, cycle, named with different number of arguments	lax
+	tags, cycle, named with growing number of arguments	lax
+	tags, cycle, named with shrinking number of arguments	lax
+	tags, cycle, undefined variable names mixed with no name	lax
+	tags, for, access parentloop	lax
+	tags, for, blank empty loops
+	tags, for, parent's parentloop	lax
+	tags, for, range loop, negative offset
+	tags, for, range loop, negative offset, limit
+	tags, for, range loop, negative offset, negative limit
+	tags, for, range loop, offset, negative limit
+	tags, if, array contains false
+	tags, if, array contains undefined	strict
+	tags, if, blocks that contain only whitespace and comments are not rendered
+	tags, if, blocks that contain only whitespace are not rendered
+	tags, unless, blocks that contain only whitespace are not rendered
+	whitespace control, suppress whitespace only case blocks
+	whitespace control, suppress whitespace only if blocks
+	whitespace control, suppress whitespace only unless blocks
+	whitespace control, suppress whitespace surrounding a capture block
+	whitespace control, suppress whitespace surrounding an empty capture block
+liquid-spec/basics/cycle.yml
+	cycle_unnamed_variable_in_loop
+	cycle_unnamed_variables_independent_counters
+liquid-spec/basics/date-filters.yml
+	date_empty_format_string
+	date_format_D_short_date
+	date_format_F_iso_date
+	date_format_G_iso_week_year
+	date_format_R_24h_time
+	date_format_T_24h_time_with_seconds
+	date_format_V_iso_week
+	date_format_combined_rfc822
+	date_format_g_iso_week_year_2digit
+	date_format_r_12h_time
+	date_format_z_timezone_offset
+	date_nil_format_string
+liquid-spec/basics/filter-edge-cases.yml
+	replace_with_empty_search
+	slice_with_negative_length
+liquid-spec/basics/for-loops.yml
+	forloop_parentloop_basic	lax
+	forloop_parentloop_first_last
+	forloop_parentloop_index0	lax
+	forloop_parentloop_three_levels	lax
+liquid-spec/basics/specs.yml
+	filter_divided_by_truncates
+	liquid_tag_accumulator_with_capture	lax
+	liquid_tag_math_pipeline
+liquid-spec/basics/string-filters.yml
+	truncatewords_exact
+liquid-spec/basics/type-coercion.yml
+	divided_by_with_integers
+	string_to_float_in_plus
+liquid-spec/liquid_ruby/bare_bracket_self.yml
+	escape_filter_stringifies_self_drop	lax
+	first_filter_returns_empty_for_self_with_first_key	lax
+	map_filter_looks_up_self_drop_properties	lax
+	self_bracket_access_resolves_variable	lax
+	self_dotted_special_names_delegate_to_scope	lax
+	self_dynamic_lookup	lax
+	self_dynamic_lookup_with_assigned_key	lax
+	self_inside_capture_body	lax
+	self_inside_for_loop_body	lax
+	self_nested_property_access	lax
+	self_recursive_lookup	lax
+	self_reflects_variables_assigned_after_creation
+	self_sees_local_assigns	lax
+	self_sees_loop_variables_across_three_nested_loops	lax
+	self_size_filter_has_no_intrinsic_size	lax
+	self_with_strict_variables_does_not_raise_for_defined_var	lax
+	truncate_filter_stringifies_self_drop	lax
+	truncatewords_filter_stringifies_self_drop	lax
+	url_encode_filter_stringifies_self_drop	lax
+liquid-spec/liquid_ruby/blank_body_error_handling.yml
+	blank_unless_body_suppresses_error_text_lax
+liquid-spec/liquid_ruby/case_when_matching.yml
+	case_body_state_advances_per_matching_render
+	case_repeats_body_for_each_matching_when_value
+liquid-spec/liquid_ruby/liquid_tag.yml
+	RecordedTest#LiquidTagParityTest#test_decrement_in_liquid_6e75fc9f
+	RecordedTest#LiquidTagParityTest#test_increment_in_liquid_a7c65aba
+liquid-spec/liquid_ruby/manual.yml
+	Float serialization with very long float
+	Float serialization with zero in decimal place
+	Lookup first on hash	lax
+	Truncatewords only splits by UTF-8 ASCII whitespaces
+	Truncatewords replaces UTF-8 ASCII whitespaces to a space character
+liquid-spec/liquid_ruby/range_resource_limits.yml
+	ForTagTest#test_assigned_dynamic_inclusive_and_exclusive_ranges_preserve_slice_semantics_16239422
+	ForTagTest#test_assigned_dynamic_inclusive_and_exclusive_ranges_preserve_slice_semantics_c8c4a23c
+liquid-spec/liquid_ruby/scalar_and_iteration_semantics.yml
+	cycle_renders_literal_booleans_and_advances
+liquid-spec/liquid_ruby/security_drops.yml
+	sec_string_allows_first	lax
+	sec_string_allows_last	lax
+liquid-spec/liquid_ruby/specs.yml
+	BlankTest#test_assigns_are_blank_10ed4990
+	BlankTest#test_captures_are_blank_69c2100e
+	BlankTest#test_case_is_blank_3e997ca1
+	BlankTest#test_case_is_blank_a3564f8a
+	BlankTest#test_comments_are_blank_369c4c30
+	BlankTest#test_if_else_are_blank_95d65ac3
+	BlankTest#test_loops_are_blank_ad0f17fe
+	BlankTest#test_nested_blocks_are_blank_but_only_if_all_children_are_b3ba2615
+	BlankTest#test_nested_blocks_are_blank_but_only_if_all_children_are_d7af8053
+	BlankTest#test_whitespace_is_blank_b0719ce9
+	BlankTest#test_whitespace_is_blank_f950e107
+	CommentTagUnitTest#test_ignores_delimiter_with_extra_strings_15598c4b
+	ContextTest#test_hash_notation_only_for_hash_access_a8607fa3
+	CycleTagTest#test_unnamed_cycle_have_independent_counters_when_used_with_lookups_ef0deed5
+	ForTagTest#test_for_parentloop_references_parent_loop_9342019a	lax
+	IncrementTagTest#test_dec_6cc14214
+	StandardFiltersTest#test_divided_by_8a29daae
+	StandardFiltersTest#test_plus_79568f07
+	StandardFiltersTest#test_sum_of_floats_15bb3f72
+	StandardFiltersTest#test_sum_of_negative_floats_89e40968
+	StandardFiltersTest#test_sum_with_float_strings_86152246
+	StandardFiltersTest#test_sum_with_floats_and_indexable_map_values_ee99fcbc
+	StandardFiltersTest#test_times_73a401d6
+	StandardFiltersTest#test_times_d8de3576
+	StandardFiltersTest#test_times_e9ac0f63
+	StandardFiltersTest#test_times_f2d31527
+	StandardTagTest#test_case_when_comma_and_blank_body_9bbeb8c8
+liquid-spec/liquid_ruby/standard_filters.yml
+	StandardFilterTest#test_abs_2463e253
+	StandardFilterTest#test_base64_encode_d7f23ad8
+	StandardFilterTest#test_base64_url_safe_decode_01dcd34c
+	StandardFilterTest#test_base64_url_safe_decode_567959c5
+	StandardFilterTest#test_base64_url_safe_encode_417f0e9c
+	StandardFilterTest#test_base64_url_safe_encode_47542c68
+	StandardFilterTest#test_base64_url_safe_encode_5827a928
+	StandardFilterTest#test_base64_url_safe_encode_656b8a35
+	StandardFilterTest#test_base64_url_safe_encode_717153e1
+	StandardFilterTest#test_base64_url_safe_encode_94430c23
+	StandardFilterTest#test_base64_url_safe_encode_bddf3bc6
+	StandardFilterTest#test_base64_url_safe_encode_d106fe79
+	StandardFilterTest#test_capitalize_cd2af2ea
+	StandardFilterTest#test_ceil_fa59e65e
+	StandardFilterTest#test_date_741fb80e
+	StandardFilterTest#test_date_ed00d695
+	StandardFilterTest#test_downcase_e9ff2ac8
+	StandardFilterTest#test_escape_9ad53a32
+	StandardFilterTest#test_escape_once_81e5b732
+	StandardFilterTest#test_floor_dd81e266
+	StandardFilterTest#test_h_35abf0be
+	StandardFilterTest#test_lstrip_8da3db70
+	StandardFilterTest#test_newline_to_br_652ed44a
+	StandardFilterTest#test_round_dbf6c574
+	StandardFilterTest#test_rstrip_c4b432ac
+	StandardFilterTest#test_size_11612dc3
+	StandardFilterTest#test_size_c240c6f9
+	StandardFilterTest#test_size_c2a19f5e
+	StandardFilterTest#test_size_cca95d86
+	StandardFilterTest#test_strip_298c499e
+	StandardFilterTest#test_strip_html_7fcf0dc6
+	StandardFilterTest#test_strip_html_dc4a80f8
+	StandardFilterTest#test_strip_newlines_7c67b363
+	StandardFilterTest#test_sum_2190076e
+	StandardFilterTest#test_sum_2785463a
+	StandardFilterTest#test_sum_8ac08e13
+	StandardFilterTest#test_sum_9e90e288
+	StandardFilterTest#test_sum_fb61db9c
+	StandardFilterTest#test_truncatewords_1c9eaf37
+	StandardFilterTest#test_upcase_a8ff5b68
+	StandardFilterTest#test_url_decode_cd71baf1
+	StandardFilterTest#test_url_decode_db5f2730
+	StandardFilterTest#test_url_encode_c6096ddb
+liquid-spec/liquid_ruby/variable_type_filters.yml
+	filter_int_size_is_byte_size
+	filter_negative_int_size
+	filter_vs_property_string_equivalence	lax
+	property_access_hash_first_last_size	lax
+liquid-spec/shopify_production_recordings/recorded_specs.yml
+	RecordedTest#test_array_raw_render_86e54cddf
+	RecordedTest#test_auto_methods_0527a2177
+	RecordedTest#test_auto_methods_23431d0f8
+	RecordedTest#test_auto_methods_707e71f16	lax
+	RecordedTest#test_big_integers_3e11142fb
+	RecordedTest#test_big_integers_6d024b1f1
+	RecordedTest#test_big_integers_7cf81e024
+	RecordedTest#test_big_integers_7d6e9a27d
+	RecordedTest#test_big_integers_8b83911d0
+	RecordedTest#test_big_integers_8c1d542a3
+	RecordedTest#test_big_integers_9436645fd
+	RecordedTest#test_big_integers_b0a7a928b
+	RecordedTest#test_big_integers_b5b9199c6
+	RecordedTest#test_big_integers_fce4e7b8b
+	RecordedTest#test_can_use_range_in_filter_580ea5229
+	RecordedTest#test_data_escaping_9e876fe0d
+	RecordedTest#test_escape_returns_falsey_value_when_fed_nil_00e2bf672
+	RecordedTest#test_first_95f89b01e	lax
+	RecordedTest#test_float_format_negative_exponent_break_9d74f1ee4
+	RecordedTest#test_float_format_negative_exponent_break_a5dd02fd4
+	RecordedTest#test_for_loop_bounds_permutations_01ef23a0f
+	RecordedTest#test_for_loop_bounds_permutations_03185ab29
+	RecordedTest#test_for_loop_bounds_permutations_045e39c22
+	RecordedTest#test_for_loop_bounds_permutations_04862dc66
+	RecordedTest#test_for_loop_bounds_permutations_0acfee73a
+	RecordedTest#test_for_loop_bounds_permutations_0c97286d2
+	RecordedTest#test_for_loop_bounds_permutations_0d23516b1
+	RecordedTest#test_for_loop_bounds_permutations_103424a52
+	RecordedTest#test_for_loop_bounds_permutations_125c309dd
+	RecordedTest#test_for_loop_bounds_permutations_165425588
+	RecordedTest#test_for_loop_bounds_permutations_1897f397d
+	RecordedTest#test_for_loop_bounds_permutations_191406e10
+	RecordedTest#test_for_loop_bounds_permutations_1a25eda69
+	RecordedTest#test_for_loop_bounds_permutations_1a31a6db5
+	RecordedTest#test_for_loop_bounds_permutations_1c3360e3a
+	RecordedTest#test_for_loop_bounds_permutations_1f6bf46df
+	RecordedTest#test_for_loop_bounds_permutations_2544fcb16
+	RecordedTest#test_for_loop_bounds_permutations_265aba564
+	RecordedTest#test_for_loop_bounds_permutations_29c233099
+	RecordedTest#test_for_loop_bounds_permutations_2c58ddf72
+	RecordedTest#test_for_loop_bounds_permutations_2c80af75c
+	RecordedTest#test_for_loop_bounds_permutations_2c984f183
+	RecordedTest#test_for_loop_bounds_permutations_2fe97b2ca
+	RecordedTest#test_for_loop_bounds_permutations_36e5fa51f
+	RecordedTest#test_for_loop_bounds_permutations_41bf68e26
+	RecordedTest#test_for_loop_bounds_permutations_43b6d9476
+	RecordedTest#test_for_loop_bounds_permutations_497a19c2e
+	RecordedTest#test_for_loop_bounds_permutations_4a309d935
+	RecordedTest#test_for_loop_bounds_permutations_4d31245a3
+	RecordedTest#test_for_loop_bounds_permutations_525908bdf
+	RecordedTest#test_for_loop_bounds_permutations_529e2db1b
+	RecordedTest#test_for_loop_bounds_permutations_52b8c9dce
+	RecordedTest#test_for_loop_bounds_permutations_551022430
+	RecordedTest#test_for_loop_bounds_permutations_55f59c40c
+	RecordedTest#test_for_loop_bounds_permutations_630dc5c90
+	RecordedTest#test_for_loop_bounds_permutations_63b8d4414
+	RecordedTest#test_for_loop_bounds_permutations_685813303
+	RecordedTest#test_for_loop_bounds_permutations_68af05814
+	RecordedTest#test_for_loop_bounds_permutations_6b27ec8e5
+	RecordedTest#test_for_loop_bounds_permutations_6b653b4ca
+	RecordedTest#test_for_loop_bounds_permutations_6c1a783dc
+	RecordedTest#test_for_loop_bounds_permutations_727269040
+	RecordedTest#test_for_loop_bounds_permutations_78e5f1986
+	RecordedTest#test_for_loop_bounds_permutations_7e1e98c5d
+	RecordedTest#test_for_loop_bounds_permutations_7e5405c84
+	RecordedTest#test_for_loop_bounds_permutations_80d09e646
+	RecordedTest#test_for_loop_bounds_permutations_810f1b9f7
+	RecordedTest#test_for_loop_bounds_permutations_8363e914d
+	RecordedTest#test_for_loop_bounds_permutations_8a8da64e0
+	RecordedTest#test_for_loop_bounds_permutations_8e607112a
+	RecordedTest#test_for_loop_bounds_permutations_8eea0b6d1
+	RecordedTest#test_for_loop_bounds_permutations_8f8f2d7b8
+	RecordedTest#test_for_loop_bounds_permutations_8f950db27
+	RecordedTest#test_for_loop_bounds_permutations_99d7ce05b
+	RecordedTest#test_for_loop_bounds_permutations_a0e3f63de
+	RecordedTest#test_for_loop_bounds_permutations_a25deda89
+	RecordedTest#test_for_loop_bounds_permutations_a2f6121b5
+	RecordedTest#test_for_loop_bounds_permutations_a3cbb1235
+	RecordedTest#test_for_loop_bounds_permutations_a5a02827a
+	RecordedTest#test_for_loop_bounds_permutations_a5c1fdef2
+	RecordedTest#test_for_loop_bounds_permutations_ac24c0173
+	RecordedTest#test_for_loop_bounds_permutations_af41dde8d
+	RecordedTest#test_for_loop_bounds_permutations_b06237be1
+	RecordedTest#test_for_loop_bounds_permutations_b405c7032
+	RecordedTest#test_for_loop_bounds_permutations_b5748241c
+	RecordedTest#test_for_loop_bounds_permutations_b76cc0f74
+	RecordedTest#test_for_loop_bounds_permutations_b96bf1003
+	RecordedTest#test_for_loop_bounds_permutations_bc490416b
+	RecordedTest#test_for_loop_bounds_permutations_c06c73cad
+	RecordedTest#test_for_loop_bounds_permutations_c23c2e1c0
+	RecordedTest#test_for_loop_bounds_permutations_c580caadf
+	RecordedTest#test_for_loop_bounds_permutations_c943a7ad3
+	RecordedTest#test_for_loop_bounds_permutations_c9b4f0e4d
+	RecordedTest#test_for_loop_bounds_permutations_cca01d112
+	RecordedTest#test_for_loop_bounds_permutations_d238c210b
+	RecordedTest#test_for_loop_bounds_permutations_d37e0c7df
+	RecordedTest#test_for_loop_bounds_permutations_d716907fb
+	RecordedTest#test_for_loop_bounds_permutations_dba950cb2
+	RecordedTest#test_for_loop_bounds_permutations_de3290b89
+	RecordedTest#test_for_loop_bounds_permutations_e0f54ed6c
+	RecordedTest#test_for_loop_bounds_permutations_e17b207b0
+	RecordedTest#test_for_loop_bounds_permutations_e3a915ce0
+	RecordedTest#test_for_loop_bounds_permutations_e3b5f2ffe
+	RecordedTest#test_for_loop_bounds_permutations_e4a9ebd1e
+	RecordedTest#test_for_loop_bounds_permutations_e56efe206
+	RecordedTest#test_for_loop_bounds_permutations_e74a780cd
+	RecordedTest#test_for_loop_bounds_permutations_eb0429a99
+	RecordedTest#test_for_loop_bounds_permutations_ec4984472
+	RecordedTest#test_for_loop_bounds_permutations_f29b1d0e5
+	RecordedTest#test_for_loop_bounds_permutations_f6d0a0236
+	RecordedTest#test_for_loop_bounds_permutations_f9841bafa
+	RecordedTest#test_for_loop_bounds_permutations_fa8709c8e
+	RecordedTest#test_for_loop_bounds_permutations_fbab1e7b4
+	RecordedTest#test_for_loop_bounds_permutations_ff249b60b
+	RecordedTest#test_for_loop_with_negative_offset_93ecec44a
+	RecordedTest#test_for_loop_with_negative_offset_and_limit_1058d859b
+	RecordedTest#test_forloop_drop_parentloop_bad10720f	lax
+	RecordedTest#test_parity_on_quote_escaping_49dba72de
+	RecordedTest#test_parity_on_quote_escaping_7376a254a
+	RecordedTest#test_parity_on_quote_escaping_a420c5442
+	RecordedTest#test_replace_empty_string_c845bcec2
+	RecordedTest#test_replace_with_value_and_from_being_nil_a44d90281	lax
+	RecordedTest#test_string_first_2b3ae31a3
+	RecordedTest#test_string_first_4cdb3e099	lax
+	RecordedTest#test_string_first_6cd361f51	lax
+	RecordedTest#test_string_first_b6aeab42d
+	RecordedTest#test_string_last_292076b0f
+	RecordedTest#test_string_last_c4fbb6fd6
+	RecordedTest#test_string_last_dd7c79283	lax
+	RecordedTest#test_truncatewords_with_newlines_c34fe3398
+liquid-spec/shopify_production_recordings/recorded_specs_lax.yml
+	RecordedTest#test_float_literal_lookup_f7cb99ff	lax
+shopify/liquid/ContextTest
+	test_access_variable_with_hash_notation	lax
+shopify/liquid/SelfDropContextTest
+	test_self_drop_reflects_variables_assigned_after_creation
+shopify/liquid/VariableTest
+	test_raw_value_variable	lax
