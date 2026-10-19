@@ -58,7 +58,8 @@ e.Filters = map[string]mist.FilterFunc{
 
 `Engine.Dialect` adapts mist to an engine that differs from liquidjs:
 - `Output` prints non-string values, for engines that stringify arrays or objects differently;
-- `Compare` evaluates comparisons;
+- `Compare` evaluates comparisons and `case`/`when` matching;
+- `Contains` evaluates `contains` (without it, `contains` falls back when `Compare` is set);
 - `Reject` makes constructs fall back;
 - `NoDefaultLeniency` turns off the leading-`default` leniency.
 

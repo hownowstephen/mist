@@ -360,9 +360,6 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		}
 		f.sawElse, f.active, f.taken = true, !f.taken, true
 	case "case":
-		if r.dialect != nil && r.dialect.Compare != nil {
-			bail(b, "dialect-case", "case with a dialect Compare hook")
-		}
 		v := r.expr(live, true) // lenientIf, as for conditions
 		if k := v.keyword(); k != "" {
 			bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)
@@ -384,7 +381,7 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		for {
 			at := r.pos()
 			v := r.expr(eval && !match, true)
-			match = match || eval && eq(f.subject(), v, at)
+			match = match || eval && r.when(f.subject(), v, at)
 			r.ws()
 			if r.p == len(r.src) {
 				break

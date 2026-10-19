@@ -212,3 +212,75 @@ func TestDialectStrictAssign(t *testing.T) {
 		t.Errorf("StrictAssign, lax: got %q, %v; want []", out, err)
 	}
 }
+
+// when matches with the dialect's ==, stopping at each when's first match.
+func TestDialectCase(t *testing.T) {
+	var calls []call
+	e := Engine{Dialect: toyDialect(&calls), Filters: map[string]FilterFunc{
+		"dec": func(f Filter) (any, error) { return &toyDecimal{fmt.Sprint(f.Input)}, nil },
+	}}
+	vars := map[string]any{"n": 2.5}
+	for _, c := range []struct {
+		tpl, want string
+		hooked    bool
+	}{
+		{"{% case n %}{% when '2.5' %}Y{% else %}N{% endcase %}", "Y", true}, // liquidjs: N
+		{"{% assign d = 1 | dec %}{% case d %}{% when 1 %}one{% when d %}self{% endcase %}", "self", false},
+		{"{% if false %}{% case n %}{% when 1 %}{% endcase %}{% endif %}", "", false},
+	} {
+		calls = nil
+		if out, err := e.Render(c.tpl, vars, false); err != nil || out != c.want || (calls != nil) != c.hooked {
+			t.Errorf("%s: got %q, %v, hook calls %#v; want %q", c.tpl, out, err, calls, c.want)
+		}
+	}
+
+	calls = nil
+	if _, err := e.Render("{% case missing %}{% when nil, 3 %}{% when 3 or 'x' %}{% endcase %}", vars, false); err != nil {
+		t.Fatal(err)
+	}
+	want := []call{{"==", nil, nil}, {"==", nil, int64(3)}, {"==", nil, "x"}}
+	if !reflect.DeepEqual(calls, want) {
+		t.Errorf("hook arguments: got %#v; want %#v", calls, want)
+	}
+
+	bad := Engine{Dialect: &Dialect{Compare: func(string, any, any) (bool, error) { return false, errToy }}}
+	var me *Error
+	if _, err := bad.Render("{% case 1 %}{% when 1 %}{% endcase %}", nil, false); !errors.Is(err, errToy) || !errors.As(err, &me) || me.Code != "hook:dialect:compare" {
+		t.Errorf("hook error: got %v; want hook:dialect:compare wrapping it", err)
+	}
+}
+
+// Contains takes over contains, including the cases liquidjs bails on.
+func TestDialectContains(t *testing.T) {
+	var calls []call
+	e := Engine{Dialect: &Dialect{Contains: func(a, b any) (bool, error) {
+		calls = append(calls, call{"contains", a, b})
+		xs, ok := a.([]any)
+		if !ok {
+			return false, errToy
+		}
+		for _, x := range xs {
+			if fmt.Sprint(x) == fmt.Sprint(b) {
+				return true, nil
+			}
+		}
+		return false, nil
+	}}}
+	vars := map[string]any{"xs": []any{1, nil}, "s": "abc"}
+	out, err := e.Render("{% if xs contains '1' %}a{% endif %}{% if xs contains nil %}b{% endif %}{% if xs contains 3 %}c{% endif %}{% if false %}{% if xs contains 1 %}{% endif %}{% endif %}", vars, false)
+	if err != nil || out != "ab" {
+		t.Errorf("got %q, %v; want ab", out, err) // liquidjs: b, after bailing on contains nil
+	}
+	want := []call{{"contains", vars["xs"], "1"}, {"contains", vars["xs"], nil}, {"contains", vars["xs"], int64(3)}}
+	if !reflect.DeepEqual(calls, want) {
+		t.Errorf("hook arguments: got %#v; want %#v", calls, want)
+	}
+
+	var me *Error
+	if _, err := e.Render("{% if s contains 'a' %}{% endif %}", vars, false); !errors.Is(err, errToy) || !errors.As(err, &me) || me.Code != "hook:dialect:contains" {
+		t.Errorf("hook error: got %v; want hook:dialect:contains wrapping it", err)
+	}
+	if _, err := e.Render("{% if xs contains blank %}{% endif %}", vars, false); !errors.As(err, &me) || me.Code != "keyword-outside-equality" {
+		t.Errorf("keyword: got %v; want keyword-outside-equality", err)
+	}
+}
