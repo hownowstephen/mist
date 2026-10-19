@@ -41,7 +41,7 @@ func (r *renderer) end() {
 		bail(r.pos(), "unexpected-token", "unexpected %q", r.src[r.p:])
 	}
 	if r.undef.set {
-		panic(bailout{&Error{Kind: ErrUndefined, Code: "undefined", Pos: r.undef.pos, Msg: r.undef.path}})
+		panic(bailout{&Error{Kind: ErrUndefined, Code: "undefined", Pos: r.undef.pos, Msg: r.undef.path, Path: r.undef.names()}})
 	}
 }
 
@@ -381,10 +381,19 @@ func (r *renderer) blankAt(i int) bool {
 func (r *renderer) path(eval, lenient bool) any {
 	start := r.p
 	name := r.ident()
+	var kb [8]val // the keys so far, for ErrUndefined's Path
+	keys := kb[:0]
+	track := eval && r.strict
+	if track {
+		keys = append(keys, strVal(name))
+	}
 	var v any
 	switch {
 	case name == "forloop":
 		v = r.forloop(eval, start)
+		if track {
+			keys = append(keys, strVal(r.src[start+len("forloop."):r.p])) // the property forloop read
+		}
 	case reserved(name):
 		bail(r.base+start, "reserved-word-variable", "%q is not supported as a variable", name)
 	case eval:
@@ -397,7 +406,7 @@ func (r *renderer) path(eval, lenient bool) any {
 				r.lenientUndef = true
 			} else if !r.undef.set {
 				// Raised by end(): a trailing filter such as `| default` makes liquidjs lenient.
-				r.undef = pendingUndef{true, r.base + start, r.src[start:r.p]}
+				r.undef = newPendingUndef(r.base+start, r.src[start:r.p], keys)
 			}
 		}
 		switch r.peek() {
@@ -418,6 +427,9 @@ func (r *renderer) path(eval, lenient bool) any {
 			if eval {
 				v = key(v, val{s: seg, lit: litStr}, at)
 			}
+			if track {
+				keys = append(keys, strVal(seg))
+			}
 		case '[':
 			r.p++
 			r.ws()
@@ -428,7 +440,11 @@ func (r *renderer) path(eval, lenient bool) any {
 			}
 			if eval && r.strict && isUndef(k) {
 				// liquidjs evaluates index keys strictly, even where the path itself is lenient.
-				panic(bailout{&Error{Kind: ErrUndefined, Code: "undefined", Pos: at, Msg: r.src[at-r.base : r.p]}})
+				e := &Error{Kind: ErrUndefined, Code: "undefined", Pos: at, Msg: r.src[at-r.base : r.p]}
+				if r.undef.set && r.undef.pos == at {
+					e.Path = r.undef.names()
+				}
+				panic(bailout{e})
 			}
 			r.ws()
 			if r.peek() != ']' {
@@ -436,6 +452,9 @@ func (r *renderer) path(eval, lenient bool) any {
 			}
 			if eval {
 				v = key(v, k, at)
+			}
+			if track {
+				keys = append(keys, k)
 			}
 			r.p++
 		default:
@@ -522,9 +541,40 @@ func literal(name string) bool {
 // pendingUndef is a strict undefined variable not yet raised. It's kept unallocated
 // because a leading default filter can still make it lenient.
 type pendingUndef struct {
-	set  bool
-	pos  int
-	path string
+	set   bool
+	pos   int
+	path  string
+	keys  [8]val // up to the first undefined one, for Error.Path
+	nkeys int    // -1 when there were more than fit
+}
+
+func newPendingUndef(pos int, path string, keys []val) pendingUndef {
+	u := pendingUndef{set: true, pos: pos, path: path}
+	if u.nkeys = copy(u.keys[:], keys); len(keys) > len(u.keys) {
+		u.nkeys = -1
+	}
+	return u
+}
+
+// names is the keys as liquidjs joins them into its undefined variable error, or nil when
+// mist can't say: too many keys, or one with no JavaScript string mist reproduces.
+func (u *pendingUndef) names() (names []string) {
+	if !u.set || u.nkeys < 0 {
+		return nil
+	}
+	defer func() {
+		if e := recover(); e != nil {
+			if _, ok := e.(bailout); !ok {
+				panic(e)
+			}
+			names = nil
+		}
+	}()
+	names = make([]string, u.nkeys)
+	for i, k := range u.keys[:u.nkeys] {
+		names[i] = jsString(k, u.pos)
+	}
+	return names
 }
 
 // reserved words that liquidjs parses as operators even where a variable is expected.
