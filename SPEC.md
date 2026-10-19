@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.33.x
+# mist Liquid subset — v0.34.x
 
 _Last updated 2026-10-18. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -189,7 +189,8 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | Hook | Effect |
 |---|---|
 | `Output(dst, v)` | Prints non-string values: numbers, bools, arrays, objects, and the `blank` and `empty` keywords. Strings, nil and undefined are printed by mist as usual. |
-| `Compare(op, a, b)` | Evaluates `==`, `!=`, `<`, `>`, `<=`, `>=` in conditions. Truthiness and `and`/`or` are unchanged. |
+| `Compare(op, a, b)` | Evaluates `==`, `!=`, `<`, `>`, `<=`, `>=` in conditions, and matches each `when` value against the `case` value as `Compare("==", case, when)`. Truthiness and `and`/`or` are unchanged. A `mist.Comparer` on either side compares itself instead. |
+| `Contains(a, b)` | Evaluates `a contains b` in conditions, `contains nil` included (the `nil` arrives as `nil`). |
 | `Reject` | A set of constructs that bail in both `Render` and `Check`, including in dead branches: `TrimMarkers`, `NegativeLiterals` (including negative indexes), `UnspacedOperators` (a comparison operator with no whitespace before it, such as `x==2`), `RawBlocks`, `BlankKeyword`, `EmptyKeyword`. |
 | `NumberText` | Number literals reach hooks and registered filters as `json.Number` holding their text, so `2.0` and `2` stay distinct (Ruby's Float and Integer). |
 | `NoBuiltinFilters` | Only registered filters run: any other filter, `default` included, bails with `filter:NAME`, as does a registered filter returning `ErrBuiltin`. |
@@ -197,8 +198,8 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | `NoDefaultLeniency` | Turns off the leading-`default` leniency rule. Combine with an overriding `default` in `Engine.Filters` to change `default` itself. |
 
 - **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integral number literals and results (`3`, `2 | times: 1`) and `float64` for fractional ones (`1.5`), `nil` for nil, undefined and the `nil` literal (but `mist.Undefined{}` for undefined inside arrays and objects), and `mist.Blank` and `mist.Empty` for those keywords.
-- **Errors:** a hook returning an error that wraps `ErrUnsupported` bails; other errors stop rendering and are returned wrapped.
-- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` or `empty` against a keyword or `nil`, and everything out of spec) still apply. `contains` and `case` bail when `Compare` is set, since the hook doesn't cover them.
+- **Errors:** a hook returning an error that wraps `ErrUnsupported` bails; other errors stop rendering and are returned wrapped. Either way the `*Error`'s code is `hook:dialect:` and the hook's lowercased name, such as `hook:dialect:contains`.
+- **Always core rules:** the dialect-independent bails (printing the `nil` literal, `blank` or `empty` against a keyword or `nil`, and everything out of spec) still apply. `contains` with `blank` or `empty` still bails, and `contains` bails when `Compare` is set without `Contains`.
 
 ## Chains
 

@@ -13,8 +13,13 @@ type Dialect struct {
 	// the Blank or Empty keyword. Strings, nil and undefined never reach it.
 	Output func(dst []byte, v any) ([]byte, error)
 
-	// Compare evaluates ==, !=, <, >, <=, >= in conditions.
+	// Compare evaluates ==, !=, <, >, <=, >= in conditions, and matches when values
+	// against the case subject with ==.
 	Compare func(op string, a, b any) (bool, error)
+
+	// Contains evaluates a contains b in conditions. With Compare set and Contains
+	// nil, contains bails.
+	Contains func(a, b any) (bool, error)
 
 	// Reject makes these constructs bail, in both Render and Check.
 	Reject Constructs
@@ -103,6 +108,23 @@ func (r *renderer) dialectCompare(op string, a, b val, at int) bool {
 	ok, err := r.dialect.Compare(op, a.hookValue(), b.hookValue())
 	if err != nil {
 		panic(bailout{hookErr("dialect", "compare", at, err)})
+	}
+	return ok
+}
+
+// when matches a when value against the case subject, with the dialect's == unless
+// either is a Comparer, as in conditions.
+func (r *renderer) when(subject, v val, at int) bool {
+	if r.dialect != nil && r.dialect.Compare != nil && !isComparer(subject) && !isComparer(v) {
+		return r.dialectCompare("==", subject, v, at)
+	}
+	return eq(subject, v, at)
+}
+
+func (r *renderer) dialectContains(a, b val, at int) bool {
+	ok, err := r.dialect.Contains(a.hookValue(), b.hookValue())
+	if err != nil {
+		panic(bailout{hookErr("dialect", "contains", at, err)})
 	}
 	return ok
 }

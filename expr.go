@@ -180,11 +180,14 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 		}
 	}
 	if op == "contains" {
+		if r.dialect != nil && r.dialect.Contains != nil {
+			return eval && r.dialectContains(a, b, at), a, false
+		}
 		if isNilLit(b) {
 			bail(at, "contains-nil", "contains nil") // liquidjs searches for "null"
 		}
 		if r.dialect != nil && r.dialect.Compare != nil {
-			bail(at, "dialect-contains", "contains with a dialect Compare hook")
+			bail(at, "dialect-contains", "contains with a dialect Compare hook but no Contains hook")
 		}
 		return eval && contains(a, b, at), a, false
 	}

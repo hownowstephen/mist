@@ -463,13 +463,6 @@ func TestNestedRangesHitTheIterationBudget(t *testing.T) {
 	}
 }
 
-func TestCaseBailsWithADialectCompareHook(t *testing.T) {
-	e := Engine{Dialect: &Dialect{Compare: func(string, any, any) (bool, error) { return true, nil }}}
-	if _, err := e.Render(`{% case x %}{% when 1 %}a{% endcase %}`, nil, false); !errors.Is(err, ErrUnsupported) {
-		t.Fatalf("got %v; want ErrUnsupported", err)
-	}
-}
-
 // Go callers can pass numbers that aren't float64; sort orders them numerically.
 func TestSortOfGoNumbers(t *testing.T) {
 	out, err := Render(`{{ xs | sort | join: ',' }}`, map[string]any{"xs": []any{3, int64(1), json.Number("2")}}, true)
