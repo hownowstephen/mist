@@ -116,7 +116,7 @@ func (r *renderer) recoverBail(err *error) {
 	if !ok {
 		b.err = &Error{Kind: ErrInternal, Code: "internal", Pos: r.pos(), Msg: fmt.Sprint("panic: ", e), Stack: debug.Stack()}
 	}
-	if me, ok := b.err.(*Error); ok {
+	if me := (*Error)(nil); errors.As(b.err, &me) {
 		me.Line, me.Col = position(r.tpl, me.Pos)
 	}
 	*err = b.err

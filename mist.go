@@ -220,10 +220,19 @@ func (e Engine) Append(dst []byte, tpl string, vars map[string]any, strict bool)
 // liquidjs writes into the data a chain's later steps share.
 func (e Engine) append(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
 	out, env, err = e.run(dst, tpl, vars, strict)
-	if me, ok := err.(*Error); ok && me.Path != nil && e.Check(tpl) != nil {
-		me.Path = nil // liquidjs parses the whole template first, and may report a later error instead
+	if err != nil {
+		dropUnsurePath(e, tpl, err)
 	}
 	return out, env, err
+}
+
+// dropUnsurePath clears an ErrUndefined's Path when tpl doesn't pass Check: liquidjs parses
+// the whole template first, and may report a later error instead.
+func dropUnsurePath(e Engine, tpl string, err error) {
+	var me *Error
+	if errors.As(err, &me) && me.Path != nil && e.Check(tpl) != nil {
+		me.Path = nil
+	}
 }
 
 func (e Engine) run(dst []byte, tpl string, vars map[string]any, strict bool) (out []byte, env map[string]any, err error) {
