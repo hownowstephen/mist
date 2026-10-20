@@ -185,6 +185,22 @@ func TestTagRender(t *testing.T) {
 	}
 }
 
+// An undefined variable inside a nested render keeps liquidjs's wording, which counts
+// from the nested template; Pos stays at the tag.
+func TestTagRenderUndefinedPosition(t *testing.T) {
+	_, err := nest.Render("ab\ncd [{% nest v %}]", map[string]any{"v": "xy {{ nope }}"}, true)
+	var me *Error
+	if !errors.As(err, &me) || !errors.Is(err, ErrUndefined) {
+		t.Fatalf("got %v; want ErrUndefined", err)
+	}
+	if got := fmt.Sprintf("undefined variable: %s, line:%d, col:%d", strings.Join(me.Path, "."), me.Line, me.Col); got != "undefined variable: nope, line:1, col:7" {
+		t.Errorf("got %q; want liquidjs's undefined variable: nope, line:1, col:7", got)
+	}
+	if me.Pos != len("ab\ncd [{%") {
+		t.Errorf("Pos = %d; want the tag's", me.Pos)
+	}
+}
+
 // Depth lets a tag cap how deep its own Tag.Render calls nest.
 func TestTagDepth(t *testing.T) {
 	var depths []int
