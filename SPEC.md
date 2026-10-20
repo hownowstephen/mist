@@ -226,12 +226,12 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | `FuzzInvariants` | On fuzzed templates and JSON data: `Render` is deterministic, `Append` gives the prefix plus `Render`'s output, a one-step `RenderChain` gives `Render`'s result, raising `Limits` or setting `PassUnknownFilters` never changes what renders, and the caller's vars are never mutated. |
 | `FuzzParity` | Opt-in (`MIST_FUZZ_PARITY=1`, needs Node): on fuzzed templates and JSON data, wherever mist renders, liquidjs (`scripts/parity-worker.mjs`) gives the same output, and wherever mist returns `ErrUndefined`, liquidjs fails. |
 
-Regenerate the corpus (needs Ruby, Node, and clones of Shopify/liquid-spec, [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) and Shopify/liquid). `-update-accepted` rewrites both `corpus.accepted` and `corpus.fragile`:
+Regenerate the corpus (needs Ruby, Node, and clones of Shopify/liquid-spec, [jg-rp/golden-liquid](https://github.com/jg-rp/golden-liquid) and Shopify/liquid). The generated templates are reused from the committed corpus, since `scripts/gen` changes as the grammar grows; replacing them with a fresh `go run ./gen -n 5000 -seed N` sample is a separate, deliberate change. `-update-accepted` rewrites both `corpus.accepted` and `corpus.fragile`:
 
 ```bash
 cd scripts && npm ci
 ruby harvest.rb ../../liquid-spec ../../golden-liquid ../../liquid /tmp/harvest.json
-go run ./gen -n 5000 -seed 1 > /tmp/gen.json
+node -e 'const fs = require("fs"); fs.writeFileSync("/tmp/gen.json", JSON.stringify(JSON.parse(fs.readFileSync("../testdata/corpus.json")).filter((c) => c.src === "generated")))'
 node oracle.mjs /tmp/harvest.json /tmp/gen.json
 cd .. && go test -run TestCorpus -update-accepted .
 ```
