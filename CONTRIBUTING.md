@@ -26,7 +26,7 @@ node scripts/parity.mjs       # cases.json against liquidjs
 
 [SPEC.md](SPEC.md) is normative. A change in behaviour is a change to it, made in the same PR:
 
-1. Add cases to `testdata/cases.json` and confirm them against liquidjs with `node scripts/parity.mjs`. Mark cases where mist bails with `"err": "unsupported"` and the `"code"` it bails with, which `TestCases` checks. For a change to what `Limits.Memory` charges, add cases with `"mem"`, what liquidjs charges its `memoryLimit` (`parity.mjs` checks it), and `"mistMem"` where mist charges more.
+1. Add cases to `testdata/cases.json` and confirm them against liquidjs with `node scripts/parity.mjs`. Mark cases where mist bails with `"err": "unsupported"` and the `"code"` it bails with, which `TestCases` checks. For a change to what `Limits.Memory` charges, add cases with `"mem"`, what liquidjs charges its `memoryLimit` (`parity.mjs` checks it), and `"mistMem"` where mist charges more. Each case's `"spec"` lists the SPEC.md rule anchors (`r-…`) it tests, and a new rule gets an `<a id="r-…"></a>` anchor; `TestSpecLinks` fails on a rule or bail code no case covers, unless `codes_test.go`'s allowlist says why none can.
 2. Update SPEC.md's grammar and semantics. A spec change bumps the minor version, and the SPEC title names that line (`v0.15.x`).
 3. If the grammar changed, extend `scripts/gen` so the generated differentials cover it.
 4. Run `go test ./...` (CI enforces a 99% coverage floor), a 100k generated differential and a few minutes each of `go test -fuzz FuzzRender` and `-fuzz FuzzInvariants` ([SPEC.md § Verification](SPEC.md#verification) has the commands).
@@ -49,13 +49,13 @@ On top of the steps above, a built-in filter touches:
 - `stdfilters.go`: a `builtinFilter` case that checks its argument count with `takes(lo, hi)` and returns. Longer implementations go in `stringfilters.go` or `arrayfilters.go`.
 - `filters.go`: `spend`, if liquidjs's `memoryLimit` charges it more than its input and arguments, or if its output can be much larger than its input.
 - `liquidjs_filters.go`: only if liquidjs added the filter. `parity.mjs` checks this list.
-- SPEC.md: its row under Semantics, and any data-dependent bails under Runtime bails.
+- SPEC.md: its row under Semantics, and any data-dependent bails under Runtime bails, each with an `r-…` anchor that its `cases.json` cases cite in `spec`.
 - `docs/supported.md`'s filter table and `scripts/gen`'s `filters()`. `TestBuiltinFiltersListed` fails if either is missing a `builtinFilter` name.
 
 A built-in tag touches:
 
 - `render.go`: a case in `tag`. A block tag also needs a `frameKind`, any `frame` fields it uses (with a comment saying which kind uses them), its end tag, and the `else`/`elsif` guards if they apply. `liquid` decides which tags its lines can hold.
-- SPEC.md: `tagbody` in the grammar, the structural rules for block tags, and a row under Semantics.
+- SPEC.md: `tagbody` in the grammar, the structural rules for block tags, and a row under Semantics with an `r-…` anchor that its `cases.json` cases cite in `spec`.
 - `docs/supported.md`'s tag table, and `scripts/gen`'s `block` (`TestBuiltinFiltersListed` doesn't cover tags).
 
 ## Performance

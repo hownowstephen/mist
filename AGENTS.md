@@ -44,7 +44,7 @@ golangci-lint run ./...
 
 ## When changing behaviour
 
-1. Add cases to `testdata/cases.json` and confirm them with `node scripts/parity.mjs` before relying on them. A bail case (`"err": "unsupported"`) names its `"code"`.
+1. Add cases to `testdata/cases.json` and confirm them with `node scripts/parity.mjs` before relying on them. A bail case (`"err": "unsupported"`) names its `"code"`, and every case lists the SPEC.md rule anchors it tests in `"spec"` (`TestSpecLinks`).
 2. Update SPEC.md in the same change, and bump its title's minor version (`v0.N.x`).
 3. Extend `scripts/gen` for new grammar or filters, and run a 100k differential with a new seed.
 4. Every `bail` takes a code (`Error.Code`), which is API: reuse one that fits, or add a kebab-case one and run `go test -run TestCodes -update-codes .` to record it in `testdata/codes.txt`. A data-dependent bail's code also goes in `runtimeCodes` (`mist_test.go`), or `FuzzRender` fails.
