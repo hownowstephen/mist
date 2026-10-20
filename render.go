@@ -116,7 +116,7 @@ func (r *renderer) recoverBail(err *error) {
 	if !ok {
 		b.err = &Error{Kind: ErrInternal, Code: "internal", Pos: r.pos(), Msg: fmt.Sprint("panic: ", e), Stack: debug.Stack()}
 	}
-	if me := (*Error)(nil); errors.As(b.err, &me) {
+	if me := (*Error)(nil); errors.As(b.err, &me) && me.Line == 0 { // set already for an error from a nested Tag.Render
 		me.Line, me.Col = position(r.tpl, me.Pos)
 	}
 	*err = b.err

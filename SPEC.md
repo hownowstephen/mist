@@ -1,6 +1,6 @@
 # mist Liquid subset — v0.35.x
 
-_Last updated 2026-10-19. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-20. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, and where its `Path` is set, with exactly the message `Path`, `Line` and `Col` give (see Strict undefined error). Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails. Every error is an `*Error` whose `Code` names the reason and stays the same across releases (`testdata/codes.txt` lists them), so callers can count bails by reason without parsing `Msg`. A panic in mist or in a registered tag, filter or dialect hook is recovered as `ErrInternal`, which wraps `ErrUnsupported` so the caller falls back; it means a bug, and `Error.Stack` says where.
 
@@ -163,7 +163,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 - A tag's function runs each time the tag is reached in a live branch. That includes every loop iteration but never a dead branch.
 - The function gets the raw, trimmed text after the name (`Args`), the tag as written from `{%` to `%}` (`Source`; a `{% liquid %}` line has no delimiters), the data passed to `Render` (`Vars`), and the strict flag. `Lookup(path)` resolves a variable in the tag's scope: loop variables, then assigns, then data.
 - `Render(dst, src)` renders `src` as Liquid in the tag's scope, as liquidjs renders a template with the caller's `Context`: it sees the tag's loop variables (including `forloop`), assigns and data, and the assigns, counters and `cycle` positions it sets persist after it. It shares the render's limits and nests at most 100 deep (`nested-render-depth`); `Tag.Depth` is how many `Render` calls a tag runs inside, for tags that allow less. Blocks it opens must close in it, and `break`/`continue` can't reach the tag's loops (liquidjs would break them), so both bail.
-- Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Returning an `*Error`, such as one from `Render`, stops the render with its `Kind` and `Code` at the tag's position. Any other error stops rendering and is returned wrapped (`hook:tag:NAME`), so `errors.Is` still matches it.
+- Returning an error that wraps `ErrUnsupported` hands the template to the full engine. Returning an `*Error`, such as one from `Render`, stops the render with its `Kind` and `Code` at the tag's position. One from `Render` keeps its `Line`, `Col` and `Path`, which count from the template it rendered, as liquidjs reports an error inside a nested render. Any other error stops rendering and is returned wrapped (`hook:tag:NAME`), so `errors.Is` still matches it.
 - Built-in tag names can't be overridden, and names that aren't registered bail as before. `Engine.Check` accepts registered names without calling them. Their arguments aren't checked.
 - The parity contract doesn't cover custom tags. Matching the full engine's output for them is up to whoever implements the tag.
 
