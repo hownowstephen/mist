@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.36.x
+# mist Liquid subset — v0.35.x
 
 _Last updated 2026-10-20. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
