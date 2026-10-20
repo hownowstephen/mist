@@ -38,7 +38,9 @@ func TestCodes(t *testing.T) {
 				}
 			case *ast.KeyValueExpr:
 				if id, ok := n.Key.(*ast.Ident); ok && id.Name == "Code" {
-					set[codeOf(t, n.Value)] = true
+					if _, passThrough := n.Value.(*ast.Ident); !passThrough {
+						set[codeOf(t, n.Value)] = true
+					}
 				}
 			}
 			return true
@@ -121,7 +123,6 @@ var (
 		"r-bail-go-types":   "JSON data can't hold other Go types",
 	}
 	uncasedCodes = map[string]string{
-		"CODE":                          "bail's own parameter, not a code",
 		"internal":                      "a recovered panic, which is a bug",
 		"bad-json-number":               "JSON data can't hold other Go types",
 		"value-type":                    "JSON data can't hold other Go types",
