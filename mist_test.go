@@ -14,6 +14,7 @@ import (
 
 type tcase struct {
 	Name   string         `json:"name"`
+	Spec   []string       `json:"spec"` // SPEC.md rule anchors the case tests
 	Tpl    string         `json:"tpl"`
 	Data   map[string]any `json:"data"`
 	Strict bool           `json:"strict"`

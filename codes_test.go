@@ -38,7 +38,9 @@ func TestCodes(t *testing.T) {
 				}
 			case *ast.KeyValueExpr:
 				if id, ok := n.Key.(*ast.Ident); ok && id.Name == "Code" {
-					set[codeOf(t, n.Value)] = true
+					if _, passThrough := n.Value.(*ast.Ident); !passThrough {
+						set[codeOf(t, n.Value)] = true
+					}
 				}
 			}
 			return true
@@ -110,6 +112,79 @@ func TestBuiltinFiltersListed(t *testing.T) {
 		}
 		if !regexp.MustCompile(`["|] ?` + n + `[":]`).Match(gen) {
 			t.Errorf("scripts/gen doesn't generate %s", n)
+		}
+	}
+}
+
+// Rules and codes cases.json can't reach, and why.
+var (
+	uncitedRules = map[string]string{
+		"r-bail-strip-html": "liquidjs 10.26 loops forever on it, so parity.mjs can't run it",
+		"r-bail-go-types":   "JSON data can't hold other Go types",
+	}
+	uncasedCodes = map[string]string{
+		"internal":                      "a recovered panic, which is a bug",
+		"bad-json-number":               "JSON data can't hold other Go types",
+		"value-type":                    "JSON data can't hold other Go types",
+		"template-too-large":            "needs a 2 GiB template",
+		"nesting-too-deep":              "needs a 1,025-deep template; TestDeepNesting covers it",
+		"strip-html-unclosed":           "liquidjs 10.26 loops forever on it, so parity.mjs can't run it",
+		"hook:KIND:NAME":                "needs a registered tag, filter or dialect",
+		"nested-render-depth":           "needs a registered tag",
+		"nil-tag-func":                  "needs a registered tag",
+		"nil-filter-func":               "needs a registered filter",
+		"nil-literal-registered-filter": "needs a registered filter",
+		"dialect-blank":                 "needs a dialect",
+		"dialect-contains":              "needs a dialect",
+		"dialect-echo":                  "needs a dialect",
+		"dialect-empty":                 "needs a dialect",
+		"dialect-negative-literal":      "needs a dialect",
+		"dialect-raw":                   "needs a dialect",
+		"dialect-raw-filter":            "needs a dialect",
+		"dialect-trim-markers":          "needs a dialect",
+		"dialect-unspaced-operator":     "needs a dialect",
+	}
+)
+
+// Every SPEC.md rule anchor (<a id="r-...">) is cited by a cases.json case's spec, every
+// cited anchor exists, and every code in codes.txt has a case, except as listed above.
+func TestSpecLinks(t *testing.T) {
+	spec, _ := os.ReadFile("SPEC.md")
+	rules := map[string]bool{}
+	for _, m := range regexp.MustCompile(`<a id="(r-[a-z0-9-]+)"></a>`).FindAllStringSubmatch(string(spec), -1) {
+		if rules[m[1]] {
+			t.Errorf("SPEC.md repeats anchor %s", m[1])
+		}
+		rules[m[1]] = true
+	}
+	cited, cased := map[string]bool{}, map[string]bool{}
+	for _, c := range loadCases(t) {
+		for _, id := range c.Spec {
+			if !rules[id] {
+				t.Errorf("case %q cites %s, which SPEC.md doesn't have", c.Name, id)
+			}
+			cited[id] = true
+		}
+		if c.Err == "undefined" {
+			c.Code = "undefined"
+		}
+		cased[c.Code] = true
+	}
+	for id := range rules {
+		if _, ok := uncitedRules[id]; ok == cited[id] {
+			t.Errorf("SPEC.md rule %s: a case cites it, or uncitedRules says why none can, not both", id)
+		}
+	}
+	codes, _ := os.ReadFile("testdata/codes.txt")
+	for _, code := range strings.Fields(string(codes)) {
+		// tag:NAME matches any tag:x.
+		re := regexp.MustCompile("^" + regexp.MustCompile(`:[A-Z]+`).ReplaceAllString(regexp.QuoteMeta(code), ":[^:]+") + "$")
+		has := false
+		for c := range cased {
+			has = has || re.MatchString(c)
+		}
+		if _, ok := uncasedCodes[code]; ok == has {
+			t.Errorf("code %s: a case bails with it, or uncasedCodes says why none can, not both", code)
 		}
 	}
 }

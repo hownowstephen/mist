@@ -1,4 +1,3 @@
-CODE
 array-filter-object
 array-length-property
 assign-syntax
