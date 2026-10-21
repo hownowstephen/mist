@@ -1,13 +1,14 @@
 name: Latest liquidjs
 
-# The nightly's drift check, on the PRs that move scripts/latest (mostly Dependabot's) or
-# add cases, so drift.txt changes in the same PR.
+# The nightly's drift check, on the PRs that move scripts/latest (mostly Dependabot's), add
+# cases or change which renders mist accepts, so drift.txt changes in the same PR.
 on:
   pull_request:
     paths:
       - scripts/latest/**
       - testdata/cases.json
       - testdata/corpus.json
+      - "*.go"
       - .github/workflows/latest.yml
 
 permissions:
