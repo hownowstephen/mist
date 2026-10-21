@@ -399,6 +399,9 @@ func (r *renderer) path(eval, lenient bool) any {
 	case eval:
 		v = r.root(name, start)
 	}
+	ruby := eval && r.dialect != nil && r.dialect.RubyLookups
+	falsyRoot := ruby && (v == nil || v == false)
+	depth := 0
 	for {
 		if eval && r.strict && v == (Undefined{}) {
 			if lenient {
@@ -425,8 +428,9 @@ func (r *renderer) path(eval, lenient bool) any {
 				bail(at, "expected-property-name", "expected property name")
 			}
 			if eval {
-				v = key(v, val{s: seg, lit: litStr}, at)
+				v = segment(v, val{s: seg, lit: litStr}, at, ruby, falsyRoot, depth)
 			}
+			depth++
 			if track {
 				keys = append(keys, strVal(seg))
 			}
@@ -451,8 +455,9 @@ func (r *renderer) path(eval, lenient bool) any {
 				bail(r.pos(), "expected-bracket", "expected ]")
 			}
 			if eval {
-				v = key(v, k, at)
+				v = segment(v, k, at, ruby, falsyRoot, depth)
 			}
+			depth++
 			if track {
 				keys = append(keys, k)
 			}
@@ -464,6 +469,19 @@ func (r *renderer) path(eval, lenient bool) any {
 			return v
 		}
 	}
+}
+
+// segment is the value of a path's next segment: key's, or with ruby (Dialect.RubyLookups)
+// Ruby Liquid's, where a nil or false first segment is the whole lookup's value and past
+// it a property or index of nil or false is undefined.
+func segment(v any, k val, at int, ruby, falsyRoot bool, depth int) any {
+	switch {
+	case falsyRoot:
+		return v
+	case ruby && depth > 0 && (v == nil || v == false):
+		return Undefined{}
+	}
+	return key(v, k, at)
 }
 
 func (r *renderer) root(name string, at int) any {

@@ -213,6 +213,42 @@ func TestDialectStrictAssign(t *testing.T) {
 	}
 }
 
+// RubyLookups follows Ruby Liquid's Context#variable; want is Ruby Liquid 2.5's strict
+// result, "undefined" for VariableNotFound.
+func TestDialectRubyLookups(t *testing.T) {
+	e := Engine{Dialect: &Dialect{RubyLookups: true}}
+	for _, c := range []struct {
+		tpl  string
+		vars map[string]any
+		want string
+	}{
+		{"[{{ c.x }}]", map[string]any{"c": nil}, "[]"},
+		{"[{{ c.x.y }}]", map[string]any{"c": nil}, "[]"},
+		{"[{{ c.x }}]", map[string]any{"c": false}, "[false]"},
+		{"[{{ c.p.x }}]", map[string]any{"c": map[string]any{"p": nil}}, "undefined"},
+		{"[{{ c.p.x.y }}]", map[string]any{"c": map[string]any{"p": nil}}, "undefined"},
+		{"[{{ c.p.q.x }}]", map[string]any{"c": map[string]any{"p": map[string]any{"q": nil}}}, "undefined"},
+		{"[{{ c.p[0] }}]", map[string]any{"c": map[string]any{"p": nil}}, "undefined"},
+		{"[{{ c.p.x }}]", map[string]any{"c": map[string]any{"p": false}}, "undefined"},
+		{"[{{ c.p }}]", map[string]any{"c": map[string]any{"p": nil}}, "[]"},
+		{"{% if c.p.x %}y{% else %}n{% endif %}", map[string]any{"c": map[string]any{"p": nil}}, "n"},
+	} {
+		out, err := e.Render(c.tpl, c.vars, true)
+		if errors.Is(err, ErrUndefined) {
+			out = "undefined"
+		}
+		if out != c.want {
+			t.Errorf("%s with %v: got %q, %v; want %q", c.tpl, c.vars, out, err, c.want)
+		}
+	}
+	if out, err := e.Render("[{{ c.p.x }}]", map[string]any{"c": map[string]any{"p": nil}}, false); err != nil || out != "[]" {
+		t.Errorf("lax: got %q, %v; want []", out, err)
+	}
+	if out, err := (Engine{}).Render("[{{ c.p.x }}]", map[string]any{"c": map[string]any{"p": nil}}, true); err != nil || out != "[]" {
+		t.Errorf("liquidjs: got %q, %v; want [], a property of null being null", out, err)
+	}
+}
+
 // when matches with the dialect's ==, stopping at each when's first match.
 func TestDialectCase(t *testing.T) {
 	var calls []call
