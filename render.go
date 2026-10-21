@@ -71,6 +71,7 @@ type renderer struct {
 	halt         int       // 1 + the stack index of the for a break or continue is unwinding to, or 0
 	haltBreak    bool      // the halt is a break, not a continue
 	binds        []binding // expression filter items, innermost last
+	exps         int       // *_exp expressions being evaluated
 	lenientUndef bool      // a lenient path met an undefined variable under strict
 	floor        int       // frames a Tag.Render inherited, which its tags can't close or break out of
 	nested       int       // Tag.Render depth
@@ -117,7 +118,11 @@ func (r *renderer) recoverBail(err *error) {
 		b.err = &Error{Kind: ErrInternal, Code: "internal", Pos: r.pos(), Msg: fmt.Sprint("panic: ", e), Stack: debug.Stack()}
 	}
 	if me := (*Error)(nil); errors.As(b.err, &me) && me.Line == 0 { // set already for an error from a nested Tag.Render
-		me.Line, me.Col = position(r.tpl, me.Pos)
+		if r.exps > 0 && me.Path != nil { // liquidjs parses a *_exp expression as its own input
+			me.Line, me.Col = position(r.src, me.Pos-r.base)
+		} else {
+			me.Line, me.Col = position(r.tpl, me.Pos)
+		}
 	}
 	*err = b.err
 }
