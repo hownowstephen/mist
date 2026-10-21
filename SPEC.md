@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.35.x
+# mist Liquid subset — v0.36.x
 
-_Last updated 2026-10-20. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-21. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, and where its `Path` is set, with exactly the message `Path`, `Line` and `Col` give (see Strict undefined error). Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails. Every error is an `*Error` whose `Code` names the reason and stays the same across releases (`testdata/codes.txt` lists them), so callers can count bails by reason without parsing `Msg`. A panic in mist or in a registered tag, filter or dialect hook is recovered as `ErrInternal`, which wraps `ErrUnsupported` so the caller falls back; it means a bug, and `Error.Stack` says where.
 
@@ -196,6 +196,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 | `NumberText` | Number literals reach hooks and registered filters as `json.Number` holding their text, so `2.0` and `2` stay distinct (Ruby's Float and Integer). |
 | `NoBuiltinFilters` | Only registered filters run: any other filter, `default` included, bails with `filter:NAME`, as does a registered filter returning `ErrBuiltin`. |
 | `StrictAssign` | Under strict, an undefined variable in an `assign` value is `ErrUndefined`, as in Ruby Liquid; liquidjs reads it leniently. |
+| `RubyLookups` | Variables are looked up as Ruby Liquid's `Context#variable` does. When the first segment is `nil` or `false`, the whole lookup is that value (`{{ c.x }}` with a `false` `c` prints `false`). Past it, a property or index of `nil` or `false` is undefined, so `ErrUndefined` under strict. liquidjs reads a property of `null` as `null`. |
 | `NoDefaultLeniency` | Turns off the leading-`default` leniency rule. Combine with an overriding `default` in `Engine.Filters` to change `default` itself. |
 
 - **Values the hooks see:** data values as the caller supplied them (decode with `json.Decoder.UseNumber` to keep `2.0` distinct from `2`), `int64` for integral number literals and results (`3`, `2 | times: 1`) and `float64` for fractional ones (`1.5`), `nil` for nil, undefined and the `nil` literal (but `mist.Undefined{}` for undefined inside arrays and objects), and `mist.Blank` and `mist.Empty` for those keywords.

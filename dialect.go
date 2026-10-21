@@ -41,6 +41,11 @@ type Dialect struct {
 	// StrictAssign makes an undefined variable in an assign's value ErrUndefined under
 	// strict, as Ruby Liquid's strict_variables does; liquidjs reads it leniently.
 	StrictAssign bool
+
+	// RubyLookups looks variables up as Ruby Liquid's Context#variable does: when the
+	// first segment is nil or false the whole lookup is that value, and past it a
+	// property or index of nil or false is undefined (ErrUndefined under strict).
+	RubyLookups bool
 }
 
 // Constructs is a set of template constructs a Dialect can reject.
