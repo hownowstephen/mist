@@ -428,7 +428,7 @@ func (r *renderer) path(eval, lenient bool) any {
 				bail(at, "expected-property-name", "expected property name")
 			}
 			if eval {
-				v = rubyKey(v, val{s: seg, lit: litStr}, at, ruby, falsyRoot, depth)
+				v = segment(v, val{s: seg, lit: litStr}, at, ruby, falsyRoot, depth)
 			}
 			depth++
 			if track {
@@ -455,7 +455,7 @@ func (r *renderer) path(eval, lenient bool) any {
 				bail(r.pos(), "expected-bracket", "expected ]")
 			}
 			if eval {
-				v = rubyKey(v, k, at, ruby, falsyRoot, depth)
+				v = segment(v, k, at, ruby, falsyRoot, depth)
 			}
 			depth++
 			if track {
@@ -471,10 +471,10 @@ func (r *renderer) path(eval, lenient bool) any {
 	}
 }
 
-// rubyKey is key, or with ruby (Dialect.RubyLookups) Ruby Liquid's lookup: a nil or false
-// first segment is the whole lookup's value, and past it a property or index of nil or
-// false is undefined.
-func rubyKey(v any, k val, at int, ruby, falsyRoot bool, depth int) any {
+// segment is the value of a path's next segment: key's, or with ruby (Dialect.RubyLookups)
+// Ruby Liquid's, where a nil or false first segment is the whole lookup's value and past
+// it a property or index of nil or false is undefined.
+func segment(v any, k val, at int, ruby, falsyRoot bool, depth int) any {
 	switch {
 	case falsyRoot:
 		return v
