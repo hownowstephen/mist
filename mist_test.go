@@ -173,6 +173,10 @@ func TestUndefinedPath(t *testing.T) {
 		{"{{ c.z | default: c.w }}", "undefined variable: c.w, line:1, col:19"},
 		{"{{ c[k] }}", "undefined variable: k, line:1, col:6"},
 		{"{% for i in (1..1) %}{{ forloop.parentloop.index }}{% endfor %}", "undefined variable: forloop.parentloop, line:1, col:25"},
+		// liquidjs counts from a *_exp expression, which it parses as its own input.
+		{`{{0|where_exp:'x','0'|size|where_exp:'A','""|default:B'}}`, "undefined variable: B, line:1, col:12"},
+		{"{{ xs | where_exp: 'x', 'c.n | append: c.nope' }}", "undefined variable: c.nope, line:1, col:15"},
+		{"a\n{{ xs | find_exp: 'x', 'c.n |\n  append: c.zz' }}", "undefined variable: c.zz, line:2, col:11"},
 	} {
 		_, err := Render(c.tpl, data, true)
 		var e *Error

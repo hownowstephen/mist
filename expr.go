@@ -503,6 +503,7 @@ type binding struct {
 // undefined variables throw unless the first filter is default.
 func (r *renderer) expValue(eval bool, exp, name string, item any, at int) val {
 	src, base, p, undef, hit := r.src, r.base, r.p, r.undef, r.lenientUndef
+	r.exps++
 	r.src, r.base, r.p, r.undef, r.lenientUndef = exp, at, 0, pendingUndef{}, false
 	r.binds = append(r.binds, binding{name, item})
 	res, v, lone := r.cond(eval)
@@ -527,6 +528,7 @@ func (r *renderer) expValue(eval bool, exp, name string, item any, at int) val {
 	}
 	r.binds = r.binds[:len(r.binds)-1]
 	r.src, r.base, r.p, r.undef, r.lenientUndef = src, base, p, undef, hit
+	r.exps--
 	return v
 }
 
