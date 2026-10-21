@@ -2,8 +2,10 @@ cases.json date %N is milliseconds right-padded
 cases.json date %s shifts with a timezone
 cases.json liquidjs_filters.go lists 87 filters; liquidjs defines 88
 cases.json math filters
+cases.json memory
 cases.json numeric property names
 cases.json round
+cases.json slice truncates a fractional end toward zero
 cases.json truncatewords
 cases.json url_decode
 corpus.json generated "gen-1-3183" strict=false
