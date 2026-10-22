@@ -170,15 +170,11 @@ func tzArg(v val, ms int64, at int) zone {
 		if !ianaName(s) {
 			bail(at, "date-timezone-name", "date timezone %q", s)
 		}
-		loc, ok := zones.Load(s)
+		loc, ok := Location(s)
 		if !ok {
-			l, err := time.LoadLocation(s)
-			if err != nil {
-				bail(at, "date-timezone-unknown", "date timezone %q: %v", s, err) // Intl may still know it; liquidjs throws if not
-			}
-			loc, _ = zones.LoadOrStore(s, l)
+			bail(at, "date-timezone-unknown", "date timezone %q", s) // Intl may still know it; liquidjs throws if not
 		}
-		_, secs := time.UnixMilli(ms).In(loc.(*time.Location)).Zone()
+		_, secs := time.UnixMilli(ms).In(loc).Zone()
 		if secs%60 != 0 {
 			bail(at, "date-timezone-sub-minute", "date timezone %q with a sub-minute offset", s)
 		}
@@ -189,6 +185,24 @@ func tzArg(v val, ms int64, at int) zone {
 		bail(at, "date-timezone-argument", "date timezone argument %v", v.any())
 	}
 	return zone{east: -int(f), fixed: true} // minutes west, as in getTimezoneOffset
+}
+
+// Location is the IANA zone name as the date filter loads it, or false where Go can't
+// load it or it's a name Go loads but JavaScript's Intl rejects (see ianaName).
+// Locations are cached.
+func Location(name string) (*time.Location, bool) {
+	if !ianaName(name) {
+		return nil, false
+	}
+	if l, ok := zones.Load(name); ok {
+		return l.(*time.Location), true
+	}
+	l, err := time.LoadLocation(name)
+	if err != nil {
+		return nil, false
+	}
+	loc, _ := zones.LoadOrStore(name, l)
+	return loc.(*time.Location), true
 }
 
 // ianaName rejects what Go's LoadLocation would load but Intl rejects: Local, Factory,
