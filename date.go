@@ -46,6 +46,14 @@ func (r *renderer) dateFilter(v val, args []val, at int) val {
 }
 
 // dateInput returns v as epoch milliseconds, or false where liquidjs's parseDate fails.
+// clock is Engine.Now, or time.Now when that's nil.
+func (r *renderer) clock() func() time.Time {
+	if r.now != nil {
+		return r.now
+	}
+	return time.Now
+}
+
 func (r *renderer) dateInput(v val, at int) (int64, bool) {
 	s, isStr := v.str()
 	switch {
@@ -56,11 +64,7 @@ func (r *renderer) dateInput(v val, at int) (int64, bool) {
 		}
 		return clipMs(f * 1000)
 	case s == "now" || s == "today":
-		now := time.Now
-		if r.now != nil {
-			now = r.now
-		}
-		return now().UnixMilli(), true
+		return r.clock()().UnixMilli(), true
 	case s == "":
 		return 0, false
 	case strings.Trim(s, "0123456789") == "":

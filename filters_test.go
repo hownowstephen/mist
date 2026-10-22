@@ -261,6 +261,21 @@ func TestErrBuiltinAppliesTheBuiltInFilter(t *testing.T) {
 	}
 }
 
+func TestFilterNow(t *testing.T) {
+	at := time.UnixMilli(1700000000123)
+	clock := func(f Filter) (any, error) { return f.Now().UnixMilli(), nil }
+	e := Engine{Filters: map[string]FilterFunc{"clock": clock}, Now: func() time.Time { return at }}
+	if out, err := e.Render("{{ x | clock }}", nil, false); err != nil || out != "1700000000123" {
+		t.Errorf("Filter.Now with Engine.Now = %q, %v", out, err)
+	}
+	e.Now = nil
+	before := time.Now().UnixMilli()
+	out, err := e.Render("{{ x | clock }}", nil, false)
+	if n, _ := strconv.ParseInt(out, 10, 64); err != nil || n < before {
+		t.Errorf("Filter.Now without Engine.Now = %q, %v", out, err)
+	}
+}
+
 func TestRegisteredFiltersAndNaN(t *testing.T) {
 	e := Engine{Filters: map[string]FilterFunc{
 		"nan":  func(Filter) (any, error) { return math.NaN(), nil },

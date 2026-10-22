@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -20,6 +21,7 @@ type Filter struct {
 	Input  any   // nil for both nil and undefined; inside arrays and objects, undefined is Undefined
 	Args   []any // positional arguments
 	Strict bool
+	Now    func() time.Time // the engine's clock: Engine.Now, or time.Now when that's nil
 }
 
 const maxFilterArgs = 4
@@ -265,7 +267,7 @@ func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at 
 	if fn == nil {
 		bail(at, "nil-filter-func", "filter %q is registered without a function", name) // e.g. for Check only
 	}
-	f := Filter{Name: name, Input: v.data(), Args: make([]any, len(args)), Strict: r.strict}
+	f := Filter{Name: name, Input: v.data(), Args: make([]any, len(args)), Strict: r.strict, Now: r.clock()}
 	if isNilLit(v) {
 		bail(at, "nil-literal-registered-filter", "the nil literal into a registered filter, which liquidjs passes as a Drop")
 	}
