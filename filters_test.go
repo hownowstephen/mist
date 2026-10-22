@@ -52,6 +52,21 @@ func TestCaseMapping(t *testing.T) {
 // every directive at each instant, and each edge-case input string, matches or bails. An
 // instant displayed within years 1000–9999 bails only on directives that print with the
 // locale (%c, %x, %X) or the process's zone name (%Z).
+func TestLocation(t *testing.T) {
+	l, ok := Location("America/New_York")
+	if !ok || l.String() != "America/New_York" {
+		t.Fatalf("Location(America/New_York) = %v, %v", l, ok)
+	}
+	if again, _ := Location("America/New_York"); again != l {
+		t.Error("Location doesn't cache")
+	}
+	for _, name := range []string{"", "Local", "Factory", "posixrules", "Nowhere/Special", "america/new_york"} {
+		if _, ok := Location(name); ok {
+			t.Errorf("Location(%q) loads", name)
+		}
+	}
+}
+
 func TestDateTable(t *testing.T) {
 	b, err := os.ReadFile("testdata/jsdate.json")
 	if err != nil {
