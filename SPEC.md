@@ -1,4 +1,4 @@
-# mist Liquid subset — v0.37.x
+# mist Liquid subset — v0.38.x
 
 _Last updated 2026-10-22. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
@@ -170,7 +170,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 
 ## Custom filters
 
-`Engine.Filters` registers filters. A `FilterFunc` receives a `Filter` with the input, positional arguments and the strict flag.
+`Engine.Filters` registers filters. A `FilterFunc` receives a `Filter` with the input, positional arguments, the strict flag and the engine's clock (`Engine.Now`, or `time.Now` when it's nil), so a filter that reads the current time sees the same clock as `date`.
 - Undefined and nil both arrive as `nil`. Inside arrays and objects mist built, such as the result of `map` over items missing the property, undefined is `mist.Undefined{}`, as it is from `Tag.Lookup` and for dialect hooks. Returned values render as built-in values do: strings, booleans, numbers and nil output, while arrays and objects bail.
 - Registered names take precedence over built-in filters, so an application can supply its own `default`, `divided_by` and so on.
 - The `nil` literal as a registered filter's input or argument bails: liquidjs passes it as a Drop, not null, so a JavaScript filter would see an object.
