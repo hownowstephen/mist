@@ -261,6 +261,45 @@ func TestErrBuiltinAppliesTheBuiltInFilter(t *testing.T) {
 	}
 }
 
+func TestFilterUndefined(t *testing.T) {
+	kind := func(f Filter) (any, error) {
+		var s []byte
+		for i, v := range append([]any{f.Input}, f.Args...) {
+			switch undef := i == 0 && f.InputUndefined() || i > 0 && f.ArgUndefined(i-1); {
+			case v == nil && undef:
+				s = append(s, 'u')
+			case v == nil:
+				s = append(s, 'n')
+			case undef:
+				s = append(s, '!') // undefined reported for a value
+			default:
+				s = append(s, 'v')
+			}
+		}
+		return string(s), nil
+	}
+	e := Engine{Filters: map[string]FilterFunc{"kind": kind}}
+	vars := map[string]any{"nul": nil, "s": "x", "hs": []any{map[string]any{"k": 1}}}
+	for tpl, want := range map[string]string{
+		"{{ missing | kind }}":                         "u",
+		"{{ nul | kind }}":                             "n",
+		"{{ s | kind }}":                               "v",
+		"{{ hs | find_exp: 'h', 'h.k == 9' | kind }}":  "u",
+		"{{ hs | find_exp: 'h', 'h.k == 1' | kind }}":  "v",
+		"{{ s | kind: missing, nul, s }}":              "vunv",
+		"{% assign a = missing %}{{ a | kind: a }}":    "uu",
+		"{% assign a = nul %}{{ a | kind: a.b, 'z' }}": "nnv", // a property of null is null in liquidjs
+	} {
+		out, err := e.Render(tpl, vars, false)
+		if err != nil || out != want {
+			t.Errorf("%s = %q, %v; want %q", tpl, out, err, want)
+		}
+	}
+	if (Filter{}).ArgUndefined(0) || (Filter{Args: []any{nil}}).ArgUndefined(-1) {
+		t.Error("ArgUndefined out of range")
+	}
+}
+
 func TestFilterNow(t *testing.T) {
 	at := time.UnixMilli(1700000000123)
 	clock := func(f Filter) (any, error) { return f.Now().UnixMilli(), nil }
