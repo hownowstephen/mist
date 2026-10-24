@@ -1,6 +1,6 @@
-# mist Liquid subset — v0.38.x
+# mist Liquid subset — v0.39.x
 
-_Last updated 2026-10-22. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
+_Last updated 2026-10-23. Parity target: liquidjs 10.26.0 configured with `new Liquid({ lenientIf: true })`, running with `TZ=UTC` and the en-US locale._
 
 **Contract.** For every template and data where mist returns output, liquidjs returns the same output. Where mist returns `ErrUndefined`, liquidjs fails too, and where its `Path` is set, with exactly the message `Path`, `Line` and `Col` give (see Strict undefined error). Anything else returns `ErrUnsupported`, and the caller renders with the full engine. Bailing is always safe, so when in doubt, the spec bails. Every error is an `*Error` whose `Code` names the reason and stays the same across releases (`testdata/codes.txt` lists them), so callers can count bails by reason without parsing `Msg`. A panic in mist or in a registered tag, filter or dialect hook is recovered as `ErrInternal`, which wraps `ErrUnsupported` so the caller falls back; it means a bug, and `Error.Stack` says where.
 
@@ -170,7 +170,7 @@ liquidjs's `renderLimit` (a time budget) has no counterpart. mist renders far fa
 
 ## Custom filters
 
-`Engine.Filters` registers filters. A `FilterFunc` receives a `Filter` with the input, positional arguments, the strict flag and the engine's clock (`Engine.Now`, or `time.Now` when it's nil), so a filter that reads the current time sees the same clock as `date`.
+`Engine.Filters` registers filters. A `FilterFunc` receives a `Filter` with the input, positional arguments, the strict flag and the engine's clock (`Engine.Now`, or `time.Now` when it's nil), so a filter that reads the current time sees the same clock as `date`. `Input` and `Args` are nil for both null and undefined; `InputUndefined` and `ArgUndefined` say which, so a filter can print them as JavaScript's `String()` does (`null`, `undefined`). Undefined is a missing variable, a property of undefined, or a built-in filter's undefined result, such as `find_exp` with no match; a property of null is null.
 - Undefined and nil both arrive as `nil`. Inside arrays and objects mist built, such as the result of `map` over items missing the property, undefined is `mist.Undefined{}`, as it is from `Tag.Lookup` and for dialect hooks. Returned values render as built-in values do: strings, booleans, numbers and nil output, while arrays and objects bail.
 - Registered names take precedence over built-in filters, so an application can supply its own `default`, `divided_by` and so on.
 - The `nil` literal as a registered filter's input or argument bails: liquidjs passes it as a Drop, not null, so a JavaScript filter would see an object.

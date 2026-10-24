@@ -22,6 +22,17 @@ type Filter struct {
 	Args   []any // positional arguments
 	Strict bool
 	Now    func() time.Time // the engine's clock: Engine.Now, or time.Now when that's nil
+
+	undef uint8 // bit 0 for Input, bit i+1 for Args[i]
+}
+
+// InputUndefined reports whether a nil Input is JavaScript's undefined, such as a
+// missing variable or a built-in filter's undefined result, rather than null.
+func (f Filter) InputUndefined() bool { return f.undef&1 != 0 }
+
+// ArgUndefined reports whether a nil Args[i] is JavaScript's undefined rather than null.
+func (f Filter) ArgUndefined(i int) bool {
+	return i >= 0 && i < len(f.Args) && f.undef&(2<<i) != 0
 }
 
 const maxFilterArgs = 4
@@ -271,11 +282,17 @@ func (r *renderer) callFilter(fn FilterFunc, name string, v val, args []val, at 
 	if isNilLit(v) {
 		bail(at, "nil-literal-registered-filter", "the nil literal into a registered filter, which liquidjs passes as a Drop")
 	}
+	if isUndef(v) {
+		f.undef |= 1
+	}
 	for i, a := range args {
 		if isNilLit(a) {
 			bail(at, "nil-literal-registered-filter", "the nil literal into a registered filter, which liquidjs passes as a Drop")
 		}
 		f.Args[i] = a.data()
+		if isUndef(a) {
+			f.undef |= 2 << i
+		}
 	}
 	x, err := fn(f)
 	switch {
