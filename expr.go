@@ -328,7 +328,7 @@ func unescape(s string, at int) string {
 		c, k := rune(0), j
 		for ; k < len(s) && k < j+maxDigits; k++ {
 			d := strings.IndexByte("0123456789abcdef", s[k]|0x20)
-			if d < 0 || d >= base {
+			if d < 0 || d >= base || s[k] < '0' { // |0x20 maps 0x10-0x19 onto the digits
 				break
 			}
 			c = c*rune(base) + rune(d)

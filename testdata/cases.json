@@ -395,6 +395,7 @@
   {"name": "space after a dot", "spec": ["r-index"], "tpl": "{{ a. b }}|{% if a. b == 'x' %}y{% endif %}", "data": {"a": {"b": "x"}}, "out": "x|y"},
   {"name": "space before a dot", "spec": ["r-grammar"], "tpl": "{{ a .b }}", "data": {"a": {"b": "x"}}, "err": "unsupported", "code": "unexpected-token"},
   {"name": "string escapes", "spec": ["r-string-literal"], "tpl": "{{ \"a\\\"b\" }}|{{ 'it\\'s' }}|{{ 'a\\\\b' }}|{{ \"\\u00e9\\x41\\101\\n\\q\\t\" | json }}|{{ \"\\u\" | json }}|{{ \"\\8\\é\" }}", "out": "a\"b|it's|a\\b|\"éx41A\\nq\\t\"|\"\\u0000\"|8é"},
+  {"name": "string escape digits stop at control characters", "spec": ["r-string-literal"], "tpl": "{{ \"\\0\u0010|\\0\u0016|\\7\u0011\u0012|\\u4\u0011|\\u\u0019\" }}", "out": "\u0000\u0010|\u0000\u0016|\u0007\u0011\u0012|\u0004\u0011|\u0000\u0019"},
   {"name": "escaped quote doesn't end an output", "spec": ["r-tag-end"], "tpl": "{{ \"a\\\"}}b\" }}", "out": "a\"}}b"},
   {"name": "string escape of half a surrogate pair", "spec": ["r-out-of-spec", "r-string-literal"], "tpl": "{{ \"\\uD83D\" }}", "err": "unsupported", "code": "string-escape-surrogate"},
   {"name": "escaped quote outside a string", "spec": ["r-grammar"], "tpl": "{% assign y = \\\"abc\\\" %}", "err": "unsupported", "code": "expected-expression"},
