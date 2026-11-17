@@ -108,62 +108,186 @@ func (r *renderer) ident() string {
 	return s
 }
 
-// fcond = cond { filter }
+// fcond = value { filter }
 // Returns false when not evaluating. Undefined variables are lenient (lenientIf).
 func (r *renderer) fcond(eval bool) bool {
-	res, v, lone := r.cond(eval)
-	if r.peek() != '|' {
-		return res
-	}
-	if k := v.keyword(); lone && k != "" {
-		bail(r.pos(), "keyword-outside-equality", "%s is only supported in conditions and output", k)
-	}
-	// liquidjs filters the whole condition's value: a lone operand's, else the boolean.
-	if !lone {
-		v = val{x: res}
-	}
+	v, _, _ := r.value(eval, true, true)
 	at := r.pos()
-	v = r.filters(v, eval)
+	if r.peek() == '|' {
+		if k := v.keyword(); k != "" {
+			bail(at, "keyword-outside-equality", "%s is only supported in conditions and output", k)
+		}
+		v = r.filters(v, eval) // liquidjs filters the expression's value
+	}
 	r.end()
 	return eval && truthy(v, at)
 }
 
-// cond = cmp [ ( "and" | "or" ) cond ]. The recursion groups right to left, as
-// liquidjs does: a and b or c is a and (b or c).
-func (r *renderer) cond(eval bool) (res bool, first val, lone bool) {
-	res, first, lone = r.cmp(eval)
-	r.ws()
-	if r.p == len(r.src) || r.peek() == '|' {
-		return res, first, lone
-	}
-	at := r.pos()
-	w := r.ident()
-	if w != "and" && w != "or" {
-		bail(at, "expected-and-or", "expected and/or, got %q", r.src[at-r.base:])
-	}
-	rest, _, _ := r.cond(eval)
-	if w == "and" {
-		return res && rest, first, false
-	}
-	return res || rest, first, false
+// operand is a value on value's stack, with where it starts.
+type operand struct {
+	v  val
+	at int
 }
 
-// cmp = expr [ op expr ]
-func (r *renderer) cmp(eval bool) (bool, val, bool) {
+// operator is an operator on value's stack, with where it ends.
+type operator struct {
+	op string
+	at int
+}
+
+// precedence is liquidjs's operator precedence.
+func precedence(op string) int {
+	switch op {
+	case "and", "or":
+		return 0
+	case "not":
+		return 1
+	}
+	return 2
+}
+
+// value = { op | expr }, read and evaluated as liquidjs's Tokenizer.readExpression and
+// Expression do: operands and operators in any order, applied in postfix order, where an
+// operator only pops operators of higher precedence, so equal ones group right to left
+// (a and b or c is a and (b or c)). An operator short of operands gets undefined. The
+// result is the bottom of the stack, so an operand after a complete expression is
+// evaluated and ignored. lone reports a single operand; end is where the first ends.
+// Anything outside cond (in a condition) or a lone operand (elsewhere) bails when the
+// dialect rejects LooseExpressions.
+func (r *renderer) value(eval, lenient, inCond bool) (v val, lone bool, end int) {
 	start := r.pos()
-	a := r.expr(eval, true)
-	before := r.p
 	r.ws()
-	spaced := r.p > before
-	op := r.op()
-	if op != "" && !spaced && r.rejects(UnspacedOperators) {
-		bail(r.pos(), "dialect-unspaced-operator", "operators without whitespace before them are rejected by the dialect")
+	if p := r.p; r.op() != "" || !r.valueStart() {
+		r.p = p
+		return r.operands(eval, lenient, inCond, start, p, nil)
 	}
-	if op == "" {
-		return eval && truthy(a, r.pos()), a, true
+	first := operand{at: r.pos()}
+	first.v = r.expr(eval, lenient)
+	end = r.p
+	if r.ws(); r.p == len(r.src) || r.peek() == '|' {
+		return first.v, true, end
 	}
-	at := r.pos()
-	b := r.expr(eval, true)
+	r.p = end
+	return r.operands(eval, lenient, inCond, start, end, &first)
+}
+
+// operands is value from its first operand, if read.
+func (r *renderer) operands(eval, lenient, inCond bool, start, end int, first *operand) (v val, lone bool, _ int) {
+	var vb [4]operand
+	var ob [4]operator
+	vals, ops := vb[:0], ob[:0]
+	// cond's grammar: 0 wants an operand, 1 an operator, 2 a compared operand, 3 and/or.
+	state, strict, n := 0, true, 0
+	lone = true
+	if first != nil {
+		vals, state, n = append(vals, *first), 1, 1
+	}
+	for {
+		before := r.p
+		r.ws()
+		if op := r.op(); op != "" {
+			if r.p-len(op) == before && n > 0 && precedence(op) == 2 && r.rejects(UnspacedOperators) {
+				bail(r.pos(), "dialect-unspaced-operator", "operators without whitespace before them are rejected by the dialect")
+			}
+			for len(ops) > 0 && precedence(ops[len(ops)-1].op) > precedence(op) {
+				vals = r.apply(vals, ops[len(ops)-1], eval)
+				ops = ops[:len(ops)-1]
+			}
+			ops = append(ops, operator{op, r.pos()})
+			strict = strict && op != "not"
+			lone = false
+			switch {
+			case op == "and" || op == "or":
+				strict = strict && (state == 1 || state == 3)
+				state = 0
+			default:
+				strict = strict && state == 1
+				state = 2
+			}
+			continue
+		}
+		if !r.valueStart() {
+			break
+		}
+		at := r.pos()
+		x := r.expr(eval, lenient)
+		if n == 0 {
+			end = r.p
+		}
+		n++
+		vals = append(vals, operand{x, at})
+		switch state {
+		case 0:
+			state = 1
+		case 2:
+			state = 3
+		default:
+			strict = false
+		}
+	}
+	if n == 0 && len(ops) == 0 {
+		bail(start, "expected-expression", "expected expression")
+	}
+	for len(ops) > 0 {
+		vals = r.apply(vals, ops[len(ops)-1], eval)
+		ops = ops[:len(ops)-1]
+	}
+	lone = lone && n == 1
+	if loose := !lone && (!inCond || !strict || state == 0 || state == 2); loose && r.rejects(LooseExpressions) {
+		bail(start, "dialect-loose-expression", "an expression outside the dialect's grammar")
+	}
+	return vals[0].v, lone, end
+}
+
+// strictLoose bails where a strict undefined met an operator ahead of filters: a leading
+// default would make liquidjs read it as null, which compares unlike undefined.
+func (r *renderer) strictLoose(lone bool, at int) {
+	if !lone && r.undef.set {
+		if r.ws(); r.peek() == '|' {
+			bail(at, "strict-loose-default", "an undefined variable in an expression with operators, before filters, under strict")
+		}
+	}
+}
+
+// valueStart reports whether expr can start here.
+func (r *renderer) valueStart() bool {
+	switch c := r.peek(); {
+	case c == '"', c == '\'', c == '-', c == '+', c == '(', isDigit(c), isIdentStart(c):
+		return true
+	}
+	return wordRune(r.src, r.p) > 0
+}
+
+// apply pops o's operands from vals, an undefined for each missing one, and pushes
+// its result.
+func (r *renderer) apply(vals []operand, o operator, eval bool) []operand {
+	b, vals := pop(vals, o.at)
+	if o.op == "not" {
+		return append(vals, operand{val{x: eval && !truthy(b.v, o.at)}, b.at})
+	}
+	a, vals := pop(vals, o.at)
+	var res bool
+	switch o.op {
+	case "and":
+		res = eval && truthy(a.v, o.at) && truthy(b.v, o.at)
+	case "or":
+		res = eval && (truthy(a.v, o.at) || truthy(b.v, o.at))
+	default:
+		res = r.cmp(o.op, a, b, o.at, eval)
+	}
+	return append(vals, operand{val{x: res}, a.at})
+}
+
+func pop(vals []operand, at int) (operand, []operand) {
+	if len(vals) == 0 {
+		return operand{val{x: Undefined{}}, at}, vals
+	}
+	return vals[len(vals)-1], vals[:len(vals)-1]
+}
+
+// cmp evaluates a op b.
+func (r *renderer) cmp(op string, l, rt operand, at int, eval bool) bool {
+	a, b, start := l.v, rt.v, l.at
 	if k, other := a.keyword(), b; k != "" || b.keyword() != "" {
 		if k == "" {
 			k, other = b.keyword(), a
@@ -173,7 +297,7 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 			bail(start, "keyword-outside-equality", "%s is only supported with ==, !=, <, >, <= and >=", k)
 		case op != "==" && op != "!=":
 			if r.dialect == nil || r.dialect.Compare == nil {
-				return false, a, false // liquidjs's EmptyDrop orders before and after nothing
+				return false // liquidjs's EmptyDrop orders before and after nothing
 			}
 		case other.keyword() != "" || isNilLit(other):
 			bail(start, "keyword-against-keyword", "%s compared with blank, empty or nil", k) // liquidjs is asymmetric here
@@ -181,7 +305,7 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 	}
 	if op == "contains" {
 		if r.dialect != nil && r.dialect.Contains != nil {
-			return eval && r.dialectContains(a, b, at), a, false
+			return eval && r.dialectContains(a, b, at)
 		}
 		if isNilLit(b) {
 			bail(at, "contains-nil", "contains nil") // liquidjs searches for "null"
@@ -189,32 +313,62 @@ func (r *renderer) cmp(eval bool) (bool, val, bool) {
 		if r.dialect != nil && r.dialect.Compare != nil {
 			bail(at, "dialect-contains", "contains with a dialect Compare hook but no Contains hook")
 		}
-		return eval && contains(a, b, at), a, false
+		return eval && contains(a, b, at)
 	}
 	if c, ok := a.x.(Comparer); eval && ok && a.lit == 0 {
-		return valueCompare(c, op, b, at), a, false
+		return valueCompare(c, op, b, at)
 	}
 	if c, ok := b.x.(Comparer); eval && ok && b.lit == 0 {
-		return valueCompare(c, mirror[op], a, at), a, false
+		return valueCompare(c, mirror[op], a, at)
 	}
 	if eval && r.dialect != nil && r.dialect.Compare != nil {
-		return r.dialectCompare(op, a, b, at), a, false
+		return r.dialectCompare(op, a, b, at)
 	}
-	return eval && compare(op, a, b, at), a, false
+	return eval && compare(op, a, b, at)
 }
 
+// op reads an operator, as liquidjs's readOperator does: a word operator needs a
+// non-word character after it.
 func (r *renderer) op() string {
 	rest := r.src[r.p:]
-	for _, op := range [...]string{"==", "!=", "<=", ">=", "<", ">", "contains"} {
-		if strings.HasPrefix(rest, op) {
-			if op == "contains" && len(rest) > len(op) && isIdentChar(rest[len(op)]) {
-				bail(r.pos(), "contains-glued", "contains followed by an identifier character") // liquidjs splits containsx into contains x
-			}
-			r.p += len(op)
-			return op
-		}
+	if rest == "" {
+		return ""
 	}
-	return ""
+	var op string
+	switch rest[0] {
+	case '=':
+		op = "=="
+	case '!':
+		op = "!="
+	case '<':
+		op = "<"
+		if len(rest) > 1 && rest[1] == '=' {
+			op = "<="
+		}
+	case '>':
+		op = ">"
+		if len(rest) > 1 && rest[1] == '=' {
+			op = ">="
+		}
+	case 'c':
+		op = "contains"
+	case 'a':
+		op = "and"
+	case 'o':
+		op = "or"
+	case 'n':
+		op = "not"
+	default:
+		return ""
+	}
+	if !strings.HasPrefix(rest, op) {
+		return ""
+	}
+	if c := op[0]; c >= 'a' && c <= 'z' && (len(rest) > len(op) && isIdentChar(rest[len(op)]) || wordRune(rest, len(op)) > 0) {
+		return "" // a word: containsx is an operand
+	}
+	r.p += len(op)
+	return op
 }
 
 // expr = path | string | number | range | "true" | "false" | "nil" | "null" | "blank" | "empty"
@@ -524,12 +678,9 @@ func (r *renderer) expValue(eval bool, exp, name string, item any, at int) val {
 	r.exps++
 	r.src, r.base, r.p, r.undef, r.lenientUndef = exp, at, 0, pendingUndef{}, false
 	r.binds = append(r.binds, binding{name, item})
-	res, v, lone := r.cond(eval)
-	if k := v.keyword(); lone && k != "" {
+	v, _, _ := r.value(eval, true, true)
+	if k := v.keyword(); k != "" {
 		bail(at, "keyword-outside-equality", "%s is only supported in conditions and output", k)
-	}
-	if !lone {
-		v = val{x: res}
 	}
 	lenient := false
 	if r.peek() == '|' {

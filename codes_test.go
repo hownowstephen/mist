@@ -143,6 +143,7 @@ var (
 		"dialect-raw-filter":            "needs a dialect",
 		"dialect-trim-markers":          "needs a dialect",
 		"dialect-unspaced-operator":     "needs a dialect",
+		"dialect-loose-expression":      "needs a dialect",
 	}
 )
 

@@ -59,6 +59,7 @@ const (
 	RawBlocks                                // {% raw %}…{% endraw %}
 	BlankKeyword                             // == blank, != blank
 	EmptyKeyword                             // == empty, != empty
+	LooseExpressions                         // operands and operators beyond cond's grammar: {{ a and b }}, {% if a b %}, not, a == b == c, a dangling operator
 )
 
 // Keyword is how a keyword literal reaches Dialect.Compare and Dialect.Output.

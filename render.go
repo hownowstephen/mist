@@ -313,8 +313,9 @@ func (r *renderer) output(b, e int) {
 	live := r.live()
 	r.ws()
 	start := r.p
-	v := r.expr(live, false)
-	text := r.src[start:r.p]
+	v, lone, end := r.value(live, false, false)
+	text := r.src[start:end]
+	r.strictLoose(lone, b)
 	if k := v.keyword(); k != "" {
 		if r.ws(); r.peek() == '|' {
 			bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)
@@ -526,7 +527,8 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 			bail(b, "assign-syntax", "expected: assign <ident> = <expr>")
 		}
 		r.p++
-		val := r.expr(live, r.dialect == nil || !r.dialect.StrictAssign)
+		val, lone, _ := r.value(live, r.dialect == nil || !r.dialect.StrictAssign, false)
+		r.strictLoose(lone, b)
 		if k := val.keyword(); k != "" {
 			bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)
 		}
@@ -554,7 +556,8 @@ func (r *renderer) tag(b, e, next int, lt, rt bool) (int, bool) {
 		if r.p == len(r.src) {
 			break // liquidjs's echo of nothing
 		}
-		v := r.expr(live, false)
+		v, lone, _ := r.value(live, false, false)
+		r.strictLoose(lone, b)
 		if k := v.keyword(); k != "" {
 			if r.ws(); r.peek() == '|' || r.dialect != nil && r.dialect.Output != nil {
 				bail(b, "keyword-outside-equality", "%s is only supported in conditions and output", k)

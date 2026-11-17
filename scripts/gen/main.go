@@ -279,6 +279,9 @@ func (g *gen) nonNil() string {
 
 // outExpr is mostly a path to a scalar, since output bails on arrays, objects and nil.
 func (g *gen) outExpr() string {
+	if g.r.IntN(12) == 0 {
+		return g.loose()
+	}
 	if g.mostly(2) {
 		fs := g.find(names, true, func(v any) bool {
 			switch v.(type) {
@@ -389,7 +392,9 @@ func (g *gen) filters() string {
 // exp is an expression filter's expression over its item, which is mostly x.
 func (g *gen) exp() string {
 	e := g.pick([]string{"x", "x." + g.pick(props), "x." + g.pick(props), "x.size", "a", "item." + g.pick(props), "missing"})
-	switch g.r.IntN(5) {
+	switch g.r.IntN(6) {
+	case 5:
+		e += " " + g.loose()
 	case 0, 1:
 		e += " " + g.pick([]string{"==", "!=", ">", "<=", "contains"}) + " " + g.pick([]string{`"a"`, `""`, "1", "2", "true", "x." + g.pick(props), "b"})
 	case 2:
@@ -401,7 +406,35 @@ func (g *gen) exp() string {
 	return e
 }
 
+// loose is a run of operands and operators outside cond's grammar: stray operands,
+// not, chained comparisons and dangling operators.
+func (g *gen) loose() string {
+	var parts []string
+	for range 1 + g.r.IntN(4) {
+		switch g.r.IntN(4) {
+		case 0:
+			parts = append(parts, g.pick([]string{"and", "or", "not", "not", "==", "!=", "contains", "<", ">="}))
+		case 1:
+			parts = append(parts, g.cmp())
+		default:
+			parts = append(parts, g.expr())
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// assigned is an assign's value, sometimes with operators.
+func (g *gen) assigned() string {
+	if g.r.IntN(10) == 0 {
+		return g.loose()
+	}
+	return g.expr()
+}
+
 func (g *gen) cond() string {
+	if g.r.IntN(8) == 0 {
+		return g.loose()
+	}
 	c := g.cmp()
 	for range g.r.IntN(4) {
 		c += " " + g.pick([]string{"and", "or"}) + " " + g.cmp()
@@ -532,7 +565,7 @@ func (g *gen) block(depth int) {
 			}
 			g.b.WriteString(g.open("endcase"))
 		case k == 7:
-			g.b.WriteString(g.open("assign " + g.pick(names[:6]) + g.ws() + "=" + g.ws() + g.expr() + g.filters()))
+			g.b.WriteString(g.open("assign " + g.pick(names[:6]) + g.ws() + "=" + g.ws() + g.assigned() + g.filters()))
 		case k == 8 && g.r.IntN(2) == 0 && depth < 4:
 			c := g.pick(names[:6])
 			if g.r.IntN(4) == 0 {

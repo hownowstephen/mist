@@ -118,6 +118,7 @@ func TestDialectReject(t *testing.T) {
 		RawBlocks:         {"{% raw %}{{ x }}{% endraw %}"},
 		BlankKeyword:      {"{% if x == blank %}{% endif %}"},
 		EmptyKeyword:      {"{% if x == empty %}{% endif %}"},
+		LooseExpressions:  {"{% if a b %}{% endif %}", "{% if not a %}{% endif %}", "{% if a == %}{% endif %}", "{% if a == b == c %}{% endif %}", "{% if a and %}{% endif %}", "{% if a and b c %}{% endif %}", "{{ a and b }}", "{{ a b }}", "{% assign x = a == 1 %}", "{% echo a or b %}", "{% if false %}{{ and }}{% endif %}"},
 	} {
 		strict := Engine{Dialect: &Dialect{Reject: c}}
 		for _, tpl := range tpls {
@@ -134,6 +135,9 @@ func TestDialectReject(t *testing.T) {
 	}
 	if err := (Engine{Dialect: &Dialect{Reject: UnspacedOperators}}).Check("{% if x ==2 %}{% endif %}"); err != nil {
 		t.Errorf("whitespace before the operator is enough: %v", err)
+	}
+	if err := (Engine{Dialect: &Dialect{Reject: LooseExpressions}}).Check("{% if a == 1 and b or c contains 'x' | default: true %}{% endif %}{{ a | upcase }}{% assign x = a %}{% echo a %}"); err != nil {
+		t.Errorf("cond's grammar and lone operands: %v", err)
 	}
 }
 

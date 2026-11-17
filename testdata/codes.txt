@@ -7,7 +7,6 @@ builtin-variable-name
 capture-syntax
 case-mapping
 comment-syntax
-contains-glued
 contains-nil
 contains-object
 counter-syntax
@@ -27,12 +26,12 @@ dialect-blank
 dialect-contains
 dialect-echo
 dialect-empty
+dialect-loose-expression
 dialect-negative-literal
 dialect-raw
 dialect-raw-filter
 dialect-trim-markers
 dialect-unspaced-operator
-expected-and-or
 expected-bracket
 expected-expression
 expected-filter-name
@@ -105,6 +104,7 @@ sort-astral
 sort-mixed
 sort-type
 split-surrogate-pair
+strict-loose-default
 string-escape-surrogate
 string-own-property
 string-type
